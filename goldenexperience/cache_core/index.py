@@ -14,6 +14,7 @@ class CacheIndex:
     def __init__(self) -> None:
         self._by_id: dict[str, CacheBlockMetadata] = {}
         self._by_model: dict[str, set[str]] = defaultdict(set)
+        self._by_layer: dict[tuple[str, int], set[str]] = defaultdict(set)
         self._by_prefix: dict[str, set[str]] = defaultdict(set)
         self._by_session: dict[str, set[str]] = defaultdict(set)
 
@@ -24,6 +25,7 @@ class CacheIndex:
         self.remove(metadata.block_id)
         self._by_id[metadata.block_id] = metadata
         self._by_model[metadata.model_id].add(metadata.block_id)
+        self._by_layer[(metadata.model_id, metadata.layer_id)].add(metadata.block_id)
         if metadata.prefix_hash is not None:
             self._by_prefix[metadata.prefix_hash].add(metadata.block_id)
         if metadata.session_id is not None:
@@ -34,6 +36,7 @@ class CacheIndex:
         if metadata is None:
             return None
         self._by_model[metadata.model_id].discard(block_id)
+        self._by_layer[(metadata.model_id, metadata.layer_id)].discard(block_id)
         if metadata.prefix_hash is not None:
             self._by_prefix[metadata.prefix_hash].discard(block_id)
         if metadata.session_id is not None:
@@ -52,7 +55,18 @@ class CacheIndex:
         matches.sort(key=lambda meta: (meta.quality_score, meta.last_accessed), reverse=True)
         return matches
 
+    def layer_ids(self, query: CacheQuery) -> list[int]:
+        return sorted({metadata.layer_id for metadata in self.find(query)})
+
+    def group_by_layer(self, query: CacheQuery) -> dict[int, list[CacheBlockMetadata]]:
+        grouped: dict[int, list[CacheBlockMetadata]] = defaultdict(list)
+        for metadata in self.find(query):
+            grouped[metadata.layer_id].append(metadata)
+        return dict(sorted(grouped.items(), key=lambda item: item[0]))
+
     def _candidate_ids(self, query: CacheQuery) -> Iterable[str]:
+        if query.model_id is not None and query.layer_id is not None:
+            return set(self._by_layer.get((query.model_id, query.layer_id), set()))
         if query.prefix_hash is not None:
             return set(self._by_prefix.get(query.prefix_hash, set()))
         if query.session_id is not None:
@@ -60,4 +74,3 @@ class CacheIndex:
         if query.model_id is not None:
             return set(self._by_model.get(query.model_id, set()))
         return set(self._by_id)
-

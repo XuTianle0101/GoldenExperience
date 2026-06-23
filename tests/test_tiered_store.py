@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from goldenexperience.cache_core import CacheBlock, CacheQuery, DeviceTier, KVPayload
-from goldenexperience.tiered_store import PrefetchPlan, TieredKVStore
+from goldenexperience.tiered_store import LayerwiseOffloadPlan, PrefetchPlan, TieredKVStore
 
 
 def make_block(idx: int) -> CacheBlock:
@@ -54,3 +54,89 @@ def test_pin_release_prevents_regular_evict(tmp_path: Path) -> None:
     assert store.evict(CacheQuery(model_id="llama-family"), required_bytes=1) == [block.metadata.block_id]
     store.shutdown()
 
+
+def test_put_layers_retrieve_layers_and_layer_groups(tmp_path: Path) -> None:
+    store = TieredKVStore(
+        capacities={DeviceTier.HBM: 10_000, DeviceTier.CPU: 10_000, DeviceTier.NVME: 10_000},
+        nvme_path=tmp_path,
+    )
+    layers = {
+        0: [make_block(0)],
+        1: [make_block(1)],
+        2: [make_block(2)],
+    }
+
+    put_results = list(store.put_layers(layers, target_tier=DeviceTier.CPU))
+
+    assert [result.layer_id for result in put_results] == [0, 1, 2]
+    assert all(result.success for result in put_results)
+    assert store.layer_ids(CacheQuery(model_id="llama-family")) == [0, 1, 2]
+    groups = store.layer_groups(CacheQuery(model_id="llama-family"))
+    assert groups
+    assert groups[0].layer_ids == [0, 1, 2]
+
+    retrieved = list(
+        store.retrieve_layers(
+            CacheQuery(model_id="llama-family", prefix_hash="shared"),
+            target_tier=DeviceTier.HBM,
+        )
+    )
+
+    assert [result.layer_id for result in retrieved] == [0, 1, 2]
+    assert all(result.hit for result in retrieved)
+    assert all(block.metadata.device_tier == DeviceTier.HBM for result in retrieved for block in result.blocks)
+    store.shutdown()
+
+
+def test_layerwise_offload_moves_selected_layers(tmp_path: Path) -> None:
+    store = TieredKVStore(
+        capacities={DeviceTier.HBM: 10_000, DeviceTier.CPU: 10_000, DeviceTier.NVME: 10_000},
+        nvme_path=tmp_path,
+    )
+    for layer_id in range(4):
+        store.put(make_block(layer_id))
+
+    results = store.offload_layers(
+        LayerwiseOffloadPlan(
+            query=CacheQuery(model_id="llama-family", prefix_hash="shared"),
+            target_tier=DeviceTier.NVME,
+            layer_ids=[1, 2],
+        )
+    )
+
+    assert [result.layer_id for result in results] == [1, 2]
+    assert all(result.success for result in results)
+    assert store.get_layer(CacheQuery(model_id="llama-family"), 0)[0].metadata.device_tier == DeviceTier.HBM
+    assert store.get_layer(CacheQuery(model_id="llama-family"), 1)[0].metadata.device_tier == DeviceTier.NVME
+    assert store.get_layer(CacheQuery(model_id="llama-family"), 2)[0].metadata.device_tier == DeviceTier.NVME
+    assert store.get_layer(CacheQuery(model_id="llama-family"), 3)[0].metadata.device_tier == DeviceTier.HBM
+    store.shutdown()
+
+
+def test_layerwise_offload_async_respects_pipeline_depth(tmp_path: Path) -> None:
+    store = TieredKVStore(
+        capacities={DeviceTier.HBM: 10_000, DeviceTier.CPU: 10_000, DeviceTier.NVME: 10_000},
+        nvme_path=tmp_path,
+        max_workers=2,
+    )
+    for layer_id in range(3):
+        store.put(make_block(layer_id))
+
+    futures = store.offload_layers(
+        LayerwiseOffloadPlan(
+            query=CacheQuery(model_id="llama-family"),
+            target_tier=DeviceTier.CPU,
+            asynchronous=True,
+            pipeline_depth=2,
+        )
+    )
+    results = [future.result() for future in futures]
+
+    assert [result.layer_id for result in results] == [0, 1, 2]
+    assert all(result.success for result in results)
+    assert all(
+        block.metadata.device_tier == DeviceTier.CPU
+        for layer_id in range(3)
+        for block in store.get_layer(CacheQuery(model_id="llama-family"), layer_id)
+    )
+    store.shutdown()

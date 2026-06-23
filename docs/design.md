@@ -44,6 +44,29 @@ The initial policy is LRU with pinned/ref-count protection and low-quality victi
 preference. This is intentionally simple: it gives a clean baseline before adding
 prefix-hotness and decode-progress prediction.
 
+## Layerwise Offload
+
+GoldenExperience treats layerwise transfer as a first-class store operation. The cache
+index can group blocks by `model_id` and `layer_id`, and the store exposes:
+
+- `put_layers(blocks_by_layer, target_tier)`: materialize layer-major KV blocks into a
+  tier with a one-layer pipeline.
+- `offload_layer(query, layer_id, target_tier)`: move one matched layer.
+- `offload_layers(plan)`: move an ordered layer list synchronously or asynchronously.
+- `retrieve_layers(query, target_tier)`: yield one promoted layer at a time while
+  scheduling the next layer.
+- `layer_groups(query)`: group layers that share KV shape, dtype, and bytes per layer.
+
+This is inspired by LMCache's layer-oriented storage/retrieval loop, but the API remains
+independent from any vLLM-specific connector. The intended engine integration pattern is:
+
+```text
+adapter extracts layer i -> store schedules layer i -> adapter consumes layer i-1
+```
+
+That shape lets real serving integrations overlap model execution, HBM/CPU movement, and
+NVMe I/O without making the core cache depend on a particular inference engine.
+
 ## Cross-Model Reuse
 
 `ArchitectureSignature` records the minimal compatibility surface:
@@ -81,4 +104,3 @@ objects and convert blocks back into engine-specific formats.
 - Add prefix-aware prefetch scheduling from request queues and decode progress.
 - Replace NVMe pickle backend with memory-mapped tensors or an async I/O backend.
 - Add C++/CUDA fast paths without changing the Python public APIs.
-

@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import threading
-from concurrent.futures import Future, ThreadPoolExecutor
+import time
+from collections.abc import Iterator, Mapping, Sequence
+from concurrent.futures import Future, ThreadPoolExecutor, wait
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -12,6 +15,12 @@ from goldenexperience.cache_core.enums import DeviceTier
 from goldenexperience.cache_core.index import CacheIndex
 from goldenexperience.tiered_store.backend import MemoryTierBackend, NvmeTierBackend, TierBackend
 from goldenexperience.tiered_store.cost import TierCostModel, TierState
+from goldenexperience.tiered_store.layerwise import (
+    LayerGroup,
+    LayerRetrievalResult,
+    LayerTransferResult,
+    LayerwiseOffloadPlan,
+)
 from goldenexperience.tiered_store.policies import EvictionPolicy, LRUEvictionPolicy, PrefetchPlan
 from goldenexperience.utils.tensors import move_payload_to_tier, stable_digest
 
@@ -90,6 +99,59 @@ class TieredKVStore:
                     blocks.append(block)
             return blocks
 
+    def layer_ids(self, query: CacheQuery) -> list[int]:
+        """Return sorted layer ids that have blocks matching the query."""
+
+        with self._lock:
+            return self.index.layer_ids(query)
+
+    def layer_groups(self, query: CacheQuery) -> list[LayerGroup]:
+        """Group matched layers by KV shape and dtype.
+
+        This mirrors the LMCache idea of grouping transfer-compatible layers by a
+        metadata identity, while remaining independent of a specific serving engine.
+        """
+
+        with self._lock:
+            groups: dict[tuple[tuple[object, ...], str, int], list[int]] = {}
+            for layer_id, items in self.index.group_by_layer(query).items():
+                if not items:
+                    continue
+                representative = items[0]
+                key = (representative.shape, representative.dtype, representative.bytes_size)
+                groups.setdefault(key, []).append(layer_id)
+            return [
+                LayerGroup(
+                    layer_ids=layer_ids,
+                    shape=shape,
+                    dtype=dtype,
+                    bytes_per_layer=bytes_per_layer,
+                )
+                for (shape, dtype, bytes_per_layer), layer_ids in sorted(
+                    groups.items(),
+                    key=lambda item: min(item[1]),
+                )
+            ]
+
+    def get_layer(
+        self,
+        query: CacheQuery,
+        layer_id: int,
+        promote_to: DeviceTier | None = None,
+    ) -> list[CacheBlock]:
+        """Load all blocks from a single layer, optionally promoting the layer."""
+
+        layer_query = replace(query, layer_id=layer_id)
+        with self._lock:
+            matches = self.index.find(layer_query)
+        blocks: list[CacheBlock] = []
+        for metadata in matches:
+            block = self.get_by_id(metadata.block_id, promote_to=promote_to)
+            if block is not None:
+                blocks.append(block)
+        blocks.sort(key=lambda block: (block.metadata.token_start, block.metadata.head_id or -1))
+        return blocks
+
     def get_by_id(self, block_id: str, promote_to: DeviceTier | None = None) -> CacheBlock | None:
         with self._lock:
             return self._load(block_id, promote_to=promote_to)
@@ -120,6 +182,108 @@ class TieredKVStore:
         if plan.asynchronous:
             return [self._executor.submit(self.offload, block_id, plan.target_tier) for block_id in plan.block_ids]
         return [self.offload(block_id, plan.target_tier) for block_id in plan.block_ids]
+
+    def put_layers(
+        self,
+        blocks_by_layer: Mapping[int, Sequence[CacheBlock]] | Sequence[Sequence[CacheBlock]],
+        target_tier: DeviceTier | None = None,
+    ) -> Iterator[LayerTransferResult]:
+        """Store KV blocks layer by layer with a one-layer pipeline.
+
+        The caller can feed blocks in layer-major order from an engine adapter. Each
+        yielded result means the previous layer has been materialized in the requested
+        tier, which is the engine-neutral counterpart of LMCache's layerwise store loop.
+        """
+
+        layer_items = self._normalize_layer_input(blocks_by_layer)
+        pending: Future[LayerTransferResult] | None = None
+        for layer_id, blocks in layer_items:
+            next_future = self._executor.submit(self._put_layer, layer_id, list(blocks), target_tier)
+            if pending is not None:
+                yield pending.result()
+            pending = next_future
+        if pending is not None:
+            yield pending.result()
+
+    def offload_layer(
+        self,
+        query: CacheQuery,
+        layer_id: int,
+        target_tier: DeviceTier,
+    ) -> LayerTransferResult:
+        """Move every matching block from one layer to the target tier."""
+
+        start = time.perf_counter()
+        layer_query = replace(query, layer_id=layer_id)
+        with self._lock:
+            metadata = list(self.index.find(layer_query))
+        block_ids = [item.block_id for item in metadata]
+        bytes_to_move = sum(item.bytes_size for item in metadata if item.device_tier != target_tier)
+        failures = []
+        for block_id in block_ids:
+            if not self.offload(block_id, target_tier):
+                failures.append(block_id)
+        return LayerTransferResult(
+            layer_id=layer_id,
+            block_ids=block_ids,
+            target_tier=target_tier,
+            success=not failures,
+            bytes_moved=bytes_to_move,
+            elapsed_ms=(time.perf_counter() - start) * 1000.0,
+            failures=failures,
+        )
+
+    def offload_layers(
+        self,
+        plan: LayerwiseOffloadPlan,
+    ) -> list[LayerTransferResult] | list[Future[LayerTransferResult]]:
+        """Move matching layers to a target tier.
+
+        Synchronous mode returns ordered results. Asynchronous mode returns futures while
+        respecting the requested pipeline depth.
+        """
+
+        layer_ids = plan.layer_ids or self.layer_ids(plan.query)
+        if not plan.asynchronous:
+            return [
+                self.offload_layer(plan.query, layer_id, plan.target_tier)
+                for layer_id in layer_ids
+            ]
+
+        depth = max(1, plan.pipeline_depth)
+        futures: list[Future[LayerTransferResult]] = []
+        in_flight: set[Future[LayerTransferResult]] = set()
+        for layer_id in layer_ids:
+            future = self._executor.submit(self.offload_layer, plan.query, layer_id, plan.target_tier)
+            futures.append(future)
+            in_flight.add(future)
+            if len(in_flight) >= depth:
+                done, in_flight = wait(in_flight, return_when="FIRST_COMPLETED")
+                for item in done:
+                    item.result()
+        return futures
+
+    def retrieve_layers(
+        self,
+        query: CacheQuery,
+        target_tier: DeviceTier = DeviceTier.HBM,
+        layer_ids: Sequence[int] | None = None,
+    ) -> Iterator[LayerRetrievalResult]:
+        """Retrieve matching KV cache one layer at a time.
+
+        The next layer is scheduled before the current layer result is yielded, so an
+        adapter can overlap device injection with storage retrieval.
+        """
+
+        ordered_layers = list(layer_ids) if layer_ids is not None else self.layer_ids(query)
+        pending: Future[LayerRetrievalResult] | None = None
+        for layer_id in ordered_layers:
+            next_future = self._executor.submit(self._retrieve_layer, query, layer_id, target_tier)
+            if pending is not None:
+                yield pending.result()
+            pending = next_future
+        if pending is not None:
+            yield pending.result()
 
     def evict(self, query: CacheQuery | None = None, required_bytes: int = 0) -> list[str]:
         """Remove blocks selected by the eviction policy."""
@@ -190,6 +354,67 @@ class TieredKVStore:
 
     def _prepare_payload_for_tier(self, payload: Any, tier: DeviceTier) -> Any:
         return move_payload_to_tier(payload, tier.value, pin_cpu=(tier == DeviceTier.CPU))
+
+    def _put_layer(
+        self,
+        layer_id: int,
+        blocks: list[CacheBlock],
+        target_tier: DeviceTier | None,
+    ) -> LayerTransferResult:
+        start = time.perf_counter()
+        block_ids = []
+        bytes_moved = 0
+        failures = []
+        for block in blocks:
+            if block.metadata.layer_id != layer_id:
+                failures.append(block.metadata.block_id)
+                continue
+            if target_tier is not None:
+                block.metadata.device_tier = target_tier
+            bytes_moved += block.metadata.bytes_size or block.payload.nbytes
+            try:
+                self.put(block)
+                block_ids.append(block.metadata.block_id)
+            except Exception:
+                failures.append(block.metadata.block_id)
+        resolved_tier = target_tier or (blocks[0].metadata.device_tier if blocks else DeviceTier.CPU)
+        return LayerTransferResult(
+            layer_id=layer_id,
+            block_ids=block_ids,
+            target_tier=resolved_tier,
+            success=not failures,
+            bytes_moved=bytes_moved,
+            elapsed_ms=(time.perf_counter() - start) * 1000.0,
+            failures=failures,
+        )
+
+    def _retrieve_layer(
+        self,
+        query: CacheQuery,
+        layer_id: int,
+        target_tier: DeviceTier,
+    ) -> LayerRetrievalResult:
+        start = time.perf_counter()
+        blocks = self.get_layer(query, layer_id, promote_to=target_tier)
+        return LayerRetrievalResult(
+            layer_id=layer_id,
+            blocks=blocks,
+            target_tier=target_tier,
+            hit=bool(blocks),
+            bytes_loaded=sum(block.metadata.bytes_size for block in blocks),
+            elapsed_ms=(time.perf_counter() - start) * 1000.0,
+        )
+
+    def _normalize_layer_input(
+        self,
+        blocks_by_layer: Mapping[int, Sequence[CacheBlock]] | Sequence[Sequence[CacheBlock]],
+    ) -> list[tuple[int, Sequence[CacheBlock]]]:
+        if isinstance(blocks_by_layer, Mapping):
+            return sorted(blocks_by_layer.items(), key=lambda item: item[0])
+        items: list[tuple[int, Sequence[CacheBlock]]] = []
+        for layer_id, blocks in enumerate(blocks_by_layer):
+            items.append((layer_id, blocks))
+        return items
 
     def _ensure_capacity(self, tier: DeviceTier, incoming_bytes: int, protected_ids: set[str]) -> None:
         capacity = self.capacities.get(tier, 0)

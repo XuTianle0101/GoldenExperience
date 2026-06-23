@@ -66,6 +66,31 @@ store.put(block)
 recovered = store.get_by_id(block.metadata.block_id)
 ```
 
+## Layerwise Offload
+
+The tiered store also supports LMCache-inspired layerwise transfer. Engine adapters can
+emit KV blocks in layer-major order, then the store pipelines one layer at a time:
+
+```python
+from goldenexperience.cache_core import CacheQuery, DeviceTier
+from goldenexperience.tiered_store import LayerwiseOffloadPlan
+
+list(store.put_layers({0: layer0_blocks, 1: layer1_blocks}, target_tier=DeviceTier.CPU))
+
+results = store.offload_layers(
+    LayerwiseOffloadPlan(
+        query=CacheQuery(model_id="qwen2.5-7b", prefix_hash="shared-system-prompt"),
+        target_tier=DeviceTier.NVME,
+    )
+)
+
+for layer in store.retrieve_layers(CacheQuery(model_id="qwen2.5-7b"), target_tier=DeviceTier.HBM):
+    engine_adapter.inject_kv(layer.blocks)
+```
+
+`put_layers` and `retrieve_layers` are generator-style APIs: while one layer is consumed
+by the caller, the next layer can already be scheduled in the background.
+
 ## Research Roadmap
 
 - M0: Repo skeleton, public APIs, synthetic benchmark, paper artifact docs.
