@@ -44,6 +44,17 @@ The initial policy is LRU with pinned/ref-count protection and low-quality victi
 preference. This is intentionally simple: it gives a clean baseline before adding
 prefix-hotness and decode-progress prediction.
 
+The store now exposes three policy seams:
+
+- Eviction: `LRUEvictionPolicy`, `LFUEvictionPolicy`, and `CostAwareEvictionPolicy`.
+- Offload: `WatermarkOffloadPolicy`, which demotes HBM or CPU blocks when tier
+  utilization exceeds a high watermark and tries to return the tier to a low watermark.
+- Prefetch: `DecodeWindowPrefetchPolicy` and `PrefixHotnessPrefetchPolicy`.
+
+Capacity admission is strict. If pinned or retained blocks prevent demotion, the store
+raises `CapacityExceededError` instead of silently exceeding a tier budget. This matters
+for reproducible systems evaluation because every failed admission becomes measurable.
+
 ## Layerwise Offload
 
 GoldenExperience treats layerwise transfer as a first-class store operation. The cache

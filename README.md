@@ -91,6 +91,35 @@ for layer in store.retrieve_layers(CacheQuery(model_id="qwen2.5-7b"), target_tie
 `put_layers` and `retrieve_layers` are generator-style APIs: while one layer is consumed
 by the caller, the next layer can already be scheduled in the background.
 
+## Policy-Driven Tiering
+
+`TieredKVStore` separates mechanism from policy:
+
+- Eviction policies choose safe victims while respecting pinned and retained blocks:
+  `LRUEvictionPolicy`, `LFUEvictionPolicy`, and `CostAwareEvictionPolicy`.
+- `WatermarkOffloadPolicy` demotes blocks when HBM or CPU utilization crosses a high
+  watermark.
+- Prefetch policies build plans from access context: `DecodeWindowPrefetchPolicy` warms
+  upcoming layers, and `PrefixHotnessPrefetchPolicy` warms the hottest matching blocks.
+
+```python
+from goldenexperience.cache_core import CacheQuery, DeviceTier
+from goldenexperience.tiered_store import PrefetchContext, WatermarkOffloadPolicy
+
+store.enforce_offload_policy()
+
+plan = store.build_prefetch_plan(
+    PrefetchContext(
+        query=CacheQuery(model_id="qwen2.5-7b", prefix_hash="shared-system-prompt"),
+        target_tier=DeviceTier.HBM,
+        current_layer_id=7,
+        lookahead_layers=2,
+        max_blocks=4,
+    )
+)
+store.prefetch(plan)
+```
+
 ## Research Roadmap
 
 - M0: Repo skeleton, public APIs, synthetic benchmark, paper artifact docs.

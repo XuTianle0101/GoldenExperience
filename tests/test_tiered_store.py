@@ -1,7 +1,17 @@
 from pathlib import Path
 
 from goldenexperience.cache_core import CacheBlock, CacheQuery, DeviceTier, KVPayload
-from goldenexperience.tiered_store import LayerwiseOffloadPlan, PrefetchPlan, TieredKVStore
+from goldenexperience.tiered_store import (
+    CapacityExceededError,
+    CostAwareEvictionPolicy,
+    DecodeWindowPrefetchPolicy,
+    LFUEvictionPolicy,
+    LayerwiseOffloadPlan,
+    PrefetchContext,
+    PrefetchPlan,
+    TieredKVStore,
+    WatermarkOffloadPolicy,
+)
 
 
 def make_block(idx: int) -> CacheBlock:
@@ -139,4 +149,119 @@ def test_layerwise_offload_async_respects_pipeline_depth(tmp_path: Path) -> None
         for layer_id in range(3)
         for block in store.get_layer(CacheQuery(model_id="llama-family"), layer_id)
     )
+    store.shutdown()
+
+
+def test_capacity_error_when_pinned_blocks_prevent_demotion(tmp_path: Path) -> None:
+    store = TieredKVStore(
+        capacities={DeviceTier.HBM: 300, DeviceTier.CPU: 10_000, DeviceTier.NVME: 10_000},
+        nvme_path=tmp_path,
+    )
+    first = make_block(0)
+    second = make_block(1)
+    store.put(first)
+    store.pin(first.metadata.block_id)
+
+    try:
+        store.put(second)
+        raised = False
+    except CapacityExceededError:
+        raised = True
+
+    assert raised
+    assert store.get_by_id(first.metadata.block_id) is not None
+    store.shutdown()
+
+
+def test_watermark_offload_policy_demotes_cold_blocks(tmp_path: Path) -> None:
+    store = TieredKVStore(
+        capacities={DeviceTier.HBM: 1_000, DeviceTier.CPU: 10_000, DeviceTier.NVME: 10_000},
+        nvme_path=tmp_path,
+        offload_policy=WatermarkOffloadPolicy(high_watermark=0.50, low_watermark=0.25),
+    )
+    for layer_id in range(5):
+        store.put(make_block(layer_id))
+
+    results = store.enforce_offload_policy()
+
+    assert results
+    assert any(result.success and result.target_tier == DeviceTier.CPU for result in results)
+    assert store.tier_states()[DeviceTier.HBM].used_bytes <= 500
+    store.shutdown()
+
+
+def test_decode_window_prefetch_policy_selects_upcoming_layers(tmp_path: Path) -> None:
+    store = TieredKVStore(
+        capacities={DeviceTier.HBM: 10_000, DeviceTier.CPU: 10_000, DeviceTier.NVME: 10_000},
+        nvme_path=tmp_path,
+        prefetch_policy=DecodeWindowPrefetchPolicy(),
+    )
+    for layer_id in range(5):
+        block = make_block(layer_id)
+        block.metadata.device_tier = DeviceTier.CPU
+        store.put(block)
+
+    plan = store.build_prefetch_plan(
+        PrefetchContext(
+            query=CacheQuery(model_id="llama-family", prefix_hash="shared"),
+            target_tier=DeviceTier.HBM,
+            current_layer_id=1,
+            lookahead_layers=2,
+            max_blocks=10,
+            asynchronous=False,
+        )
+    )
+
+    planned_layers = [
+        store.index.get(block_id).layer_id
+        for block_id in plan.block_ids
+        if store.index.get(block_id) is not None
+    ]
+    assert planned_layers == [2, 3]
+    assert store.prefetch(plan) == [True, True]
+    assert store.get_layer(CacheQuery(model_id="llama-family"), 2)[0].metadata.device_tier == DeviceTier.HBM
+    assert store.get_layer(CacheQuery(model_id="llama-family"), 3)[0].metadata.device_tier == DeviceTier.HBM
+    store.shutdown()
+
+
+def test_lfu_eviction_policy_removes_least_accessed_block(tmp_path: Path) -> None:
+    store = TieredKVStore(
+        capacities={DeviceTier.HBM: 10_000, DeviceTier.CPU: 10_000, DeviceTier.NVME: 10_000},
+        nvme_path=tmp_path,
+        eviction_policy=LFUEvictionPolicy(),
+    )
+    cold = make_block(0)
+    hot = make_block(1)
+    store.put(cold)
+    store.put(hot)
+    store.get_by_id(hot.metadata.block_id)
+    store.get_by_id(hot.metadata.block_id)
+
+    victims = store.evict(CacheQuery(model_id="llama-family"), required_bytes=cold.metadata.bytes_size)
+
+    assert victims == [cold.metadata.block_id]
+    assert store.get_by_id(cold.metadata.block_id) is None
+    assert store.get_by_id(hot.metadata.block_id) is not None
+    store.shutdown()
+
+
+def test_cost_aware_eviction_policy_keeps_high_quality_hot_block(tmp_path: Path) -> None:
+    store = TieredKVStore(
+        capacities={DeviceTier.HBM: 10_000, DeviceTier.CPU: 10_000, DeviceTier.NVME: 10_000},
+        nvme_path=tmp_path,
+        eviction_policy=CostAwareEvictionPolicy(),
+    )
+    low_quality = make_block(0)
+    low_quality.metadata.quality_score = 0.10
+    high_quality = make_block(1)
+    high_quality.metadata.quality_score = 0.99
+    store.put(low_quality)
+    store.put(high_quality)
+    store.get_by_id(high_quality.metadata.block_id)
+
+    victims = store.evict(CacheQuery(model_id="llama-family"), required_bytes=low_quality.metadata.bytes_size)
+
+    assert victims == [low_quality.metadata.block_id]
+    assert store.get_by_id(low_quality.metadata.block_id) is None
+    assert store.get_by_id(high_quality.metadata.block_id) is not None
     store.shutdown()

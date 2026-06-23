@@ -1,17 +1,34 @@
 """Tiered KV cache storage."""
 
 from goldenexperience.tiered_store.cost import TierCostModel, TierState
+from goldenexperience.tiered_store.exceptions import CapacityExceededError, TieredStoreError
 from goldenexperience.tiered_store.layerwise import (
     LayerGroup,
     LayerRetrievalResult,
     LayerTransferResult,
     LayerwiseOffloadPlan,
 )
-from goldenexperience.tiered_store.policies import LRUEvictionPolicy, PrefetchPlan
+from goldenexperience.tiered_store.policies import (
+    CostAwareEvictionPolicy,
+    DecodeWindowPrefetchPolicy,
+    LFUEvictionPolicy,
+    LRUEvictionPolicy,
+    OffloadPlan,
+    OffloadResult,
+    PrefixHotnessPrefetchPolicy,
+    PrefetchContext,
+    PrefetchPlan,
+    WatermarkOffloadPolicy,
+)
 from goldenexperience.tiered_store.store import TieredKVStore
 
 __all__ = [
     "TieredKVStore",
+    "CapacityExceededError",
+    "TieredStoreError",
+    "CostAwareEvictionPolicy",
+    "DecodeWindowPrefetchPolicy",
+    "LFUEvictionPolicy",
     "TierCostModel",
     "TierState",
     "LayerGroup",
@@ -19,5 +36,10 @@ __all__ = [
     "LayerTransferResult",
     "LayerwiseOffloadPlan",
     "LRUEvictionPolicy",
+    "OffloadPlan",
+    "OffloadResult",
+    "PrefixHotnessPrefetchPolicy",
+    "PrefetchContext",
     "PrefetchPlan",
+    "WatermarkOffloadPolicy",
 ]

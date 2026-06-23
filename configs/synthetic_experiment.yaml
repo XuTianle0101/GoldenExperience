@@ -9,7 +9,13 @@ store:
     cpu_capacity_gb: 64
     nvme_capacity_gb: 512
   eviction_policy: lru_quality_aware
-  prefetch_policy: prefix_hotness_decode_progress
+  offload_policy:
+    name: watermark
+    high_watermark: 0.90
+    low_watermark: 0.75
+  prefetch_policy:
+    name: decode_window
+    lookahead_layers: 2
 
 models:
   source:
@@ -42,4 +48,3 @@ benchmarks:
     - gpu_memory_peak_bytes
     - cache_hit_rate
     - offload_bandwidth_bytes_per_second
-

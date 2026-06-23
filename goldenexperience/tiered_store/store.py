@@ -15,13 +15,25 @@ from goldenexperience.cache_core.enums import DeviceTier
 from goldenexperience.cache_core.index import CacheIndex
 from goldenexperience.tiered_store.backend import MemoryTierBackend, NvmeTierBackend, TierBackend
 from goldenexperience.tiered_store.cost import TierCostModel, TierState
+from goldenexperience.tiered_store.exceptions import CapacityExceededError
 from goldenexperience.tiered_store.layerwise import (
     LayerGroup,
     LayerRetrievalResult,
     LayerTransferResult,
     LayerwiseOffloadPlan,
 )
-from goldenexperience.tiered_store.policies import EvictionPolicy, LRUEvictionPolicy, PrefetchPlan
+from goldenexperience.tiered_store.policies import (
+    DecodeWindowPrefetchPolicy,
+    EvictionPolicy,
+    LRUEvictionPolicy,
+    OffloadPlan,
+    OffloadPolicy,
+    OffloadResult,
+    PrefetchContext,
+    PrefetchPlan,
+    PrefetchPolicy,
+    WatermarkOffloadPolicy,
+)
 from goldenexperience.utils.tensors import move_payload_to_tier, stable_digest
 
 
@@ -45,7 +57,10 @@ class TieredKVStore:
         capacities: dict[DeviceTier, int] | None = None,
         nvme_path: str | Path = "artifacts/cache/nvme",
         eviction_policy: EvictionPolicy | None = None,
+        offload_policy: OffloadPolicy | None = None,
+        prefetch_policy: PrefetchPolicy | None = None,
         cost_model: TierCostModel | None = None,
+        demotion_path: dict[DeviceTier, DeviceTier | None] | None = None,
         max_workers: int = 2,
     ) -> None:
         self.capacities = capacities or {
@@ -60,7 +75,12 @@ class TieredKVStore:
         }
         self.index = CacheIndex()
         self.eviction_policy = eviction_policy or LRUEvictionPolicy()
+        self.offload_policy = offload_policy or WatermarkOffloadPolicy(
+            eviction_policy=self.eviction_policy
+        )
+        self.prefetch_policy = prefetch_policy or DecodeWindowPrefetchPolicy()
         self.cost_model = cost_model or TierCostModel()
+        self.demotion_path = dict(demotion_path or DEMOTION_TARGET)
         self._lock = threading.RLock()
         self._executor = ThreadPoolExecutor(max_workers=max_workers)
 
@@ -159,22 +179,53 @@ class TieredKVStore:
     def offload(self, block_id: str, target_tier: DeviceTier) -> bool:
         """Move a block to a different tier."""
 
+        return self._execute_offload(block_id, target_tier, reason="manual").success
+
+    def offload_blocks(
+        self,
+        plan: OffloadPlan,
+    ) -> list[OffloadResult] | list[Future[OffloadResult]]:
+        """Move blocks according to a block-level offload plan."""
+
+        if plan.asynchronous:
+            return [
+                self._executor.submit(
+                    self._execute_offload,
+                    block_id,
+                    plan.target_tier,
+                    plan.reason,
+                )
+                for block_id in plan.block_ids
+            ]
+        return [
+            self._execute_offload(block_id, plan.target_tier, plan.reason)
+            for block_id in plan.block_ids
+        ]
+
+    def enforce_offload_policy(
+        self,
+        protected_ids: set[str] | None = None,
+        asynchronous: bool = False,
+    ) -> list[OffloadResult] | list[Future[OffloadResult]]:
+        """Apply the configured offload policy to all cache metadata."""
+
         with self._lock:
-            metadata = self.index.get(block_id)
-            if metadata is None:
-                return False
-            if metadata.device_tier == target_tier:
-                return True
-            payload = self.backends[metadata.device_tier].get(block_id)
-            if payload is None:
-                return False
-            self._ensure_capacity(target_tier, metadata.bytes_size, protected_ids={block_id})
-            payload = self._prepare_payload_for_tier(payload, target_tier)
-            self.backends[target_tier].put(block_id, payload)
-            self.backends[metadata.device_tier].remove(block_id)
-            metadata.device_tier = target_tier
-            metadata.touch()
-            return True
+            plans = self.offload_policy.plan(
+                candidates=self.index.all(),
+                tier_states=self.tier_states(),
+                demotion_path=self.demotion_path,
+                protected_ids=protected_ids or set(),
+            )
+        results: list[OffloadResult] = []
+        futures: list[Future[OffloadResult]] = []
+        for plan in plans:
+            executable = replace(plan, asynchronous=asynchronous)
+            outcome = self.offload_blocks(executable)
+            if asynchronous:
+                futures.extend(outcome)  # type: ignore[arg-type]
+            else:
+                results.extend(outcome)  # type: ignore[arg-type]
+        return futures if asynchronous else results
 
     def prefetch(self, plan: PrefetchPlan) -> list[Future[bool]] | list[bool]:
         """Promote blocks according to a prefetch plan."""
@@ -182,6 +233,41 @@ class TieredKVStore:
         if plan.asynchronous:
             return [self._executor.submit(self.offload, block_id, plan.target_tier) for block_id in plan.block_ids]
         return [self.offload(block_id, plan.target_tier) for block_id in plan.block_ids]
+
+    def build_prefetch_plan(
+        self,
+        context: PrefetchContext,
+        policy: PrefetchPolicy | None = None,
+    ) -> PrefetchPlan:
+        """Build a prefetch plan from cache metadata and a prefetch policy."""
+
+        with self._lock:
+            candidates = self.index.find(context.query)
+        return (policy or self.prefetch_policy).plan(candidates, context)
+
+    def prefetch_for_query(
+        self,
+        query: CacheQuery,
+        target_tier: DeviceTier = DeviceTier.HBM,
+        current_layer_id: int | None = None,
+        lookahead_layers: int = 1,
+        max_blocks: int | None = None,
+        max_bytes: int | None = None,
+        asynchronous: bool = True,
+        policy: PrefetchPolicy | None = None,
+    ) -> list[Future[bool]] | list[bool]:
+        """Build and execute a prefetch plan for a query."""
+
+        context = PrefetchContext(
+            query=query,
+            target_tier=target_tier,
+            current_layer_id=current_layer_id,
+            lookahead_layers=lookahead_layers,
+            max_blocks=max_blocks,
+            max_bytes=max_bytes,
+            asynchronous=asynchronous,
+        )
+        return self.prefetch(self.build_prefetch_plan(context, policy=policy))
 
     def put_layers(
         self,
@@ -290,7 +376,14 @@ class TieredKVStore:
 
         with self._lock:
             candidates = self.index.find(query or CacheQuery())
-            victim_ids = self.eviction_policy.select_victims(candidates, required_bytes, protected_ids=set())
+            bytes_to_remove = required_bytes
+            if bytes_to_remove <= 0:
+                bytes_to_remove = sum(item.bytes_size for item in candidates)
+            victim_ids = self.eviction_policy.select_victims(
+                candidates,
+                bytes_to_remove,
+                protected_ids=set(),
+            )
             for block_id in victim_ids:
                 self.remove(block_id)
             return victim_ids
@@ -334,6 +427,77 @@ class TieredKVStore:
 
     def shutdown(self) -> None:
         self._executor.shutdown(wait=True)
+
+    def _execute_offload(
+        self,
+        block_id: str,
+        target_tier: DeviceTier,
+        reason: str,
+    ) -> OffloadResult:
+        start = time.perf_counter()
+        with self._lock:
+            metadata = self.index.get(block_id)
+            if metadata is None:
+                return OffloadResult(
+                    block_id=block_id,
+                    source_tier=None,
+                    target_tier=target_tier,
+                    success=False,
+                    bytes_moved=0,
+                    elapsed_ms=(time.perf_counter() - start) * 1000.0,
+                    reason=reason,
+                    error="block not found",
+                )
+            source_tier = metadata.device_tier
+            if source_tier == target_tier:
+                return OffloadResult(
+                    block_id=block_id,
+                    source_tier=source_tier,
+                    target_tier=target_tier,
+                    success=True,
+                    bytes_moved=0,
+                    elapsed_ms=(time.perf_counter() - start) * 1000.0,
+                    reason=reason,
+                )
+            payload = self.backends[source_tier].get(block_id)
+            if payload is None:
+                return OffloadResult(
+                    block_id=block_id,
+                    source_tier=source_tier,
+                    target_tier=target_tier,
+                    success=False,
+                    bytes_moved=0,
+                    elapsed_ms=(time.perf_counter() - start) * 1000.0,
+                    reason=reason,
+                    error="payload missing from source tier",
+                )
+            try:
+                self._ensure_capacity(target_tier, metadata.bytes_size, protected_ids={block_id})
+            except CapacityExceededError as exc:
+                return OffloadResult(
+                    block_id=block_id,
+                    source_tier=source_tier,
+                    target_tier=target_tier,
+                    success=False,
+                    bytes_moved=0,
+                    elapsed_ms=(time.perf_counter() - start) * 1000.0,
+                    reason=reason,
+                    error=str(exc),
+                )
+            payload = self._prepare_payload_for_tier(payload, target_tier)
+            self.backends[target_tier].put(block_id, payload)
+            self.backends[source_tier].remove(block_id)
+            metadata.device_tier = target_tier
+            metadata.touch()
+            return OffloadResult(
+                block_id=block_id,
+                source_tier=source_tier,
+                target_tier=target_tier,
+                success=True,
+                bytes_moved=metadata.bytes_size,
+                elapsed_ms=(time.perf_counter() - start) * 1000.0,
+                reason=reason,
+            )
 
     def _load(self, block_id: str, promote_to: DeviceTier | None = None) -> CacheBlock | None:
         metadata = self.index.get(block_id)
@@ -431,8 +595,15 @@ class TieredKVStore:
             metadata = self.index.get(victim_id)
             if metadata is None:
                 continue
-            lower_tier = DEMOTION_TARGET[metadata.device_tier]
+            lower_tier = self.demotion_path.get(metadata.device_tier)
             if lower_tier is None:
                 self.remove(victim_id)
             else:
-                self.offload(victim_id, lower_tier)
+                if not self.offload(victim_id, lower_tier):
+                    continue
+        if backend.bytes_used() + incoming_bytes > capacity:
+            raise CapacityExceededError(
+                tier=tier,
+                required_bytes=incoming_bytes,
+                free_bytes=max(0, capacity - backend.bytes_used()),
+            )
