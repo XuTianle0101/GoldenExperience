@@ -1,0 +1,45 @@
+experiment:
+  name: goldenexperience_synthetic_v1
+  target_venue_style: mlsys_osdi
+  primary_metric: ttft_latency_memory
+
+store:
+  tiers:
+    hbm_capacity_gb: 8
+    cpu_capacity_gb: 64
+    nvme_capacity_gb: 512
+  eviction_policy: lru_quality_aware
+  prefetch_policy: prefix_hotness_decode_progress
+
+models:
+  source:
+    family: qwen
+    model_id: qwen2.5-7b
+  target:
+    family: qwen
+    model_id: qwen2.5-14b
+  mapping_scope: same_family_first
+
+quality_gates:
+  direct_quality_threshold: 0.97
+  partial_quality_threshold: 0.90
+  min_prefix_similarity: 0.90
+  max_perplexity_drift: null
+
+benchmarks:
+  scenarios:
+    - long_context_qa
+    - multi_turn_chat
+    - rag_prefix_sharing
+    - agent_workflow
+  metrics:
+    - ttft_ms
+    - throughput_tokens_per_second
+    - end_to_end_latency_ms
+    - p50_latency_ms
+    - p95_latency_ms
+    - p99_latency_ms
+    - gpu_memory_peak_bytes
+    - cache_hit_rate
+    - offload_bandwidth_bytes_per_second
+

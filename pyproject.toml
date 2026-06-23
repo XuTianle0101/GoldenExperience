@@ -1,0 +1,49 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "goldenexperience"
+version = "0.1.0"
+description = "Engine-decoupled tiered KV cache offload and cross-model KV reuse infrastructure for LLM serving research."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "Apache-2.0" }
+authors = [
+  { name = "GoldenExperience Contributors" }
+]
+keywords = [
+  "llm",
+  "kv-cache",
+  "offload",
+  "serving",
+  "systems",
+  "mlsys",
+  "osdi"
+]
+dependencies = []
+
+[project.optional-dependencies]
+torch = ["torch>=2.1"]
+hf = ["transformers>=4.40", "torch>=2.1"]
+vllm = ["vllm>=0.5"]
+dev = ["pytest>=8", "ruff>=0.5", "mypy>=1.10"]
+
+[project.scripts]
+golden-synthetic-benchmark = "goldenexperience.benchmarks.synthetic:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["goldenexperience*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "SIM"]
+
