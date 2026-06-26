@@ -30,6 +30,7 @@ class PlanStatus(str, Enum):
     READY = "ready"
     NEEDS_CALIBRATION = "needs_calibration"
     BLOCKED = "blocked"
+    WARM_START_RECOMPUTE = "warm_start_recompute"
 
 
 @dataclass(frozen=True)
@@ -39,9 +40,14 @@ class KVShape:
     num_layers: int
     num_key_value_heads: int
     head_dim: int
+    hidden_size: int | None = None
+    num_attention_heads: int | None = None
     dtype: str = "float16"
     rope_theta: float | None = None
+    rope_scaling: str | None = None
     sliding_window: int | None = None
+    model_config_hash: str | None = None
+    tokenizer_hash: str | None = None
 
     def same_layout(self, other: "KVShape") -> bool:
         return (
@@ -50,7 +56,21 @@ class KVShape:
             and self.head_dim == other.head_dim
             and self.dtype == other.dtype
             and self.rope_theta == other.rope_theta
+            and self.rope_scaling == other.rope_scaling
             and self.sliding_window == other.sliding_window
+        )
+
+    def same_runtime_contract(self, other: "KVShape") -> bool:
+        return (
+            self.dtype == other.dtype
+            and self.rope_theta == other.rope_theta
+            and self.rope_scaling == other.rope_scaling
+            and self.sliding_window == other.sliding_window
+            and (
+                self.tokenizer_hash is None
+                or other.tokenizer_hash is None
+                or self.tokenizer_hash == other.tokenizer_hash
+            )
         )
 
     def projection_required(self, other: "KVShape") -> bool:
@@ -96,6 +116,9 @@ class ReuseRequest:
     prefix_hash: str
     prompt_tokens: int | None = None
     calibration_id: str | None = None
+    artifact_uri: str | None = None
+    estimated_target_prefill_ms: float | None = None
+    estimated_materialization_ms: float | None = None
     allow_cross_base: bool = False
     quality_floor: float = 0.95
     metadata: dict[str, str | int | float | bool] = field(default_factory=dict)
@@ -114,6 +137,14 @@ class ReusePlan:
     lmcache_lookup_model_id: str
     required_gates: tuple[str, ...]
     patch_hooks: tuple[str, ...]
+    direction: str | None = None
+    pair_id: str | None = None
+    artifact_uri: str | None = None
+    layer_map_id: str | None = None
+    projection_id: str | None = None
+    estimated_prefill_saved_ms: float | None = None
+    estimated_materialization_ms: float | None = None
+    fallback_reason: str | None = None
     notes: tuple[str, ...] = ()
 
     @property
@@ -123,7 +154,7 @@ class ReusePlan:
     def as_metadata(self) -> dict[str, str | float | bool]:
         """Metadata fields that can be attached to an LMCache lookup/store path."""
 
-        return {
+        metadata: dict[str, str | float | bool] = {
             "ge_scenario": self.scenario.value,
             "ge_strategy": self.strategy.value,
             "ge_status": self.status.value,
@@ -134,3 +165,20 @@ class ReusePlan:
             "ge_prefix_hash": self.request.prefix_hash,
             "ge_executable": self.executable,
         }
+        optional = {
+            "ge_direction": self.direction,
+            "ge_pair_id": self.pair_id,
+            "ge_calibration_id": self.request.calibration_id,
+            "ge_artifact_uri": self.artifact_uri,
+            "ge_layer_map_id": self.layer_map_id,
+            "ge_projection_id": self.projection_id,
+            "ge_estimated_prefill_saved_ms": self.estimated_prefill_saved_ms,
+            "ge_estimated_materialization_ms": self.estimated_materialization_ms,
+            "ge_fallback_reason": self.fallback_reason,
+            "ge_source_config_hash": self.request.source.kv_shape.model_config_hash,
+            "ge_target_config_hash": self.request.target.kv_shape.model_config_hash,
+        }
+        for key, value in optional.items():
+            if value is not None:
+                metadata[key] = value
+        return metadata

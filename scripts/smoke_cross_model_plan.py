@@ -67,6 +67,8 @@ def build_plans() -> list[dict[str, object]]:
             target=large,
             prefix_hash="shared-system-prompt",
             calibration_id="qwen25_projection_v0",
+            estimated_target_prefill_ms=100.0,
+            estimated_materialization_ms=30.0,
         ),
         ReuseRequest(source=base, target=llama, prefix_hash="shared-system-prompt"),
     ]
@@ -81,6 +83,13 @@ def build_plans() -> list[dict[str, object]]:
             "confidence": plan.confidence,
             "executable": plan.executable,
             "transform_id": plan.transform_id,
+            "direction": plan.direction,
+            "pair_id": plan.pair_id,
+            "layer_map_id": plan.layer_map_id,
+            "projection_id": plan.projection_id,
+            "estimated_prefill_saved_ms": plan.estimated_prefill_saved_ms,
+            "estimated_materialization_ms": plan.estimated_materialization_ms,
+            "fallback_reason": plan.fallback_reason,
             "required_gates": list(plan.required_gates),
             "notes": list(plan.notes),
         }
@@ -114,7 +123,7 @@ def main() -> None:
 
     for plan in payload["plans"]:  # type: ignore[index]
         print(
-            "{scenario}: {source} -> {target} | {strategy} | {status} | confidence={confidence}".format(
+            "{scenario}: {source} -> {target} | {strategy} | {status} | confidence={confidence} | direction={direction}".format(
                 **plan
             )
         )

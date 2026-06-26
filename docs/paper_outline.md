@@ -32,7 +32,7 @@
 
 - How often can base/LoRA deployments reuse KV safely?
 - What TTFT improvement is available when same-model size variants share prefixes?
-- Which layer subsets and projection methods are useful for size-variant reuse?
+- Which layer subsets and projection methods are useful for GoldenScale reuse?
 - How much overhead does the LMCache secondary lookup and materializer add?
 - When do quality gates reject reuse, and are those rejections predictive of task quality?
 - Is cross-base reuse ever useful under strict calibration and task allowlists?
@@ -42,7 +42,7 @@
 - Architecture: SGLang, LMCache, and the GoldenExperience patch hooks.
 - Taxonomy table for the three reuse scenarios.
 - TTFT and accepted-reuse rate for base/LoRA serving.
-- Quality versus latency for size-variant projection strategies.
+- Quality versus latency for GoldenScale projection strategies.
 - Fallback reason breakdown.
 - Patch overhead: lookup, materialization, accounting.
 

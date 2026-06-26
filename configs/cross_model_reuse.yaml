@@ -22,14 +22,19 @@ reuse_scenarios:
       - same_tokenizer_id
       - same_kv_shape
       - lora_delta_quality_gate
-  same_model_size_variant:
+  golden_scale:
     enabled: true
+    bidirectional: true
     strategy: layerwise_projection
+    default_pair: qwen25_7b_14b
+    shadow_mode_first: true
     required_gates:
       - same_family_architecture
       - tokenizer_alignment
       - layer_mapping
       - projection_calibration
+      - artifact_hash_match
+      - runtime_cost_gate
   cross_base_model:
     enabled: false
     strategy: learned_cross_base_translator
@@ -48,11 +53,21 @@ model_pairs:
     tokenizer_id: qwen2.5
     base_model_id: qwen2.5-7b
   - name: small_to_large
-    scenario: same_model_size_variant
-    source_model_id: qwen2.5-7b
-    target_model_id: qwen2.5-14b
-    tokenizer_id: qwen2.5
-    calibration_id: qwen25_7b_14b_projection_v0
+    scenario: golden_scale
+    source_model_id: Qwen/Qwen2.5-7B-Instruct
+    target_model_id: Qwen/Qwen2.5-14B-Instruct
+    tokenizer_id: Qwen/Qwen2.5
+    direction: small_to_large
+    calibration_id: qwen25_7b_to_14b_projection_v0
+    artifact_uri: artifacts/golden_scale/qwen25_7b_to_14b_projection_v0.json
+  - name: large_to_small
+    scenario: golden_scale
+    source_model_id: Qwen/Qwen2.5-14B-Instruct
+    target_model_id: Qwen/Qwen2.5-7B-Instruct
+    tokenizer_id: Qwen/Qwen2.5
+    direction: large_to_small
+    calibration_id: qwen25_14b_to_7b_projection_v0
+    artifact_uri: artifacts/golden_scale/qwen25_14b_to_7b_projection_v0.json
 
 quality_gates:
   min_lora_confidence: 0.95
@@ -60,13 +75,19 @@ quality_gates:
   min_cross_base_confidence: 0.70
   max_probe_logit_drift: null
   max_task_score_drop: null
+  golden_scale:
+    min_kv_cosine: 0.90
+    min_attention_proxy_cosine: 0.95
+    max_perplexity_drift_pct: 5.0
+    max_task_score_drop_pct: 2.0
+    max_materialization_to_prefill_ratio: 0.70
 
 benchmarks:
   workloads:
     - lora_multi_tenant_chat
     - rag_prefix_sharing
     - agent_tool_schema_reuse
-    - size_variant_fallback_serving
+    - golden_scale_fallback_serving
   metrics:
     - ttft_ms
     - ttft_delta_ms

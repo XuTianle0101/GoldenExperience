@@ -1,0 +1,345 @@
+"""Records for same-model, different-parameter-size KV reuse."""
+
+from __future__ import annotations
+
+import hashlib
+import json
+from dataclasses import asdict, dataclass, field
+from enum import Enum
+from pathlib import Path
+from typing import Any
+
+from goldenexperience.reuse.models import KVShape, ModelRef
+
+
+class SizeVariantDirection(str, Enum):
+    """Directional artifact identity for model-size variants."""
+
+    SMALL_TO_LARGE = "small_to_large"
+    LARGE_TO_SMALL = "large_to_small"
+    UNKNOWN = "unknown"
+
+
+class FallbackReason(str, Enum):
+    """Stable fallback labels used by patch accounting."""
+
+    NONE = "none"
+    MISSING_CALIBRATION = "missing_calibration"
+    ARTIFACT_HASH_MISMATCH = "artifact_hash_mismatch"
+    TOKENIZER_MISMATCH = "tokenizer_mismatch"
+    ROPE_MISMATCH = "rope_mismatch"
+    INCOMPLETE_LAYER_MAP = "incomplete_layer_map"
+    SOURCE_LAYER_MISSING = "source_layer_missing"
+    PROJECTION_SHAPE_MISMATCH = "projection_shape_mismatch"
+    QUALITY_GATE_FAILED = "quality_gate_failed"
+    MATERIALIZATION_TIMEOUT = "materialization_timeout"
+    COST_GATE_FAILED = "cost_gate_failed"
+
+
+@dataclass(frozen=True)
+class LayerMapEntry:
+    """Mapping from one target layer to one or more source layers."""
+
+    target_layer_id: int
+    source_layer_ids: tuple[int, ...]
+    weights: tuple[float, ...]
+
+    def validate(self, source_num_layers: int) -> list[str]:
+        errors: list[str] = []
+        if not self.source_layer_ids:
+            errors.append(f"target layer {self.target_layer_id} has no source layer")
+        if len(self.source_layer_ids) != len(self.weights):
+            errors.append(f"target layer {self.target_layer_id} has mismatched layer weights")
+        for source_layer_id in self.source_layer_ids:
+            if source_layer_id < 0 or source_layer_id >= source_num_layers:
+                errors.append(f"source layer {source_layer_id} is outside source depth")
+        if self.weights and abs(sum(self.weights) - 1.0) > 1e-6:
+            errors.append(f"target layer {self.target_layer_id} weights do not sum to 1")
+        return errors
+
+
+@dataclass(frozen=True)
+class LayerMap:
+    """Complete target-depth layer mapping for one direction."""
+
+    layer_map_id: str
+    pair_id: str
+    direction: SizeVariantDirection
+    source_num_layers: int
+    target_num_layers: int
+    entries: tuple[LayerMapEntry, ...]
+    method: str = "linear_interpolation"
+    score: float = 1.0
+
+    def entry_for(self, target_layer_id: int) -> LayerMapEntry | None:
+        for entry in self.entries:
+            if entry.target_layer_id == target_layer_id:
+                return entry
+        return None
+
+    def validate(self) -> list[str]:
+        errors: list[str] = []
+        target_ids = [entry.target_layer_id for entry in self.entries]
+        expected = list(range(self.target_num_layers))
+        if sorted(target_ids) != expected:
+            errors.append("layer map must cover every target layer exactly once")
+        if len(target_ids) != len(set(target_ids)):
+            errors.append("layer map contains duplicate target layers")
+        for entry in self.entries:
+            errors.extend(entry.validate(self.source_num_layers))
+        return errors
+
+
+@dataclass(frozen=True)
+class ProjectionSpec:
+    """KV projection shape contract for one direction.
+
+    The MVP stores projection metadata and uses deterministic pad/truncate projection.
+    Learned per-layer weights can be attached later through weight_uri without changing
+    the manifest contract.
+    """
+
+    projection_id: str
+    pair_id: str
+    direction: SizeVariantDirection
+    source_width: int
+    target_width: int
+    source_kv_heads: int
+    target_kv_heads: int
+    source_head_dim: int
+    target_head_dim: int
+    method: str = "identity_pad_truncate"
+    weight_uri: str | None = None
+    rank: int | None = None
+
+    def validate(self) -> list[str]:
+        errors = []
+        if self.source_width != self.source_kv_heads * self.source_head_dim:
+            errors.append("source_width must equal source_kv_heads * source_head_dim")
+        if self.target_width != self.target_kv_heads * self.target_head_dim:
+            errors.append("target_width must equal target_kv_heads * target_head_dim")
+        if self.source_width <= 0 or self.target_width <= 0:
+            errors.append("projection widths must be positive")
+        return errors
+
+
+@dataclass(frozen=True)
+class QualityGateResult:
+    """Offline or shadow-mode quality gate result."""
+
+    passed: bool
+    kv_cosine: float = 0.0
+    attention_proxy_cosine: float = 0.0
+    perplexity_drift_pct: float = 0.0
+    task_score_drop_pct: float = 0.0
+    reasons: tuple[str, ...] = ()
+
+    @classmethod
+    def from_metrics(
+        cls,
+        kv_cosine: float,
+        attention_proxy_cosine: float,
+        perplexity_drift_pct: float,
+        task_score_drop_pct: float,
+        min_kv_cosine: float = 0.90,
+        min_attention_proxy_cosine: float = 0.95,
+        max_perplexity_drift_pct: float = 5.0,
+        max_task_score_drop_pct: float = 2.0,
+    ) -> "QualityGateResult":
+        reasons: list[str] = []
+        if kv_cosine < min_kv_cosine:
+            reasons.append("kv_cosine_below_threshold")
+        if attention_proxy_cosine < min_attention_proxy_cosine:
+            reasons.append("attention_proxy_below_threshold")
+        if perplexity_drift_pct > max_perplexity_drift_pct:
+            reasons.append("perplexity_drift_above_threshold")
+        if task_score_drop_pct > max_task_score_drop_pct:
+            reasons.append("task_score_drop_above_threshold")
+        return cls(
+            passed=not reasons,
+            kv_cosine=kv_cosine,
+            attention_proxy_cosine=attention_proxy_cosine,
+            perplexity_drift_pct=perplexity_drift_pct,
+            task_score_drop_pct=task_score_drop_pct,
+            reasons=tuple(reasons),
+        )
+
+
+@dataclass(frozen=True)
+class CalibrationManifest:
+    """Serializable artifact manifest for one GoldenScale direction."""
+
+    calibration_id: str
+    pair_id: str
+    direction: SizeVariantDirection
+    source: ModelRef
+    target: ModelRef
+    layer_map: LayerMap
+    projection: ProjectionSpec
+    quality: QualityGateResult
+    artifact_root: str = "artifacts/golden_scale"
+    prompts_count: int = 0
+    created_by: str = "golden-scale-fit"
+    references: tuple[str, ...] = ()
+    metadata: dict[str, str | int | float | bool] = field(default_factory=dict)
+
+    @property
+    def layer_map_id(self) -> str:
+        return self.layer_map.layer_map_id
+
+    @property
+    def projection_id(self) -> str:
+        return self.projection.projection_id
+
+    @property
+    def passed(self) -> bool:
+        return self.quality.passed and not self.validate()
+
+    def validate(self) -> list[str]:
+        errors: list[str] = []
+        if not self.source.same_family_architecture(self.target):
+            errors.append("source and target must share family and architecture")
+        if not self.source.shares_tokenizer_with(self.target):
+            errors.append("source and target tokenizers differ")
+        if self.source.kv_shape.rope_theta != self.target.kv_shape.rope_theta:
+            errors.append("source and target rope_theta differ")
+        if self.source.kv_shape.rope_scaling != self.target.kv_shape.rope_scaling:
+            errors.append("source and target rope_scaling differ")
+        if self.layer_map.source_num_layers != self.source.kv_shape.num_layers:
+            errors.append("layer map source depth does not match source model")
+        if self.layer_map.target_num_layers != self.target.kv_shape.num_layers:
+            errors.append("layer map target depth does not match target model")
+        if self.layer_map.pair_id != self.pair_id or self.projection.pair_id != self.pair_id:
+            errors.append("layer map/projection pair_id must match manifest pair_id")
+        if self.layer_map.direction != self.direction or self.projection.direction != self.direction:
+            errors.append("layer map/projection direction must match manifest direction")
+        errors.extend(self.layer_map.validate())
+        errors.extend(self.projection.validate())
+        if not self.quality.passed:
+            errors.append("quality gate failed")
+        return errors
+
+    def to_dict(self) -> dict[str, Any]:
+        payload = asdict(self)
+        payload["direction"] = self.direction.value
+        payload["layer_map"]["direction"] = self.layer_map.direction.value
+        payload["projection"]["direction"] = self.projection.direction.value
+        return payload
+
+    @classmethod
+    def from_dict(cls, payload: dict[str, Any]) -> "CalibrationManifest":
+        source = model_ref_from_dict(payload["source"])
+        target = model_ref_from_dict(payload["target"])
+        layer_map_payload = payload["layer_map"]
+        projection_payload = payload["projection"]
+        quality_payload = payload["quality"]
+        layer_map = LayerMap(
+            layer_map_id=layer_map_payload["layer_map_id"],
+            pair_id=layer_map_payload["pair_id"],
+            direction=SizeVariantDirection(layer_map_payload["direction"]),
+            source_num_layers=int(layer_map_payload["source_num_layers"]),
+            target_num_layers=int(layer_map_payload["target_num_layers"]),
+            entries=tuple(
+                LayerMapEntry(
+                    target_layer_id=int(item["target_layer_id"]),
+                    source_layer_ids=tuple(int(value) for value in item["source_layer_ids"]),
+                    weights=tuple(float(value) for value in item["weights"]),
+                )
+                for item in layer_map_payload["entries"]
+            ),
+            method=layer_map_payload.get("method", "linear_interpolation"),
+            score=float(layer_map_payload.get("score", 1.0)),
+        )
+        projection = ProjectionSpec(
+            projection_id=projection_payload["projection_id"],
+            pair_id=projection_payload["pair_id"],
+            direction=SizeVariantDirection(projection_payload["direction"]),
+            source_width=int(projection_payload["source_width"]),
+            target_width=int(projection_payload["target_width"]),
+            source_kv_heads=int(projection_payload["source_kv_heads"]),
+            target_kv_heads=int(projection_payload["target_kv_heads"]),
+            source_head_dim=int(projection_payload["source_head_dim"]),
+            target_head_dim=int(projection_payload["target_head_dim"]),
+            method=projection_payload.get("method", "identity_pad_truncate"),
+            weight_uri=projection_payload.get("weight_uri"),
+            rank=projection_payload.get("rank"),
+        )
+        quality = QualityGateResult(
+            passed=bool(quality_payload["passed"]),
+            kv_cosine=float(quality_payload.get("kv_cosine", 0.0)),
+            attention_proxy_cosine=float(quality_payload.get("attention_proxy_cosine", 0.0)),
+            perplexity_drift_pct=float(quality_payload.get("perplexity_drift_pct", 0.0)),
+            task_score_drop_pct=float(quality_payload.get("task_score_drop_pct", 0.0)),
+            reasons=tuple(quality_payload.get("reasons", ())),
+        )
+        return cls(
+            calibration_id=payload["calibration_id"],
+            pair_id=payload["pair_id"],
+            direction=SizeVariantDirection(payload["direction"]),
+            source=source,
+            target=target,
+            layer_map=layer_map,
+            projection=projection,
+            quality=quality,
+            artifact_root=payload.get("artifact_root", "artifacts/golden_scale"),
+            prompts_count=int(payload.get("prompts_count", 0)),
+            created_by=payload.get("created_by", "golden-scale-fit"),
+            references=tuple(payload.get("references", ())),
+            metadata=dict(payload.get("metadata", {})),
+        )
+
+    def save(self, path: str | Path) -> None:
+        output_path = Path(path)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_text(json.dumps(self.to_dict(), indent=2, sort_keys=True), encoding="utf-8")
+
+    @classmethod
+    def load(cls, path: str | Path) -> "CalibrationManifest":
+        return cls.from_dict(json.loads(Path(path).read_text(encoding="utf-8")))
+
+
+def kv_width(shape: KVShape) -> int:
+    return shape.num_key_value_heads * shape.head_dim
+
+
+def infer_direction(source: ModelRef, target: ModelRef) -> SizeVariantDirection:
+    if source.parameter_count_b is None or target.parameter_count_b is None:
+        return SizeVariantDirection.UNKNOWN
+    if source.parameter_count_b < target.parameter_count_b:
+        return SizeVariantDirection.SMALL_TO_LARGE
+    if source.parameter_count_b > target.parameter_count_b:
+        return SizeVariantDirection.LARGE_TO_SMALL
+    return SizeVariantDirection.UNKNOWN
+
+
+def pair_id_for(source: ModelRef, target: ModelRef) -> str:
+    family = source.family if source.family == target.family else f"{source.family}_{target.family}"
+    left = source.model_id.replace("/", "_").replace(" ", "_")
+    right = target.model_id.replace("/", "_").replace(" ", "_")
+    return f"{family}:{left}->{right}"
+
+
+def stable_artifact_id(prefix: str, *parts: object) -> str:
+    raw = "|".join(str(part) for part in parts)
+    return f"{prefix}-" + hashlib.sha256(raw.encode("utf-8")).hexdigest()[:16]
+
+
+def model_ref_to_dict(model: ModelRef) -> dict[str, Any]:
+    payload = asdict(model)
+    return payload
+
+
+def model_ref_from_dict(payload: dict[str, Any]) -> ModelRef:
+    kv_shape = KVShape(**payload["kv_shape"])
+    return ModelRef(
+        model_id=payload["model_id"],
+        family=payload["family"],
+        architecture=payload["architecture"],
+        tokenizer_id=payload["tokenizer_id"],
+        kv_shape=kv_shape,
+        parameter_count_b=payload.get("parameter_count_b"),
+        base_model_id=payload.get("base_model_id"),
+        lora_adapter_id=payload.get("lora_adapter_id"),
+        revision=payload.get("revision"),
+        metadata=dict(payload.get("metadata", {})),
+    )

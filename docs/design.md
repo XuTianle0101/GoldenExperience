@@ -60,6 +60,20 @@ differs, the plan becomes `layerwise_projection` and must wait for calibration. 
 development work is layer mapping, head mapping, projection materialization, and partial
 reuse policy.
 
+The implemented MVP makes this scenario artifact-driven:
+
+- `CalibrationManifest` binds one source model, one target model, one direction, a layer
+  map, a projection spec, and quality-gate results.
+- `LayerMap` must cover every target layer. The default builder uses linear depth
+  interpolation; later calibration can replace the score with CKA/SVCCA alignment.
+- `ProjectionSpec` records source/target KV width. The current deterministic materializer
+  uses identity-pad-truncate projection as a scaffold for learned per-layer projections.
+- Planner execution requires a `calibration_id`; when an `artifact_uri` is supplied, model
+  ids, tokenizer/shape contract, config hashes, layer coverage, projection shape, and
+  quality gates are validated before returning `ready`.
+- Runtime cost gating rejects reuse when estimated materialization cost exceeds 70% of the
+  target native prefill cost.
+
 ### 3. Different Base Models
 
 This is explicitly experimental. The default plan is not executable unless the caller opts

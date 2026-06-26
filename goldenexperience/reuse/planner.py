@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 from dataclasses import dataclass
+from pathlib import Path
 
 from goldenexperience.reuse.models import (
     ModelRef,
@@ -13,6 +14,13 @@ from goldenexperience.reuse.models import (
     ReuseScenario,
     ReuseStrategy,
 )
+from goldenexperience.size_variant.models import (
+    CalibrationManifest,
+    FallbackReason,
+    infer_direction,
+    pair_id_for,
+)
+from goldenexperience.size_variant.projection import validate_projection_cost
 
 
 @dataclass(frozen=True)
@@ -135,6 +143,7 @@ class CrossModelReusePlanner:
         strategy = ReuseStrategy.DIRECT_SHAPE_ALIAS if same_layout else ReuseStrategy.LAYERWISE_PROJECTION
         status = PlanStatus.READY if same_layout or request.calibration_id else PlanStatus.NEEDS_CALIBRATION
         confidence = self.same_shape_confidence if same_layout else self.projection_confidence
+        fallback_reason: str | None = None
         gates = [
             "same_family_architecture",
             "tokenizer_alignment",
@@ -148,9 +157,47 @@ class CrossModelReusePlanner:
         if not request.source.shares_tokenizer_with(request.target):
             status = PlanStatus.BLOCKED
             confidence = 0.0
+            fallback_reason = FallbackReason.TOKENIZER_MISMATCH.value
             notes.append("Tokenizers differ inside the same model line.")
+        elif not request.source.kv_shape.same_runtime_contract(request.target.kv_shape):
+            status = PlanStatus.BLOCKED
+            confidence = 0.0
+            fallback_reason = FallbackReason.ROPE_MISMATCH.value
+            notes.append("Runtime KV contract differs; dtype, RoPE, or sliding-window settings are incompatible.")
         elif not same_layout and request.calibration_id is None:
+            fallback_reason = FallbackReason.MISSING_CALIBRATION.value
             notes.append("Projection path is scaffolded but needs calibration before execution.")
+        elif not validate_projection_cost(
+            request.estimated_materialization_ms,
+            request.estimated_target_prefill_ms,
+        ):
+            status = PlanStatus.WARM_START_RECOMPUTE
+            confidence = 0.0
+            fallback_reason = FallbackReason.COST_GATE_FAILED.value
+            notes.append("Projection cost gate failed; target prefill is cheaper than materialization.")
+
+        manifest = self._load_size_variant_manifest(request)
+        if manifest is not None:
+            manifest_errors = self._manifest_errors(request, manifest)
+            if manifest_errors:
+                status = PlanStatus.BLOCKED
+                confidence = 0.0
+                fallback_reason = FallbackReason.ARTIFACT_HASH_MISMATCH.value
+                notes.extend(manifest_errors)
+            else:
+                gates.append("artifact_hash_match")
+                confidence = min(confidence, manifest.quality.kv_cosine)
+
+        direction = infer_direction(request.source, request.target).value
+        pair_id = pair_id_for(request.source, request.target)
+        layer_map_id = manifest.layer_map_id if manifest is not None and not manifest_errors else None
+        projection_id = manifest.projection_id if manifest is not None and not manifest_errors else None
+        estimated_prefill_saved_ms = None
+        if request.estimated_target_prefill_ms is not None and request.estimated_materialization_ms is not None:
+            estimated_prefill_saved_ms = max(
+                0.0,
+                request.estimated_target_prefill_ms - request.estimated_materialization_ms,
+            )
         return self._make_plan(
             request=request,
             scenario=ReuseScenario.SAME_MODEL_SIZE_VARIANT,
@@ -159,6 +206,14 @@ class CrossModelReusePlanner:
             confidence=confidence,
             required_gates=tuple(gates),
             notes=tuple(notes),
+            direction=direction,
+            pair_id=pair_id,
+            artifact_uri=request.artifact_uri,
+            layer_map_id=layer_map_id,
+            projection_id=projection_id,
+            estimated_prefill_saved_ms=estimated_prefill_saved_ms,
+            estimated_materialization_ms=request.estimated_materialization_ms,
+            fallback_reason=fallback_reason,
         )
 
     def _plan_cross_base(self, request: ReuseRequest) -> ReusePlan:
@@ -196,8 +251,16 @@ class CrossModelReusePlanner:
         confidence: float,
         required_gates: tuple[str, ...],
         notes: tuple[str, ...],
+        direction: str | None = None,
+        pair_id: str | None = None,
+        artifact_uri: str | None = None,
+        layer_map_id: str | None = None,
+        projection_id: str | None = None,
+        estimated_prefill_saved_ms: float | None = None,
+        estimated_materialization_ms: float | None = None,
+        fallback_reason: str | None = None,
     ) -> ReusePlan:
-        transform_id = self._transform_id(request, scenario, strategy)
+        transform_id = projection_id or self._transform_id(request, scenario, strategy)
         return ReusePlan(
             request=request,
             scenario=scenario,
@@ -213,8 +276,44 @@ class CrossModelReusePlanner:
                 "goldenexperience_materializer",
                 "quality_gate_accounting",
             ),
+            direction=direction,
+            pair_id=pair_id,
+            artifact_uri=artifact_uri,
+            layer_map_id=layer_map_id,
+            projection_id=projection_id,
+            estimated_prefill_saved_ms=estimated_prefill_saved_ms,
+            estimated_materialization_ms=estimated_materialization_ms,
+            fallback_reason=fallback_reason,
             notes=notes,
         )
+
+    def _load_size_variant_manifest(self, request: ReuseRequest) -> CalibrationManifest | None:
+        if request.artifact_uri is None:
+            return None
+        path = Path(request.artifact_uri)
+        if not path.exists():
+            return None
+        return CalibrationManifest.load(path)
+
+    def _manifest_errors(
+        self,
+        request: ReuseRequest,
+        manifest: CalibrationManifest,
+    ) -> list[str]:
+        errors = manifest.validate()
+        if manifest.calibration_id != request.calibration_id:
+            errors.append("calibration_id differs from artifact")
+        if manifest.source.model_id != request.source.model_id:
+            errors.append("source model differs from artifact")
+        if manifest.target.model_id != request.target.model_id:
+            errors.append("target model differs from artifact")
+        source_hash = request.source.kv_shape.model_config_hash
+        target_hash = request.target.kv_shape.model_config_hash
+        if source_hash and manifest.source.kv_shape.model_config_hash and source_hash != manifest.source.kv_shape.model_config_hash:
+            errors.append("source model_config_hash differs from artifact")
+        if target_hash and manifest.target.kv_shape.model_config_hash and target_hash != manifest.target.kv_shape.model_config_hash:
+            errors.append("target model_config_hash differs from artifact")
+        return errors
 
     def _is_lora_pair(self, source: ModelRef, target: ModelRef) -> bool:
         same_base = source.canonical_base_model_id == target.canonical_base_model_id

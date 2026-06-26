@@ -33,6 +33,11 @@ dev = ["pytest>=8", "ruff>=0.5", "mypy>=1.10"]
 
 [project.scripts]
 golden-patch-manifest = "goldenexperience.cli.patch_manifest:main"
+golden-scale = "goldenexperience.cli.size_variant:main"
+golden-scale-collect = "goldenexperience.cli.size_variant:main_collect"
+golden-scale-fit = "goldenexperience.cli.size_variant:main_fit"
+golden-scale-validate = "goldenexperience.cli.size_variant:main_validate"
+golden-scale-bench = "goldenexperience.cli.size_variant:main_bench"
 golden-synthetic-benchmark = "goldenexperience.benchmarks.synthetic:main"
 
 [tool.setuptools.packages.find]

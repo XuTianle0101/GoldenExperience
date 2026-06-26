@@ -5,8 +5,9 @@
 - SGLang without LMCache.
 - SGLang with unmodified LMCache.
 - SGLang with LMCache plus GoldenExperience metadata, but cross-model reuse disabled.
+- GoldenScale shadow mode, where projected KV is validated but not injected.
 - GoldenExperience base/LoRA reuse enabled.
-- GoldenExperience same-model size-variant reuse enabled.
+- GoldenScale reuse enabled.
 - GoldenExperience cross-base reuse enabled only for calibrated experiments.
 
 ## Reuse Scenarios
@@ -40,5 +41,7 @@
 - Prefix length sweep.
 - Layer subset: early layers, middle layers, late layers, all layers.
 - Projection type for size variants: direct alias, linear projection, learned projection.
+- Direction for size variants: 7B->14B, 14B->7B, and bidirectional serving.
+- Runtime gate: materialization cost ratio from 0.3 to 0.9 of target prefill.
 - Calibration set size.
 - Cross-base task allowlist versus no allowlist.

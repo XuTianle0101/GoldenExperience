@@ -17,13 +17,17 @@ GoldenExperience is no longer trying to be an inference engine or a KV offload s
 It is intended to be carried as a small patch on top of LMCache, with runtime metadata
 flowing from SGLang requests into LMCache lookup and retrieve paths.
 
-The research/development target is three cross-model reuse cases:
+The research/development target is three GoldenExperience reuse tracks:
 
-| Scenario | Goal | Default Strategy | Safety Gate |
-| --- | --- | --- | --- |
-| Base model <-> LoRA model | Reuse KV between a model and its LoRA fine-tuned variant | Adapter-delta gated aliasing | Same base, tokenizer, KV layout, LoRA drift probe |
-| Same model, different parameter sizes | Reuse KV across variants such as 7B <-> 14B | Direct alias if shapes match; otherwise layerwise projection | Layer/head mapping and projection calibration |
-| Different base models | Explore broader cross-base reuse | Learned translator | Explicit calibration set, tokenizer bridge, task allowlist |
+| Track Name | Scenario | Goal | Default Strategy | Safety Gate |
+| --- | --- | --- | --- | --- |
+| GoldenLoRA | Base model <-> LoRA model | Reuse KV between a model and its LoRA fine-tuned variant | Adapter-delta gated aliasing | Same base, tokenizer, KV layout, LoRA drift probe |
+| GoldenScale | Same model, different parameter sizes | Reuse KV across variants such as 7B <-> 14B | Direct alias if shapes match; otherwise layerwise projection | Layer/head mapping and projection calibration |
+| GoldenBridge | Different base models | Explore broader cross-base reuse | Learned translator | Explicit calibration set, tokenizer bridge, task allowlist |
+
+The names map to the implementation scenarios as follows: `GoldenLoRA` targets
+`model_lora_mutual_reuse`, `GoldenScale` targets `same_model_different_parameter_size`,
+and `GoldenBridge` targets `different_base_model`.
 
 ## Architecture
 
@@ -82,6 +86,18 @@ Run the planner smoke test:
 
 ```bash
 python3 scripts/smoke_cross_model_plan.py
+```
+
+Build the Qwen2.5 7B <-> 14B GoldenScale calibration scaffold:
+
+```bash
+golden-scale-collect --output artifacts/golden_scale/prompts.json
+golden-scale-fit \
+  --direction bidirectional \
+  --prompt-manifest artifacts/golden_scale/prompts.json \
+  --output-dir artifacts/golden_scale
+golden-scale-validate artifacts/golden_scale/qwen25_7b_to_14b_projection_v0.json
+golden-scale-bench artifacts/golden_scale/qwen25_14b_to_7b_projection_v0.json
 ```
 
 ## Deployment Flow
@@ -158,7 +174,7 @@ python3 scripts/smoke_cross_model_plan.py --check-runtime
 Expected planner output includes three rows:
 
 - `model_lora_mutual_reuse`: ready base/LoRA plan.
-- `same_model_different_parameter_size`: calibrated size-variant projection plan.
+- `same_model_different_parameter_size`: calibrated GoldenScale projection plan.
 - `different_base_model`: conservative unready cross-base plan.
 
 If `--check-runtime` reports missing `sglang` or `lmcache`, install the runtime stack before
@@ -236,6 +252,40 @@ manifest, and deployment wrappers. The real LMCache hook implementation is the n
 Until `lmcache_cross_model_lookup` and `goldenexperience_materializer` are wired into an
 LMCache patch or fork, SGLang + LMCache will run normally and GoldenExperience can validate
 plans/metadata, but accepted cross-model KV reuse will not yet be executed inside LMCache.
+
+## GoldenScale Reuse
+
+The first GoldenScale MVP targets bidirectional `Qwen/Qwen2.5-7B-Instruct` and
+`Qwen/Qwen2.5-14B-Instruct` reuse. GoldenExperience treats each direction as an independent
+artifact because 7B->14B and 14B->7B need different layer maps, projection specs, cost
+estimates, and quality gates.
+
+The artifact flow is:
+
+```text
+shared prompts
+  -> golden-scale-collect
+  -> golden-scale-fit
+  -> CalibrationManifest JSON per direction
+  -> golden-scale-validate
+  -> planner READY only when calibration/artifact gates pass
+```
+
+The MVP artifact contains:
+
+- `LayerMap`: covers every target layer and maps it to source layer ids.
+- `ProjectionSpec`: source/target KV width, KV heads, head dim, method, and projection id.
+- `QualityGateResult`: offline/shadow gate metrics such as KV cosine and perplexity drift.
+- sidecar ids: `pair_id`, `direction`, `calibration_id`, `layer_map_id`, `projection_id`,
+  source/target config hashes, and fallback reason.
+
+Runtime behavior remains conservative:
+
+- Prefix token ids must match exactly; chunk alignment is required.
+- The materializer must output full target-shaped KV for every target layer.
+- `estimated_materialization_ms` must be <= 70% of target prefill cost.
+- Any tokenizer, RoPE, config hash, artifact, layer-map, projection, or quality mismatch
+  falls back to the original SGLang + LMCache target prefill path.
 
 ## Minimal Planner Example
 
