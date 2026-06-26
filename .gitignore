@@ -1,6 +1,11 @@
+.vscode/
+.cursor/
+.codex/
+.claude/
 __pycache__/
 *.py[cod]
 *.pyo
+*.pyc
 *.egg-info/
 .pytest_cache/
 .ruff_cache/
@@ -11,6 +16,7 @@ dist/
 build/
 .venv/
 venv/
+.env
 artifacts/cache/
 artifacts/results/
 *.pt
@@ -18,3 +24,4 @@ artifacts/results/
 *.bin
 *.safetensors
 
+activate_env.sh
