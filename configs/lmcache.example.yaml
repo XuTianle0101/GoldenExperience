@@ -1,0 +1,7 @@
+# Placeholder for the upstream LMCache configuration used by SGLang experiments.
+# GoldenExperience should not redefine storage/offload policy here; keep those settings
+# in the format expected by the installed LMCache version.
+goldenexperience:
+  enable_cross_model_reuse: true
+  patch_manifest: docs/patch_manifest.md
+  fallback_on_unready_plan: true

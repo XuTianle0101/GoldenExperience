@@ -1,133 +1,139 @@
 # GoldenExperience
 
-GoldenExperience is a research infrastructure repository for engine-decoupled KV cache
-reuse in LLM serving. The v1 system focuses on:
+GoldenExperience is a **cross-model KV Cache reuse patch framework** for an open-source
+serving stack built from **SGLang** + **LMCache**.
 
-- Tiered KV cache offload across HBM, CPU memory, and NVMe.
-- Cross-model KV cache reuse for same-family LLMs such as Llama or Qwen variants.
-- Thin adapters for inference engines instead of engine-owned cache logic.
-- Reproducible synthetic and model-backed benchmarks for systems papers.
+The new boundary is deliberately narrow:
 
-The first paper target is an MLSys/OSDI-style systems contribution. The main success
-metrics are TTFT, throughput, memory pressure, and tail latency, with answer quality used
-as a gate for reuse decisions.
+- SGLang owns model loading, scheduling, decoding, and inference correctness.
+- LMCache owns KV storage, lookup, offload, eviction, and prefetch mechanics.
+- GoldenExperience adds the control plane for **reusing KV Cache across models**.
+- If a reuse plan is not safe or not calibrated, the stack falls back to the original
+  SGLang + LMCache behavior.
+
+## What This Project Focuses On
+
+GoldenExperience is no longer trying to be an inference engine or a KV offload system.
+It is intended to be carried as a small patch on top of LMCache, with runtime metadata
+flowing from SGLang requests into LMCache lookup and retrieve paths.
+
+The research/development target is three cross-model reuse cases:
+
+| Scenario | Goal | Default Strategy | Safety Gate |
+| --- | --- | --- | --- |
+| Base model <-> LoRA model | Reuse KV between a model and its LoRA fine-tuned variant | Adapter-delta gated aliasing | Same base, tokenizer, KV layout, LoRA drift probe |
+| Same model, different parameter sizes | Reuse KV across variants such as 7B <-> 14B | Direct alias if shapes match; otherwise layerwise projection | Layer/head mapping and projection calibration |
+| Different base models | Explore broader cross-base reuse | Learned translator | Explicit calibration set, tokenizer bridge, task allowlist |
+
+## Architecture
+
+```text
+SGLang request/session
+        |
+        | model refs, prefix hash, experiment flags
+        v
+GoldenExperience planner
+        |
+        | ReusePlan: scenario, strategy, confidence, gates
+        v
+LMCache patch surface
+        |
+        | secondary lookup -> materialize/transform -> quality accounting
+        v
+LMCache storage/offload + SGLang inference remain upstream-owned
+```
+
+The patch surface is described by `PatchManifest.default()`:
+
+1. `sglang_request_metadata`: attach `ModelRef` and prefix metadata before LMCache lookup.
+2. `lmcache_cross_model_lookup`: on a same-model miss, query cross-model candidates.
+3. `goldenexperience_materializer`: alias/project/translate KV before returning it.
+4. `quality_gate_accounting`: record confidence, calibration, and fallback reasons.
 
 ## Repository Layout
 
 ```text
 goldenexperience/
-  cache_core/          CacheBlock metadata, indexing, and store-facing APIs.
-  tiered_store/        HBM/CPU/NVMe storage backends, offload, prefetch, eviction.
-  cross_model_mapper/  Same-family KV mapping, confidence scoring, reuse policy.
-  engine_adapter/      Engine-neutral adapter interface plus HF/vLLM thin adapters.
-  benchmarks/          Synthetic benchmark harness and metrics.
-configs/               Example experiment configuration.
-docs/                  Design, paper, and artifact notes.
-examples/              Minimal usage examples.
-tests/                 Unit tests for core behavior.
+  reuse/             ModelRef, KVShape, ReuseRequest, ReusePlan, scenario planner.
+  lmcache_patch/     Patch manifest and sidecar key metadata for LMCache deltas.
+  sglang_runtime/    Dependency checks and namespaced env helpers for wrappers.
+  cache_core/        Legacy in-repo cache block metadata utilities for tests/prototypes.
+  tiered_store/      Legacy synthetic tiering prototype; not the product runtime path.
+  engine_adapter/    Legacy adapter experiments; SGLang is now the runtime target.
+docs/                Design, experiment matrix, artifact, and paper planning notes.
+configs/             Cross-model reuse experiment configuration.
+examples/            Minimal planning examples.
+scripts/             Optional bootstrap helpers.
+tests/               Unit tests for the current framework and legacy utilities.
 ```
 
 ## Quick Start
 
+Install the project first:
+
 ```bash
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-pip install -e ".[dev]"
+python3 -m venv .venv
+source .venv/bin/activate
+python3 -m pip install -e ".[dev]"
 pytest
-golden-synthetic-benchmark --blocks 64 --tokens-per-block 128
 ```
 
-The core package has no mandatory PyTorch dependency. PyTorch is optional and needed for
-real model integration through Hugging Face or vLLM.
+Install SGLang and LMCache from upstream or local clones before running model-backed work.
+For a convenience source-install flow:
 
-## Minimal Example
+```bash
+./scripts/bootstrap_runtime.sh
+```
+
+The helper clones into `third_party/` by default and then runs editable installs. Override
+URLs or the target directory with `GE_SGLANG_REPO_URL`, `GE_LMCACHE_REPO_URL`, and
+`GE_THIRD_PARTY_DIR` when using forks.
+
+## Minimal Planner Example
 
 ```python
-from goldenexperience.cache_core import CacheBlock, CacheBlockMetadata, DeviceTier, KVPayload
-from goldenexperience.tiered_store import TieredKVStore
+from goldenexperience.reuse import CrossModelReusePlanner, KVShape, ModelRef, ReuseRequest
 
-store = TieredKVStore(
-    capacities={DeviceTier.HBM: 64 * 1024 * 1024, DeviceTier.CPU: 512 * 1024 * 1024},
-    nvme_path="artifacts/cache/nvme",
-)
-
-payload = KVPayload(key=[[[1.0, 0.0]]], value=[[[0.5, 0.5]]])
-block = CacheBlock.from_payload(
-    payload=payload,
+shape = KVShape(num_layers=32, num_key_value_heads=8, head_dim=128)
+base = ModelRef(
     model_id="qwen2.5-7b",
-    layer_id=0,
-    head_id=0,
-    token_range=(0, 1),
-    dtype="float32",
-    device_tier=DeviceTier.HBM,
+    family="qwen",
+    architecture="qwen2",
+    tokenizer_id="qwen2.5",
+    parameter_count_b=7,
+    kv_shape=shape,
+)
+lora = ModelRef(
+    model_id="qwen2.5-7b-lora-math",
+    family="qwen",
+    architecture="qwen2",
+    tokenizer_id="qwen2.5",
+    parameter_count_b=7,
+    base_model_id="qwen2.5-7b",
+    lora_adapter_id="math-adapter",
+    kv_shape=shape,
 )
 
-store.put(block)
-recovered = store.get_by_id(block.metadata.block_id)
-```
-
-## Layerwise Offload
-
-The tiered store also supports LMCache-inspired layerwise transfer. Engine adapters can
-emit KV blocks in layer-major order, then the store pipelines one layer at a time:
-
-```python
-from goldenexperience.cache_core import CacheQuery, DeviceTier
-from goldenexperience.tiered_store import LayerwiseOffloadPlan
-
-list(store.put_layers({0: layer0_blocks, 1: layer1_blocks}, target_tier=DeviceTier.CPU))
-
-results = store.offload_layers(
-    LayerwiseOffloadPlan(
-        query=CacheQuery(model_id="qwen2.5-7b", prefix_hash="shared-system-prompt"),
-        target_tier=DeviceTier.NVME,
-    )
+plan = CrossModelReusePlanner().plan(
+    ReuseRequest(source=base, target=lora, prefix_hash="shared-system-prompt")
 )
-
-for layer in store.retrieve_layers(CacheQuery(model_id="qwen2.5-7b"), target_tier=DeviceTier.HBM):
-    engine_adapter.inject_kv(layer.blocks)
+print(plan.scenario.value, plan.strategy.value, plan.status.value)
 ```
 
-`put_layers` and `retrieve_layers` are generator-style APIs: while one layer is consumed
-by the caller, the next layer can already be scheduled in the background.
+Render the LMCache patch contract:
 
-## Policy-Driven Tiering
-
-`TieredKVStore` separates mechanism from policy:
-
-- Eviction policies choose safe victims while respecting pinned and retained blocks:
-  `LRUEvictionPolicy`, `LFUEvictionPolicy`, and `CostAwareEvictionPolicy`.
-- `WatermarkOffloadPolicy` demotes blocks when HBM or CPU utilization crosses a high
-  watermark.
-- Prefetch policies build plans from access context: `DecodeWindowPrefetchPolicy` warms
-  upcoming layers, and `PrefixHotnessPrefetchPolicy` warms the hottest matching blocks.
-
-```python
-from goldenexperience.cache_core import CacheQuery, DeviceTier
-from goldenexperience.tiered_store import PrefetchContext, WatermarkOffloadPolicy
-
-store.enforce_offload_policy()
-
-plan = store.build_prefetch_plan(
-    PrefetchContext(
-        query=CacheQuery(model_id="qwen2.5-7b", prefix_hash="shared-system-prompt"),
-        target_tier=DeviceTier.HBM,
-        current_layer_id=7,
-        lookahead_layers=2,
-        max_blocks=4,
-    )
-)
-store.prefetch(plan)
+```bash
+golden-patch-manifest --output docs/patch_manifest.md
 ```
 
-## Research Roadmap
+## Development Roadmap
 
-- M0: Repo skeleton, public APIs, synthetic benchmark, paper artifact docs.
-- M1: Tiered KV store with eviction, offload, and prefetch policies.
-- M2: Hugging Face and vLLM adapters with engine-neutral signatures.
-- M3: Same-family cross-model KV mapping and quality-gated reuse.
-- M4: Long-context, multi-turn, RAG prefix-sharing, and batch-serving evaluation.
-- M5: Paper writing, artifact package, Docker/conda reproduction path.
+- M0: Lock the project boundary around SGLang + LMCache + GoldenExperience patch metadata.
+- M1: Implement LMCache secondary lookup sidecar for base/LoRA mutual reuse.
+- M2: Add layer/head mapping and calibrated projection for same-model size variants.
+- M3: Add experimental learned translator interface for different-base reuse.
+- M4: Build SGLang model-backed benchmarks and quality/fallback accounting.
+- M5: Keep the patch small enough to rebase on upstream LMCache.
 
-See `docs/design.md`, `docs/paper_outline.md`, and `docs/artifact.md` for the detailed
-research and artifact plan.
+See `docs/design.md`, `docs/experiment_matrix.md`, and `docs/artifact.md` for the detailed
+framework plan.

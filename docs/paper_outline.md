@@ -2,47 +2,53 @@
 
 ## Title Candidates
 
-- GoldenExperience: Engine-Decoupled Tiered KV Cache Reuse Across Same-Family LLMs
-- Beyond Engine-Local KV Cache: Tiered Offload and Cross-Model Reuse for LLM Serving
+- GoldenExperience: Cross-Model KV Cache Reuse as an LMCache Patch for SGLang
+- Reusing KV Cache Across Models Without Rebuilding the Serving Stack
 
 ## Abstract Shape
 
-1. Problem: KV cache dominates memory and TTFT for long-context and shared-prefix serving.
-2. Gap: existing serving stacks keep KV cache tied to one engine and one model instance.
-3. Method: tiered cache store plus same-family cross-model KV mapping.
-4. Evidence: TTFT, throughput, memory, and quality-gated reuse benchmarks.
-5. Contribution: engine-decoupled artifact with adapters and reproducible evaluation.
+1. Problem: KV Cache is valuable across related model deployments, but serving stacks treat
+   it as model-local state.
+2. Gap: existing cache systems focus on storage/offload and same-model prefix reuse, not
+   controlled reuse across LoRA adapters, size variants, or different base models.
+3. Method: a small LMCache patch driven by model identity, reuse planning, materialization,
+   and quality/fallback accounting.
+4. Evidence: TTFT improvement and accepted reuse rate under SGLang + LMCache, with quality
+   gates for three model-pair scenarios.
+5. Contribution: a narrow, upstream-friendly framework that leaves inference and offload to
+   SGLang and LMCache.
 
 ## Main Contributions
 
-- A reusable cache block API that separates KV metadata, placement, and engine integration.
-- A tiered offload system for HBM, CPU memory, and NVMe with policy-controlled demotion and
-  prefetch.
-- A same-family cross-model reuse path with compatibility signatures, projection mapping,
-  confidence scoring, and fallback recompute.
-- A benchmark suite for long-context QA, multi-turn chat, RAG prefix sharing, and agent
-  workflows.
+- A model-pair taxonomy for cross-model KV reuse: base/LoRA, same-model size variants, and
+  different base models.
+- A control-plane planner that emits explicit `ReusePlan` metadata, confidence, gates, and
+  fallback reasons.
+- An LMCache patch surface for secondary lookup, materialization, and quality accounting.
+- A SGLang-based evaluation path that measures latency gain without modifying inference
+  semantics or cache offload mechanics.
 
 ## Evaluation Questions
 
-- How much does tiered offload reduce HBM pressure under long-context workloads?
-- How much TTFT improvement is possible when shared prefixes are reused?
-- When can same-family model variants reuse mapped KV without quality loss?
-- What are the overheads of projection, prefetch misses, and NVMe movement?
-- Does the adapter design work across at least two inference backends?
+- How often can base/LoRA deployments reuse KV safely?
+- What TTFT improvement is available when same-model size variants share prefixes?
+- Which layer subsets and projection methods are useful for size-variant reuse?
+- How much overhead does the LMCache secondary lookup and materializer add?
+- When do quality gates reject reuse, and are those rejections predictive of task quality?
+- Is cross-base reuse ever useful under strict calibration and task allowlists?
 
 ## Required Figures
 
-- System architecture: engine adapters, cache core, tiered store, mapper, policy layer.
-- TTFT and tail latency versus baseline systems.
-- GPU memory peak and cache hit rate across prompt lengths.
-- Quality versus reuse aggressiveness.
-- Ablation: offload only, reuse only, offload plus reuse.
+- Architecture: SGLang, LMCache, and the GoldenExperience patch hooks.
+- Taxonomy table for the three reuse scenarios.
+- TTFT and accepted-reuse rate for base/LoRA serving.
+- Quality versus latency for size-variant projection strategies.
+- Fallback reason breakdown.
+- Patch overhead: lookup, materialization, accounting.
 
 ## Limitations to State
 
-- v1 focuses on same-family models and does not claim arbitrary cross-architecture reuse.
-- Projection confidence must be calibrated per model family.
-- The NVMe prototype is artifact-friendly and should be replaced by async/mmap storage for
-  production-grade serving.
-
+- GoldenExperience does not claim to improve LMCache offload or SGLang inference kernels.
+- Cross-base reuse is experimental and disabled without calibration.
+- Reuse quality must be evaluated per model pair, task, and prefix distribution.
+- Upstream LMCache and SGLang APIs may change, so the patch must remain small and rebased.

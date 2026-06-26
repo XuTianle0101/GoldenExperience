@@ -1,0 +1,78 @@
+experiment:
+  name: goldenexperience_cross_model_reuse_m0
+  runtime_stack:
+    inference_engine: sglang
+    cache_backend: lmcache
+    goldenexperience_role: lmcache_patch_control_plane
+  primary_metric: ttft_delta_with_quality_gated_reuse
+
+runtime:
+  install:
+    sglang: external_or_third_party_clone
+    lmcache: external_or_third_party_clone
+  lmcache_config_path: configs/lmcache.example.yaml
+  patch_manifest: docs/patch_manifest.md
+
+reuse_scenarios:
+  lora_adapter:
+    enabled: true
+    strategy: adapter_delta_gated_alias
+    required_gates:
+      - same_base_model_id
+      - same_tokenizer_id
+      - same_kv_shape
+      - lora_delta_quality_gate
+  same_model_size_variant:
+    enabled: true
+    strategy: layerwise_projection
+    required_gates:
+      - same_family_architecture
+      - tokenizer_alignment
+      - layer_mapping
+      - projection_calibration
+  cross_base_model:
+    enabled: false
+    strategy: learned_cross_base_translator
+    required_gates:
+      - calibration_dataset
+      - tokenizer_bridge
+      - learned_translator
+      - probe_quality_gate
+      - task_allowlist
+
+model_pairs:
+  - name: base_to_lora
+    scenario: lora_adapter
+    source_model_id: qwen2.5-7b
+    target_model_id: qwen2.5-7b-lora-math
+    tokenizer_id: qwen2.5
+    base_model_id: qwen2.5-7b
+  - name: small_to_large
+    scenario: same_model_size_variant
+    source_model_id: qwen2.5-7b
+    target_model_id: qwen2.5-14b
+    tokenizer_id: qwen2.5
+    calibration_id: qwen25_7b_14b_projection_v0
+
+quality_gates:
+  min_lora_confidence: 0.95
+  min_projection_confidence: 0.85
+  min_cross_base_confidence: 0.70
+  max_probe_logit_drift: null
+  max_task_score_drop: null
+
+benchmarks:
+  workloads:
+    - lora_multi_tenant_chat
+    - rag_prefix_sharing
+    - agent_tool_schema_reuse
+    - size_variant_fallback_serving
+  metrics:
+    - ttft_ms
+    - ttft_delta_ms
+    - accepted_reuse_rate
+    - cross_model_cache_hit_rate
+    - secondary_lookup_latency_ms
+    - materialization_latency_ms
+    - fallback_rate_by_reason
+    - quality_gate_pass_rate

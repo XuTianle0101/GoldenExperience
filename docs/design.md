@@ -2,116 +2,96 @@
 
 ## Goal
 
-GoldenExperience turns KV cache into an engine-decoupled serving resource. Instead of
-keeping KV cache private to a single model instance or inference engine, it exposes:
+GoldenExperience focuses on **KV Cache reuse across models** while delegating serving and
+cache mechanics to existing projects:
 
-1. A uniform cache block abstraction.
-2. A tiered placement layer across HBM, CPU memory, and NVMe.
-3. Same-family cross-model mapping with quality-gated reuse.
-4. Thin adapters for engines such as Hugging Face Transformers and vLLM.
+- SGLang is the inference engine.
+- LMCache is the KV Cache storage/offload layer.
+- GoldenExperience is a small LMCache patch plus Python control-plane library for deciding
+  when cross-model reuse is safe enough to try.
+
+The core invariant is simple: GoldenExperience must not change model decoding behavior or
+replace LMCache offload. It may only enrich metadata, perform secondary cross-model lookup,
+materialize compatible KV, and record quality/fallback evidence.
+
+## Runtime Boundary
+
+```text
+SGLang owns: request scheduling, model execution, attention kernels, decoding
+LMCache owns: cache storage, lookup, offload, eviction, prefetch
+GoldenExperience owns: model identity, reuse planning, transform metadata, quality gates
+```
+
+When a request arrives, SGLang should pass enough model and prefix metadata for the LMCache
+patch to build a `ReuseRequest`. The `CrossModelReusePlanner` returns a `ReusePlan`. If the
+plan is `ready`, LMCache may run a secondary lookup and materialize source KV for the target
+model. Otherwise, the original LMCache miss path proceeds unchanged.
 
 ## Core Abstractions
 
-`CacheBlock` stores a `KVPayload` plus `CacheBlockMetadata`. Metadata contains model id,
-layer id, head id, token range, dtype, tier, shape, checksum, quality score, prefix hash,
-session id, reference count, and source mapper fields. The payload remains opaque so the
-same store can handle PyTorch tensors, NumPy arrays, or list-backed synthetic payloads.
+`KVShape` captures the minimum compatibility surface: layer count, KV heads, head dim,
+dtype, RoPE theta, and optional sliding window.
 
-`TieredKVStore` owns metadata indexing and tier placement. The public methods are:
+`ModelRef` identifies a base model, a LoRA adapter, or a model-size variant. It records
+family, architecture, tokenizer, parameter count, base model id, LoRA adapter id, and KV
+shape.
 
-- `put(block)`
-- `get(query, promote_to=None)`
-- `get_many(query, limit=None)`
-- `get_by_id(block_id, promote_to=None)`
-- `offload(block_id, target_tier)`
-- `prefetch(plan)`
-- `evict(query=None, required_bytes=0)`
-- `pin(block_id)` and `release(block_id)`
+`ReuseRequest` connects a source model, target model, prefix hash, optional calibration id,
+and experimental flags.
 
-## Tiered Offload
+`ReusePlan` records the selected scenario, strategy, status, confidence, required gates,
+transform id, and patch hooks. Plans are metadata-first so they can be attached to LMCache
+sidecar records without changing the underlying storage backend.
 
-The default demotion path is:
+## Three Reuse Scenarios
 
-```text
-HBM -> CPU -> NVMe -> remove
-```
+### 1. Base Model and LoRA Variant
 
-HBM and CPU are represented by in-process memory backends. The NVMe tier is a pickle-backed
-directory so artifact runs can work without a custom C++ runtime. When PyTorch tensors are
-present, the utility layer performs best-effort movement to CUDA or CPU pinned memory.
+This is the first implementation target. The source and target must share a base model,
+tokenizer, and KV layout. The default strategy is `adapter_delta_gated_alias`: reuse is
+allowed only after a cheap LoRA drift or probe-logit gate passes. This path should be a
+small LMCache key/metadata patch plus quality accounting.
 
-The initial policy is LRU with pinned/ref-count protection and low-quality victim
-preference. This is intentionally simple: it gives a clean baseline before adding
-prefix-hotness and decode-progress prediction.
+### 2. Same Model Line, Different Parameter Sizes
 
-The store now exposes three policy seams:
+This covers pairs such as 7B and 14B variants from the same family/architecture. If KV
+layout is identical, direct aliasing can be tested. If layer count, KV heads, or head dim
+differs, the plan becomes `layerwise_projection` and must wait for calibration. The main
+development work is layer mapping, head mapping, projection materialization, and partial
+reuse policy.
 
-- Eviction: `LRUEvictionPolicy`, `LFUEvictionPolicy`, and `CostAwareEvictionPolicy`.
-- Offload: `WatermarkOffloadPolicy`, which demotes HBM or CPU blocks when tier
-  utilization exceeds a high watermark and tries to return the tier to a low watermark.
-- Prefetch: `DecodeWindowPrefetchPolicy` and `PrefixHotnessPrefetchPolicy`.
+### 3. Different Base Models
 
-Capacity admission is strict. If pinned or retained blocks prevent demotion, the store
-raises `CapacityExceededError` instead of silently exceeding a tier budget. This matters
-for reproducible systems evaluation because every failed admission becomes measurable.
+This is explicitly experimental. The default plan is not executable unless the caller opts
+in with `allow_cross_base=True` and provides a `calibration_id`. The expected strategy is a
+learned translator plus tokenizer bridge and task allowlist. Fallback-to-recompute must be
+the default for every uncalibrated or low-confidence case.
 
-## Layerwise Offload
+## LMCache Patch Surface
 
-GoldenExperience treats layerwise transfer as a first-class store operation. The cache
-index can group blocks by `model_id` and `layer_id`, and the store exposes:
+`PatchManifest.default()` defines four narrow hooks:
 
-- `put_layers(blocks_by_layer, target_tier)`: materialize layer-major KV blocks into a
-  tier with a one-layer pipeline.
-- `offload_layer(query, layer_id, target_tier)`: move one matched layer.
-- `offload_layers(plan)`: move an ordered layer list synchronously or asynchronously.
-- `retrieve_layers(query, target_tier)`: yield one promoted layer at a time while
-  scheduling the next layer.
-- `layer_groups(query)`: group layers that share KV shape, dtype, and bytes per layer.
+1. `sglang_request_metadata`: attach source/target model identity and prefix metadata.
+2. `lmcache_cross_model_lookup`: query cross-model candidates after normal lookup fails.
+3. `goldenexperience_materializer`: alias, project, or translate KV for the target model.
+4. `quality_gate_accounting`: record confidence, calibration provenance, and fallback reason.
 
-This is inspired by LMCache's layer-oriented storage/retrieval loop, but the API remains
-independent from any vLLM-specific connector. The intended engine integration pattern is:
+The patch must preserve these invariants:
 
-```text
-adapter extracts layer i -> store schedules layer i -> adapter consumes layer i-1
-```
+- Do not modify SGLang scheduling, attention kernels, or token generation semantics.
+- Do not replace LMCache storage, offload, eviction, or prefetch implementations.
+- Always fall back to the original SGLang + LMCache path when a plan is not ready.
+- Attach scenario, transform id, confidence, and calibration metadata to every reuse attempt.
 
-That shape lets real serving integrations overlap model execution, HBM/CPU movement, and
-NVMe I/O without making the core cache depend on a particular inference engine.
+## Development Shape
 
-## Cross-Model Reuse
+The current repository contains legacy synthetic cache-core and tiered-store utilities.
+They remain useful for unit tests and paper-prototype thinking, but the product runtime path
+is now `reuse/` + `lmcache_patch/` + `sglang_runtime/`.
 
-`ArchitectureSignature` records the minimal compatibility surface:
+Near-term implementation should avoid building a second cache system. Instead:
 
-- family and architecture
-- layer count
-- hidden size
-- attention heads and KV heads
-- head dimension
-- RoPE, tokenizer, dtype, and optional metadata
-
-v1 supports three compatibility classes:
-
-- `exact`: direct reuse.
-- `shape_compatible`: direct reuse with lower confidence.
-- `shape_mismatch`: final-dimension projection for same-family models.
-
-`ReusePolicy` combines compatibility, mapper confidence, prefix similarity, and expected
-latency savings. Every failed gate returns fallback recompute or warm-start recompute,
-which keeps quality risk explicit.
-
-## Engine Adapters
-
-Adapters are deliberately thin. They convert engine-owned KV state into `CacheBlock`
-objects and convert blocks back into engine-specific formats.
-
-- `TransformersAdapter` handles Hugging Face `past_key_values`.
-- `VLLMAdapter` exposes extractor/injector callables because vLLM cache internals vary by
-  version.
-- `MockModelAdapter` supports deterministic tests and synthetic benchmarks.
-
-## Extension Points
-
-- Add a learned projection mapper that fits from paired calibration traces.
-- Add prefix-aware prefetch scheduling from request queues and decode progress.
-- Replace NVMe pickle backend with memory-mapped tensors or an async I/O backend.
-- Add C++/CUDA fast paths without changing the Python public APIs.
+- Patch LMCache lookup with a secondary cross-model index.
+- Keep model-pair rules in `CrossModelReusePlanner`.
+- Keep tensor conversion/materialization behind a small interface selected by `ReusePlan`.
+- Record every rejected plan so benchmark results distinguish quality fallback from cache miss.
