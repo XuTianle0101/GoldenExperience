@@ -69,7 +69,7 @@ tests/               Unit tests for the current framework and legacy utilities.
 
 ## Quick Start
 
-Install the project first:
+Create a Python 3.10+ environment and install the local project:
 
 ```bash
 python3 -m venv .venv
@@ -78,16 +78,164 @@ python3 -m pip install -e ".[dev]"
 pytest
 ```
 
-Install SGLang and LMCache from upstream or local clones before running model-backed work.
-For a convenience source-install flow:
+Run the planner smoke test:
 
 ```bash
-./scripts/bootstrap_runtime.sh
+python3 scripts/smoke_cross_model_plan.py
 ```
 
-The helper clones into `third_party/` by default and then runs editable installs. Override
-URLs or the target directory with `GE_SGLANG_REPO_URL`, `GE_LMCACHE_REPO_URL`, and
-`GE_THIRD_PARTY_DIR` when using forks.
+## Deployment Flow
+
+GoldenExperience deploys as a Python package inside the same environment as SGLang and
+LMCache. It is not a standalone daemon.
+
+```text
+client -> SGLang OpenAI-compatible server
+             |
+             | --enable-lmcache
+             v
+          LMCache
+             |
+             | GoldenExperience patch hooks and planner metadata
+             v
+          fallback or cross-model KV reuse
+```
+
+Runtime ownership:
+
+- SGLang starts the inference server and owns request scheduling and generation.
+- LMCache owns KV lookup, storage, offload, eviction, and prefetch.
+- GoldenExperience owns `ModelRef`, `ReuseRequest`, `ReusePlan`, patch metadata, and
+  quality/fallback accounting.
+
+### 1. Install Runtime Packages
+
+Use package mode when you only need to run the stack:
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+./scripts/install_runtime.sh --mode package
+```
+
+Use source mode when you need to patch LMCache or debug SGLang/LMCache internals:
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+./scripts/install_runtime.sh --mode source
+```
+
+`--mode source` clones SGLang and LMCache into `third_party/` and installs editable copies.
+Override the defaults when using forks:
+
+```bash
+GE_THIRD_PARTY_DIR=third_party \
+GE_SGLANG_REPO_URL=https://github.com/sgl-project/sglang.git \
+GE_LMCACHE_REPO_URL=https://github.com/LMCache/LMCache.git \
+./scripts/install_runtime.sh --mode source
+```
+
+Install only GoldenExperience if SGLang and LMCache are already available:
+
+```bash
+./scripts/install_runtime.sh --mode golden-only
+```
+
+The script prefers `uv pip install` when `uv` is installed; otherwise it falls back to
+`python3 -m pip install`. SGLang and LMCache install details should still be checked
+against their upstream docs when changing CUDA, Python, or package versions:
+
+- SGLang docs: <https://docs.sglang.ai/>
+- LMCache docs: <https://docs.lmcache.ai/>
+
+### 2. Verify Planner and Imports
+
+```bash
+python3 scripts/smoke_cross_model_plan.py --check-runtime
+```
+
+Expected planner output includes three rows:
+
+- `model_lora_mutual_reuse`: ready base/LoRA plan.
+- `same_model_different_parameter_size`: calibrated size-variant projection plan.
+- `different_base_model`: conservative unready cross-base plan.
+
+If `--check-runtime` reports missing `sglang` or `lmcache`, install the runtime stack before
+starting model-backed serving.
+
+### 3. Generate Patch Manifest
+
+```bash
+golden-patch-manifest --output docs/patch_manifest.md
+```
+
+The manifest is also generated automatically by `scripts/start_sglang_lmcache.sh`.
+
+### 4. Start SGLang With LMCache
+
+The default launch command starts a SGLang OpenAI-compatible server with LMCache enabled:
+
+```bash
+GE_MODEL_PATH=Qwen/Qwen3-8B \
+./scripts/start_sglang_lmcache.sh
+```
+
+Common overrides:
+
+```bash
+GE_MODEL_PATH=Qwen/Qwen3-8B \
+GE_HOST=0.0.0.0 \
+GE_PORT=30000 \
+GE_LMCACHE_CONFIG_FILE=artifacts/runtime/lmc_config.yaml \
+GE_LMCACHE_CHUNK_SIZE=256 \
+GE_LMCACHE_LOCAL_CPU_GB=10 \
+./scripts/start_sglang_lmcache.sh --tp 1
+```
+
+The start script does the following before `exec python3 -m sglang.launch_server`:
+
+1. Writes an LMCache config if `GE_LMCACHE_CONFIG_FILE` does not exist.
+2. Renders `docs/patch_manifest.md`.
+3. Checks that `sglang`, `lmcache`, and `goldenexperience` are importable.
+4. Exports GoldenExperience metadata variables:
+   - `GE_ENABLE_CROSS_MODEL_REUSE=1`
+   - `GE_PATCH_MANIFEST=docs/patch_manifest.md`
+   - `GE_LMCACHE_CONFIG=configs/lmcache.example.yaml`
+   - `GE_SGLANG_MODEL_ID=$GE_MODEL_PATH`
+5. Starts SGLang with `--enable-lmcache`.
+
+The generated LMCache config is intentionally small:
+
+```yaml
+chunk_size: 256
+local_cpu: true
+use_layerwise: true
+max_local_cpu_size: 10
+```
+
+Set `GE_OVERWRITE_LMCACHE_CONFIG=1` to regenerate an existing config.
+
+### 5. Send a Request
+
+```bash
+curl http://localhost:30000/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "Qwen/Qwen3-8B",
+    "messages": [{"role": "user", "content": "Hello"}],
+    "max_tokens": 64,
+    "temperature": 0
+  }'
+```
+
+### Current Runtime Limitation
+
+The repository currently contains the GoldenExperience planner, metadata model, patch
+manifest, and deployment wrappers. The real LMCache hook implementation is the next step.
+Until `lmcache_cross_model_lookup` and `goldenexperience_materializer` are wired into an
+LMCache patch or fork, SGLang + LMCache will run normally and GoldenExperience can validate
+plans/metadata, but accepted cross-model KV reuse will not yet be executed inside LMCache.
 
 ## Minimal Planner Example
 
