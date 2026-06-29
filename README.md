@@ -1,5 +1,7 @@
 # GoldenExperience
 
+[English](README.md) | [中文](README.zh-CN.md)
+
 GoldenExperience is a **cross-model KV Cache reuse patch framework** for an open-source
 serving stack built from **SGLang** + **LMCache**.
 
