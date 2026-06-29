@@ -245,6 +245,71 @@ curl http://localhost:30000/v1/chat/completions \
   }'
 ```
 
+### 6. Run the First KV Offload/Reuse Baseline
+
+Use this baseline after SGLang, LMCache, and GoldenExperience are installed in the same
+Python environment. The script starts one SGLang + LMCache server, sends a deterministic
+GSM8K-style prompt to populate/offload KV, restarts SGLang with the same LMCache disk
+directory, sends the same prompt again, and records timing/log evidence for reuse.
+
+```bash
+source .venv/bin/activate
+
+GE_MODEL_PATH=Qwen/Qwen3-8B \
+GE_PORT=30000 \
+scripts/kv_baseline/run_sglang_lmcache_kv_baseline.sh -- --tp 1
+```
+
+Default outputs are written under `artifacts/kv_baseline/<run_id>/`:
+
+- `metadata.json`: model, prompt, mode, cache path, and runtime settings.
+- `lmc_config.yaml`: generated LMCache config with local CPU plus persistent local disk.
+- `requests/offload.json`: first request output, usage, end-to-end latency, and TTFT.
+- `requests/reuse.json`: second request with the same prompt after restart.
+- `logs/offload_server.log` and `logs/reuse_server.log`: SGLang/LMCache evidence.
+- `summary.json`: request deltas and best-effort log counters for store/retrieve events.
+
+The default prompt lives in `configs/kv_baseline_prompts.json` and uses the classic GSM8K
+Natalia clips question. The default `GE_KV_CHUNK_SIZE=16` is intentionally small so this
+short prompt crosses at least one LMCache chunk. For longer workloads, raise it back toward
+the production-style value used in your LMCache experiments.
+
+Useful overrides:
+
+```bash
+GE_MODEL_PATH=/models/Qwen3-8B \
+GE_MODEL_NAME=/models/Qwen3-8B \
+GE_RUN_ID=qwen3_8b_gsm8k_restart_001 \
+GE_KV_LOCAL_CPU_GB=20 \
+GE_KV_LOCAL_DISK_GB=200 \
+GE_PROMPT_ID=gsm8k_natalia_clips \
+scripts/kv_baseline/run_sglang_lmcache_kv_baseline.sh -- --tp 1
+```
+
+Interpretation checklist:
+
+1. Confirm the first run finished and `requests/offload.json` contains the expected answer.
+2. Confirm `logs/offload_server.log` contains LMCache store/offload messages.
+3. Confirm the second run starts from a fresh process and `logs/reuse_server.log` contains
+   LMCache lookup/retrieve/hit evidence.
+4. Compare `summary.json` fields `reuse_minus_offload_ttft_ms` and
+   `reuse_minus_offload_e2e_ms`; negative values indicate the second request was faster.
+5. Keep the whole `artifacts/kv_baseline/<run_id>/` directory as the same-model baseline for
+   later cross-model KV reuse experiments.
+
+If your installed LMCache version does not rebuild local-disk metadata across process
+restart, run a diagnostic same-process baseline instead:
+
+```bash
+GE_MODEL_PATH=Qwen/Qwen3-8B \
+GE_BASELINE_MODE=same-process \
+scripts/kv_baseline/run_sglang_lmcache_kv_baseline.sh -- --tp 1
+```
+
+`GE_DISABLE_RADIX_CACHE=1` is enabled by default so the baseline is not hidden by SGLang's
+in-process radix cache. Set `GE_DISABLE_RADIX_CACHE=0` only when you want to measure the
+combined SGLang radix cache plus LMCache behavior.
+
 ### Current Runtime Limitation
 
 The repository currently contains the GoldenExperience planner, metadata model, patch

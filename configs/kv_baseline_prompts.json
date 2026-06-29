@@ -1,0 +1,26 @@
+{
+  "default_prompt_id": "gsm8k_natalia_clips",
+  "prompts": [
+    {
+      "id": "gsm8k_natalia_clips",
+      "dataset": "GSM8K",
+      "split": "train",
+      "source": "canonical GSM8K sample question",
+      "expected_final_answer": "72",
+      "messages": [
+        {
+          "role": "system",
+          "content": "You are a careful math solver. Show the reasoning briefly, then end with a line formatted as: Final answer: <number>."
+        },
+        {
+          "role": "user",
+          "content": "Natalia sold clips to 48 of her friends in April, and then she sold half as many clips in May. How many clips did Natalia sell altogether in April and May?"
+        }
+      ],
+      "generation": {
+        "max_tokens": 128,
+        "temperature": 0
+      }
+    }
+  ]
+}
