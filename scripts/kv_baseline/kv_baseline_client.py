@@ -290,7 +290,17 @@ def _summarize_log(path: Path) -> dict[str, Any]:
         "path": str(path),
         "bytes": path.stat().st_size,
         "lmcache_store_events": _count_regex(r"\b(store|stored|put|offload)", text),
+        "lmcache_strict_store_events": _count_regex(
+            r"\blmcache\b.*\b(store|stored|put|offload)\b|"
+            r"\b(stored|offloaded)\s+[0-9]+\s+(?:tokens|token)\b",
+            text,
+        ),
         "lmcache_retrieve_events": _count_regex(r"\b(retrieve|retrieved|lookup|hit)", text),
+        "lmcache_strict_retrieve_events": _count_regex(
+            r"\blmcache\b.*\b(retrieve|retrieved|lookup|hit)\b|"
+            r"\b(retrieved|hit)\s+[0-9]+\s+(?:tokens|token)\b",
+            text,
+        ),
         "stored_token_mentions": _sum_regex_int(r"stored\s+([0-9]+)\s+(?:tokens|token)", text),
         "retrieved_token_mentions": _sum_regex_int(
             r"retrieved\s+([0-9]+)\s+(?:tokens|token)", text
@@ -299,11 +309,29 @@ def _summarize_log(path: Path) -> dict[str, Any]:
     }
 
 
+def _summarize_cache_dir(path: Path) -> dict[str, Any]:
+    files: list[Path] = []
+    total_bytes = 0
+    if path.exists():
+        for item in path.rglob("*"):
+            if item.is_file():
+                files.append(item)
+                total_bytes += item.stat().st_size
+    return {
+        "path": str(path),
+        "exists": path.exists(),
+        "file_count": len(files),
+        "total_bytes": total_bytes,
+        "sample_files": [str(item) for item in sorted(files)[:10]],
+    }
+
+
 def summarize(args: argparse.Namespace) -> int:
     run_dir = Path(args.run_dir)
     request_dir = run_dir / "requests"
     log_dir = run_dir / "logs"
     metrics_dir = run_dir / "metrics"
+    cache_dir = run_dir / "cache"
 
     requests: dict[str, dict[str, Any]] = {}
     if request_dir.exists():
@@ -321,6 +349,7 @@ def summarize(args: argparse.Namespace) -> int:
         if metrics_dir.exists()
         else {}
     )
+    cache = _summarize_cache_dir(cache_dir)
 
     def timing(phase: str, key: str) -> float | None:
         value = requests.get(phase, {}).get("timing", {}).get(key)
@@ -332,6 +361,10 @@ def summarize(args: argparse.Namespace) -> int:
     reuse_e2e = timing("reuse", "e2e_ms")
     reuse_logs = [log for log in logs if Path(str(log["path"])).name.startswith("reuse")]
     reuse_retrieve_events = sum(int(log["lmcache_retrieve_events"]) for log in reuse_logs)
+    reuse_strict_retrieve_events = sum(
+        int(log["lmcache_strict_retrieve_events"]) for log in reuse_logs
+    )
+    strict_store_events = sum(int(log["lmcache_strict_store_events"]) for log in logs)
     reuse_cached_mentions = [
         int(log["max_cached_tokens_mentioned"])
         for log in reuse_logs
@@ -348,12 +381,20 @@ def summarize(args: argparse.Namespace) -> int:
         and uncached_prompt_sum < prompt_sum
     )
     reuse_has_cache_evidence = bool(
-        reuse_retrieve_events > 0
+        reuse_strict_retrieve_events > 0
         or (reuse_max_cached_tokens is not None and reuse_max_cached_tokens > 0)
         or (isinstance(reuse_cache_hit_rate, (int, float)) and reuse_cache_hit_rate > 0)
         or reuse_uncached_prompt_less_than_total
     )
+    disk_cache_file_count = int(cache["file_count"])
+    disk_cache_total_bytes = int(cache["total_bytes"])
+    offload_has_disk_evidence = disk_cache_file_count > 0 and disk_cache_total_bytes > 0
+    disk_reuse_success = offload_has_disk_evidence and reuse_has_cache_evidence
     evidence_warnings: list[str] = []
+    if not offload_has_disk_evidence:
+        evidence_warnings.append(
+            "No disk cache files were found under the run cache directory after offload."
+        )
     if not reuse_has_cache_evidence:
         evidence_warnings.append(
             "No reuse-side cache evidence was found: retrieve events, cached-token mentions, "
@@ -365,6 +406,7 @@ def summarize(args: argparse.Namespace) -> int:
         "requests": requests,
         "logs": logs,
         "metrics": metrics,
+        "cache": cache,
         "deltas": {
             "reuse_minus_offload_ttft_ms": (
                 (
@@ -383,8 +425,12 @@ def summarize(args: argparse.Namespace) -> int:
         },
         "evidence": {
             "lmcache_store_events_total": sum(int(log["lmcache_store_events"]) for log in logs),
+            "lmcache_strict_store_events_total": strict_store_events,
             "lmcache_retrieve_events_total": sum(
                 int(log["lmcache_retrieve_events"]) for log in logs
+            ),
+            "lmcache_strict_retrieve_events_total": sum(
+                int(log["lmcache_strict_retrieve_events"]) for log in logs
             ),
             "max_cached_tokens_mentioned": max(
                 [
@@ -395,17 +441,25 @@ def summarize(args: argparse.Namespace) -> int:
                 or [None]
             ),
             "reuse_lmcache_retrieve_events": reuse_retrieve_events,
+            "reuse_lmcache_strict_retrieve_events": reuse_strict_retrieve_events,
             "reuse_max_cached_tokens_mentioned": reuse_max_cached_tokens,
             "reuse_cache_hit_rate_max": reuse_cache_hit_rate,
             "reuse_uncached_prompt_tokens_less_than_total": (
                 reuse_uncached_prompt_less_than_total
             ),
+            "disk_cache_file_count": disk_cache_file_count,
+            "disk_cache_total_bytes": disk_cache_total_bytes,
+            "offload_has_disk_evidence": offload_has_disk_evidence,
             "reuse_has_cache_evidence": reuse_has_cache_evidence,
+            "disk_reuse_success": disk_reuse_success,
             "warnings": evidence_warnings,
         },
     }
     _write_json(Path(args.output), summary)
     print(f"Wrote summary to {args.output}")
+    if args.require_disk_offload and not offload_has_disk_evidence:
+        print("error: disk offload evidence is absent", file=sys.stderr)
+        return 3
     if args.require_reuse_evidence and not reuse_has_cache_evidence:
         print("error: reuse cache evidence is absent", file=sys.stderr)
         return 2
@@ -452,6 +506,7 @@ def build_parser() -> argparse.ArgumentParser:
     summary_parser = subparsers.add_parser("summarize", help="summarize requests and logs")
     summary_parser.add_argument("--run-dir", required=True)
     summary_parser.add_argument("--output", required=True)
+    summary_parser.add_argument("--require-disk-offload", action="store_true")
     summary_parser.add_argument("--require-reuse-evidence", action="store_true")
     summary_parser.set_defaults(func=summarize)
 
