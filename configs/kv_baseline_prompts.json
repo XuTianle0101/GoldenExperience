@@ -18,7 +18,28 @@
         }
       ],
       "generation": {
-        "max_tokens": 128,
+        "max_tokens": 256,
+        "temperature": 0
+      }
+    },
+    {
+      "id": "kv_baseline_warmup",
+      "dataset": "synthetic",
+      "split": "warmup",
+      "source": "short unrelated warmup prompt for engine stabilization",
+      "expected_final_answer": "OK",
+      "messages": [
+        {
+          "role": "system",
+          "content": "You are a concise assistant."
+        },
+        {
+          "role": "user",
+          "content": "Reply with exactly: OK"
+        }
+      ],
+      "generation": {
+        "max_tokens": 8,
         "temperature": 0
       }
     }

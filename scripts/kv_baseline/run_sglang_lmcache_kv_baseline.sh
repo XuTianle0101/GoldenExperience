@@ -36,11 +36,17 @@ Environment:
   GE_SERVER_START_TIMEOUT_SEC        Wait time for model server. Default: 900.
   GE_REQUEST_TIMEOUT_SEC             Request timeout. Default: 600.
   GE_AFTER_REQUEST_SLEEP_SEC         Delay after each request for cache flush/logs. Default: 5.
+  GE_AFTER_WARMUP_SLEEP_SEC          Delay after discarded warmup request. Default: 1.
   GE_BASELINE_MODE                   restart or same-process. Default: restart.
   GE_DISABLE_RADIX_CACHE             Add --disable-radix-cache when supported. Default: 1.
   GE_ENABLE_SGLANG_METRICS           Add --enable-metrics and snapshot /metrics. Default: 1.
   GE_SAVE_DECODE_CACHE               Write save_decode_cache to LMCache config. Default: false.
   GE_INCLUDE_USAGE                   Request stream usage accounting if supported. Default: 1.
+  GE_WAIT_FOR_READY_LOG              Wait for SGLang's ready log before measuring. Default: 1.
+  GE_READY_LOG_PATTERN               Ready log regex. Default: The server is fired up and ready to roll!
+  GE_WARMUP_BEFORE_MEASURE           Send a discarded warmup request before measured request. Default: 1.
+  GE_WARMUP_PROMPT_ID                Warmup prompt id. Default: kv_baseline_warmup.
+  GE_REQUIRE_REUSE_EVIDENCE          Fail summary if reuse evidence is absent. Default: 0.
   GE_KEEP_SERVER_AFTER_REUSE         Leave final server running after reuse phase. Default: 0.
   -h, --help                         Show this help.
 EOF
@@ -82,11 +88,17 @@ hash_algorithm="${GE_LMCACHE_HASH_ALGORITHM:-builtin}"
 start_timeout="${GE_SERVER_START_TIMEOUT_SEC:-900}"
 request_timeout="${GE_REQUEST_TIMEOUT_SEC:-600}"
 after_request_sleep="${GE_AFTER_REQUEST_SLEEP_SEC:-5}"
+after_warmup_sleep="${GE_AFTER_WARMUP_SLEEP_SEC:-1}"
 baseline_mode="${GE_BASELINE_MODE:-restart}"
 disable_radix_cache="${GE_DISABLE_RADIX_CACHE:-1}"
 enable_metrics="${GE_ENABLE_SGLANG_METRICS:-1}"
 save_decode_cache="${GE_SAVE_DECODE_CACHE:-false}"
 include_usage="${GE_INCLUDE_USAGE:-1}"
+wait_for_ready_log="${GE_WAIT_FOR_READY_LOG:-1}"
+ready_log_pattern="${GE_READY_LOG_PATTERN:-The server is fired up and ready to roll!}"
+warmup_before_measure="${GE_WARMUP_BEFORE_MEASURE:-1}"
+warmup_prompt_id="${GE_WARMUP_PROMPT_ID:-kv_baseline_warmup}"
+require_reuse_evidence="${GE_REQUIRE_REUSE_EVIDENCE:-0}"
 keep_server_after_reuse="${GE_KEEP_SERVER_AFTER_REUSE:-0}"
 base_url="http://${client_host}:${port}"
 server_pid=""
@@ -139,6 +151,11 @@ metadata = {
     "disable_radix_cache": "${disable_radix_cache}" == "1",
     "enable_sglang_metrics": "${enable_metrics}" == "1",
     "include_usage": "${include_usage}" == "1",
+    "wait_for_ready_log": "${wait_for_ready_log}" == "1",
+    "ready_log_pattern": "${ready_log_pattern}",
+    "warmup_before_measure": "${warmup_before_measure}" == "1",
+    "warmup_prompt_id": "${warmup_prompt_id}",
+    "require_reuse_evidence": "${require_reuse_evidence}" == "1",
     "created_unix": __import__("time").time(),
 }
 Path("${run_dir}/metadata.json").write_text(
@@ -177,6 +194,30 @@ start_server() {
   echo "$server_pid" > "${run_dir}/${phase}.pid"
 }
 
+wait_for_ready_log_pattern() {
+  local phase="$1"
+  local log_file="${log_dir}/${phase}_server.log"
+  local deadline=$((SECONDS + start_timeout))
+  if [ "$wait_for_ready_log" != "1" ]; then
+    return
+  fi
+  while [ "$SECONDS" -lt "$deadline" ]; do
+    if grep -E -q -- "$ready_log_pattern" "$log_file" 2>/dev/null; then
+      echo "${phase} server emitted ready log: ${ready_log_pattern}"
+      return
+    fi
+    if ! kill -0 "$server_pid" >/dev/null 2>&1; then
+      echo "${phase} server exited before ready log; last log lines:" >&2
+      tail -n 80 "$log_file" >&2 || true
+      exit 1
+    fi
+    sleep 1
+  done
+  echo "Timed out waiting for ${phase} ready log '${ready_log_pattern}'; last log lines:" >&2
+  tail -n 80 "$log_file" >&2 || true
+  exit 1
+}
+
 wait_for_ready() {
   local phase="$1"
   local log_file="${log_dir}/${phase}_server.log"
@@ -191,6 +232,7 @@ wait_for_ready() {
       --base-url "$base_url" \
       --timeout 2 \
       --interval 1 >/dev/null 2>&1; then
+      wait_for_ready_log_pattern "$phase"
       echo "${phase} server is ready at ${base_url}"
       return
     fi
@@ -231,16 +273,16 @@ cleanup() {
 }
 trap cleanup EXIT
 
-run_phase_request() {
+send_request() {
   local phase="$1"
-  local request_output="${request_dir}/${phase}.json"
-  echo "Sending ${phase} request"
+  local prompt_id_for_request="$2"
+  local request_output="$3"
   local -a request_args=(
     request
     --base-url "$base_url"
     --model "$model_name"
     --prompt-file "$prompt_file"
-    --prompt-id "$prompt_id"
+    --prompt-id "$prompt_id_for_request"
     --phase "$phase"
     --output "$request_output"
     --timeout "$request_timeout"
@@ -255,6 +297,18 @@ run_phase_request() {
     request_args+=(--no-include-usage)
   fi
   "$python_bin" scripts/kv_baseline/kv_baseline_client.py "${request_args[@]}"
+}
+
+run_phase_request() {
+  local phase="$1"
+  local request_output="${request_dir}/${phase}.json"
+  if [ "$warmup_before_measure" = "1" ]; then
+    echo "Sending ${phase} warmup request (${warmup_prompt_id}); output is excluded from timing deltas"
+    send_request "${phase}_warmup" "$warmup_prompt_id" "${request_dir}/${phase}_warmup.json"
+    sleep "$after_warmup_sleep"
+  fi
+  echo "Sending ${phase} request"
+  send_request "$phase" "$prompt_id" "$request_output"
 
   if [ "$enable_metrics" = "1" ]; then
     "$python_bin" scripts/kv_baseline/kv_baseline_client.py fetch-metrics \
@@ -291,9 +345,15 @@ if [ "${keep_server_after_reuse}" != "1" ]; then
   stop_server "reuse"
 fi
 
-"$python_bin" scripts/kv_baseline/kv_baseline_client.py summarize \
-  --run-dir "$run_dir" \
+summary_args=(
+  summarize
+  --run-dir "$run_dir"
   --output "${run_dir}/summary.json"
+)
+if [ "$require_reuse_evidence" = "1" ]; then
+  summary_args+=(--require-reuse-evidence)
+fi
+"$python_bin" scripts/kv_baseline/kv_baseline_client.py "${summary_args[@]}"
 
 echo "Done. Key outputs:"
 echo "  ${run_dir}/metadata.json"

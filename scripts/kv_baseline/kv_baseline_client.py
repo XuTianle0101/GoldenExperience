@@ -254,6 +254,36 @@ def _max_prefill_cached_tokens(text: str) -> int | None:
     return max(values) if values else None
 
 
+def _metric_values(text: str, metric_name: str) -> list[float]:
+    number = r"([-+]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][-+]?[0-9]+)?|NaN|Inf|-Inf)"
+    pattern = re.compile(
+        rf"^{re.escape(metric_name)}(?:\{{[^}}]*\}})?\s+{number}\s*$",
+        flags=re.MULTILINE,
+    )
+    values: list[float] = []
+    for match in pattern.finditer(text):
+        try:
+            values.append(float(match.group(1)))
+        except ValueError:
+            continue
+    return values
+
+
+def _summarize_metrics(path: Path) -> dict[str, Any]:
+    text = path.read_text(encoding="utf-8", errors="replace")
+    cache_hit_rates = _metric_values(text, "sglang:cache_hit_rate")
+    prompt_sums = _metric_values(text, "sglang:prompt_tokens_histogram_sum")
+    uncached_prompt_sums = _metric_values(text, "sglang:uncached_prompt_tokens_histogram_sum")
+    return {
+        "path": str(path),
+        "cache_hit_rate_max": max(cache_hit_rates) if cache_hit_rates else None,
+        "prompt_tokens_histogram_sum": sum(prompt_sums) if prompt_sums else None,
+        "uncached_prompt_tokens_histogram_sum": (
+            sum(uncached_prompt_sums) if uncached_prompt_sums else None
+        ),
+    }
+
+
 def _summarize_log(path: Path) -> dict[str, Any]:
     text = path.read_text(encoding="utf-8", errors="replace")
     return {
@@ -273,6 +303,7 @@ def summarize(args: argparse.Namespace) -> int:
     run_dir = Path(args.run_dir)
     request_dir = run_dir / "requests"
     log_dir = run_dir / "logs"
+    metrics_dir = run_dir / "metrics"
 
     requests: dict[str, dict[str, Any]] = {}
     if request_dir.exists():
@@ -285,6 +316,11 @@ def summarize(args: argparse.Namespace) -> int:
         if log_dir.exists()
         else []
     )
+    metrics = (
+        {path.stem: _summarize_metrics(path) for path in sorted(metrics_dir.glob("*.prom"))}
+        if metrics_dir.exists()
+        else {}
+    )
 
     def timing(phase: str, key: str) -> float | None:
         value = requests.get(phase, {}).get("timing", {}).get(key)
@@ -294,11 +330,41 @@ def summarize(args: argparse.Namespace) -> int:
     reuse_ttft = timing("reuse", "ttft_ms")
     offload_e2e = timing("offload", "e2e_ms")
     reuse_e2e = timing("reuse", "e2e_ms")
+    reuse_logs = [log for log in logs if Path(str(log["path"])).name.startswith("reuse")]
+    reuse_retrieve_events = sum(int(log["lmcache_retrieve_events"]) for log in reuse_logs)
+    reuse_cached_mentions = [
+        int(log["max_cached_tokens_mentioned"])
+        for log in reuse_logs
+        if log["max_cached_tokens_mentioned"]
+    ]
+    reuse_max_cached_tokens = max(reuse_cached_mentions) if reuse_cached_mentions else None
+    reuse_metric = metrics.get("reuse", {})
+    reuse_cache_hit_rate = reuse_metric.get("cache_hit_rate_max")
+    prompt_sum = reuse_metric.get("prompt_tokens_histogram_sum")
+    uncached_prompt_sum = reuse_metric.get("uncached_prompt_tokens_histogram_sum")
+    reuse_uncached_prompt_less_than_total = (
+        isinstance(prompt_sum, (int, float))
+        and isinstance(uncached_prompt_sum, (int, float))
+        and uncached_prompt_sum < prompt_sum
+    )
+    reuse_has_cache_evidence = bool(
+        reuse_retrieve_events > 0
+        or (reuse_max_cached_tokens is not None and reuse_max_cached_tokens > 0)
+        or (isinstance(reuse_cache_hit_rate, (int, float)) and reuse_cache_hit_rate > 0)
+        or reuse_uncached_prompt_less_than_total
+    )
+    evidence_warnings: list[str] = []
+    if not reuse_has_cache_evidence:
+        evidence_warnings.append(
+            "No reuse-side cache evidence was found: retrieve events, cached-token mentions, "
+            "cache hit rate, and uncached prompt token reduction are all absent or zero."
+        )
 
     summary = {
         "run_dir": str(run_dir),
         "requests": requests,
         "logs": logs,
+        "metrics": metrics,
         "deltas": {
             "reuse_minus_offload_ttft_ms": (
                 (
@@ -328,10 +394,21 @@ def summarize(args: argparse.Namespace) -> int:
                 ]
                 or [None]
             ),
+            "reuse_lmcache_retrieve_events": reuse_retrieve_events,
+            "reuse_max_cached_tokens_mentioned": reuse_max_cached_tokens,
+            "reuse_cache_hit_rate_max": reuse_cache_hit_rate,
+            "reuse_uncached_prompt_tokens_less_than_total": (
+                reuse_uncached_prompt_less_than_total
+            ),
+            "reuse_has_cache_evidence": reuse_has_cache_evidence,
+            "warnings": evidence_warnings,
         },
     }
     _write_json(Path(args.output), summary)
     print(f"Wrote summary to {args.output}")
+    if args.require_reuse_evidence and not reuse_has_cache_evidence:
+        print("error: reuse cache evidence is absent", file=sys.stderr)
+        return 2
     return 0
 
 
@@ -375,6 +452,7 @@ def build_parser() -> argparse.ArgumentParser:
     summary_parser = subparsers.add_parser("summarize", help="summarize requests and logs")
     summary_parser.add_argument("--run-dir", required=True)
     summary_parser.add_argument("--output", required=True)
+    summary_parser.add_argument("--require-reuse-evidence", action="store_true")
     summary_parser.set_defaults(func=summarize)
 
     return parser
