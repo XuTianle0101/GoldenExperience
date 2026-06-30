@@ -34,7 +34,7 @@ Environment:
   GE_PROMPT_FILE                     Prompt manifest. Default: configs/kv_baseline_prompts.json.
   GE_PROMPT_ID                       Prompt id. Default: gsm8k_natalia_clips.
   GE_DISK_PROMPT_ID                  Generated long prompt id for force-disk mode. Default: kv_disk_long_prefix.
-  GE_DISK_PROMPT_REPEAT              Number of repeated context lines in generated prompt. Default: 512.
+  GE_DISK_PROMPT_REPEAT              Number of repeated context lines in generated prompt. Default: 256.
   GE_DISK_PROMPT_MAX_TOKENS          Generated prompt max_tokens. Default: 128.
   GE_MAX_TOKENS                      Override prompt max_tokens.
   GE_TEMPERATURE                     Override prompt temperature.
@@ -101,7 +101,7 @@ fi
 local_disk_gb="${GE_KV_LOCAL_DISK_GB:-100}"
 hash_algorithm="${GE_LMCACHE_HASH_ALGORITHM:-builtin}"
 disk_prompt_id="${GE_DISK_PROMPT_ID:-kv_disk_long_prefix}"
-disk_prompt_repeat="${GE_DISK_PROMPT_REPEAT:-512}"
+disk_prompt_repeat="${GE_DISK_PROMPT_REPEAT:-256}"
 disk_prompt_max_tokens="${GE_DISK_PROMPT_MAX_TOKENS:-128}"
 start_timeout="${GE_SERVER_START_TIMEOUT_SEC:-900}"
 request_timeout="${GE_REQUEST_TIMEOUT_SEC:-600}"

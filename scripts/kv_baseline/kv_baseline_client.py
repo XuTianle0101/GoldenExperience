@@ -181,6 +181,11 @@ def run_request(args: argparse.Namespace) -> int:
                 response_text = _extract_text_from_non_stream(parsed)
     except urllib.error.HTTPError as exc:
         error_body = exc.read().decode("utf-8", errors="replace")
+        if exc.code == 400 and "context length" in error_body.lower():
+            error_body += (
+                "\nHint: for generated disk-offload prompts, lower GE_DISK_PROMPT_REPEAT "
+                "or increase the model context length if the backend supports it."
+            )
         raise RuntimeError(f"HTTP {exc.code} from {url}: {error_body}") from exc
 
     ended_unix = time.time()
