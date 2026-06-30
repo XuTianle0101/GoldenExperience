@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Small stdlib-only client for SGLang + LMCache KV offload/reuse experiments."""
+"""Small stdlib-only client for OpenAI-compatible KV offload/reuse experiments."""
 
 from __future__ import annotations
 
@@ -294,16 +294,24 @@ def _summarize_log(path: Path) -> dict[str, Any]:
     return {
         "path": str(path),
         "bytes": path.stat().st_size,
-        "lmcache_store_events": _count_regex(r"\b(store|stored|put|offload)", text),
+        "lmcache_store_events": _count_regex(
+            r"\b(store|stored|put|offload|write|written|save|saved)", text
+        ),
         "lmcache_strict_store_events": _count_regex(
-            r"\blmcache\b.*\b(store|stored|put|offload)\b|"
-            r"\b(stored|offloaded)\s+[0-9]+\s+(?:tokens|token)\b",
+            r"\blmcache\b.*\b(store|stored|put|offload|write|written|save|saved)\b|"
+            r"\bl2\b.*\b(store|stored|write|written|save|saved)\b|"
+            r"\b(stored|offloaded|written|saved)\s+[0-9]+\s+"
+            r"(?:tokens|token|chunks|chunk|objects|object)\b",
             text,
         ),
-        "lmcache_retrieve_events": _count_regex(r"\b(retrieve|retrieved|lookup|hit)", text),
+        "lmcache_retrieve_events": _count_regex(
+            r"\b(retrieve|retrieved|lookup|hit|prefetch|prefetched|load|loaded|read)", text
+        ),
         "lmcache_strict_retrieve_events": _count_regex(
-            r"\blmcache\b.*\b(retrieve|retrieved|lookup|hit)\b|"
-            r"\b(retrieved|hit)\s+[0-9]+\s+(?:tokens|token)\b",
+            r"\blmcache\b.*\b(retrieve|retrieved|lookup|hit|prefetch|prefetched|load|loaded|read)\b|"
+            r"\bl2\b.*\b(retrieve|retrieved|hit|prefetch|prefetched|load|loaded|read)\b|"
+            r"\b(retrieved|hit|prefetched|loaded|read)\s+[0-9]+\s+"
+            r"(?:tokens|token|chunks|chunk|objects|object)\b",
             text,
         ),
         "stored_token_mentions": _sum_regex_int(r"stored\s+([0-9]+)\s+(?:tokens|token)", text),
@@ -336,7 +344,15 @@ def summarize(args: argparse.Namespace) -> int:
     request_dir = run_dir / "requests"
     log_dir = run_dir / "logs"
     metrics_dir = run_dir / "metrics"
-    cache_dir = run_dir / "cache"
+    metadata_path = run_dir / "metadata.json"
+    metadata = _read_json(metadata_path) if metadata_path.exists() else {}
+    metadata_cache_dir = metadata.get("kv_cache_dir")
+    if isinstance(metadata_cache_dir, str) and metadata_cache_dir:
+        cache_dir = Path(metadata_cache_dir)
+        if not cache_dir.is_absolute():
+            cache_dir = Path.cwd() / cache_dir
+    else:
+        cache_dir = run_dir / "cache"
 
     requests: dict[str, dict[str, Any]] = {}
     if request_dir.exists():
@@ -408,6 +424,7 @@ def summarize(args: argparse.Namespace) -> int:
 
     summary = {
         "run_dir": str(run_dir),
+        "metadata": metadata,
         "requests": requests,
         "logs": logs,
         "metrics": metrics,
