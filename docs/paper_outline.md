@@ -2,7 +2,7 @@
 
 ## Title Candidates
 
-- GoldenExperience: Cross-Model KV Cache Reuse as an LMCache Patch for SGLang
+- GoldenExperience: Cross-Model KV Cache Reuse as an LMCache Patch for vLLM
 - Reusing KV Cache Across Models Without Rebuilding the Serving Stack
 
 ## Abstract Shape
@@ -13,10 +13,10 @@
    controlled reuse across LoRA adapters, size variants, or different base models.
 3. Method: a small LMCache patch driven by model identity, reuse planning, materialization,
    and quality/fallback accounting.
-4. Evidence: TTFT improvement and accepted reuse rate under SGLang + LMCache, with quality
+4. Evidence: TTFT improvement and accepted reuse rate under vLLM + LMCache MP, with quality
    gates for three model-pair scenarios.
 5. Contribution: a narrow, upstream-friendly framework that leaves inference and offload to
-   SGLang and LMCache.
+   vLLM, LMCache, and optional SGLang legacy controls.
 
 ## Main Contributions
 
@@ -25,7 +25,7 @@
 - A control-plane planner that emits explicit `ReusePlan` metadata, confidence, gates, and
   fallback reasons.
 - An LMCache patch surface for secondary lookup, materialization, and quality accounting.
-- A SGLang-based evaluation path that measures latency gain without modifying inference
+- A vLLM + LMCache MP evaluation path that measures latency gain without modifying inference
   semantics or cache offload mechanics.
 
 ## Evaluation Questions
@@ -39,7 +39,7 @@
 
 ## Required Figures
 
-- Architecture: SGLang, LMCache, and the GoldenExperience patch hooks.
+- Architecture: vLLM, LMCache MP, filesystem L2, and the GoldenExperience patch hooks.
 - Taxonomy table for the three reuse scenarios.
 - TTFT and accepted-reuse rate for base/LoRA serving.
 - Quality versus latency for GoldenScale projection strategies.
@@ -48,7 +48,7 @@
 
 ## Limitations to State
 
-- GoldenExperience does not claim to improve LMCache offload or SGLang inference kernels.
+- GoldenExperience does not claim to improve LMCache offload or vLLM inference kernels.
 - Cross-base reuse is experimental and disabled without calibration.
 - Reuse quality must be evaluated per model pair, task, and prefix distribution.
-- Upstream LMCache and SGLang APIs may change, so the patch must remain small and rebased.
+- Upstream vLLM and LMCache APIs may change, so the patch must remain small and rebased.

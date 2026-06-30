@@ -38,8 +38,8 @@ class CrossModelReusePlanner:
     """Classify source/target pairs and produce an LMCache-safe reuse plan.
 
     The planner only decides whether GoldenExperience should ask the LMCache patch path
-    to look for a compatible entry. It does not mutate SGLang scheduling, LMCache offload,
-    or engine-owned KV tensors.
+    to look for a compatible entry. It does not mutate serving-engine scheduling,
+    LMCache offload, or engine-owned KV tensors.
     """
 
     def __init__(
@@ -121,7 +121,7 @@ class CrossModelReusePlanner:
             "lora_delta_quality_gate",
         ]
         status = PlanStatus.READY
-        notes = ["LoRA pair detected; inference and offload remain owned by SGLang and LMCache."]
+        notes = ["LoRA pair detected; inference and offload remain owned by the serving engine and LMCache."]
         if not request.source.shares_tokenizer_with(request.target):
             status = PlanStatus.BLOCKED
             notes.append("Tokenizers differ, so direct KV aliasing is unsafe.")
@@ -271,7 +271,7 @@ class CrossModelReusePlanner:
             lmcache_lookup_model_id=request.source.model_id,
             required_gates=required_gates,
             patch_hooks=(
-                "sglang_request_metadata",
+                "serving_request_metadata",
                 "lmcache_cross_model_lookup",
                 "goldenexperience_materializer",
                 "quality_gate_accounting",

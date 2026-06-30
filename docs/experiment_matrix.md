@@ -2,9 +2,10 @@
 
 ## Baselines
 
-- SGLang without LMCache.
-- SGLang with unmodified LMCache.
-- SGLang with LMCache plus GoldenExperience metadata, but cross-model reuse disabled.
+- vLLM without LMCache.
+- vLLM with LMCache MP plus filesystem L2, same-model reuse evidence disabled.
+- vLLM with LMCache MP plus GoldenExperience metadata, but cross-model reuse disabled.
+- SGLang with LMCache legacy control path.
 - GoldenScale shadow mode, where projected KV is validated but not injected.
 - GoldenExperience base/LoRA reuse enabled.
 - GoldenScale reuse enabled.
@@ -28,7 +29,7 @@
 
 ## Main Metrics
 
-- TTFT delta versus unmodified SGLang + LMCache.
+- TTFT delta versus vLLM without disk KV reuse and versus the SGLang legacy control path.
 - Cross-model cache hit rate and accepted reuse rate.
 - Fallback rate by reason: no candidate, not calibrated, shape mismatch, quality gate fail.
 - Materialization overhead: alias, projection, or learned translator latency.

@@ -23,10 +23,10 @@ class PatchManifest:
 
     GoldenExperience is intentionally a control-plane layer. The manifest makes that
     boundary explicit so future implementation work patches lookup/materialization paths
-    without replacing SGLang inference or LMCache storage/offload internals.
+    without replacing serving-engine inference or LMCache storage/offload internals.
     """
 
-    runtime_engine: str = "SGLang"
+    runtime_engine: str = "vLLM"
     cache_backend: str = "LMCache"
     hooks: tuple[PatchHook, ...] = field(default_factory=tuple)
     invariants: tuple[str, ...] = field(default_factory=tuple)
@@ -37,8 +37,8 @@ class PatchManifest:
         return cls(
             hooks=(
                 PatchHook(
-                    name="sglang_request_metadata",
-                    target="SGLang request/session metadata before LMCache lookup",
+                    name="serving_request_metadata",
+                    target="Serving request/session metadata before LMCache lookup",
                     purpose="Attach source/target ModelRef, prefix hash, and experiment flags.",
                     order=10,
                 ),
@@ -50,7 +50,7 @@ class PatchManifest:
                 ),
                 PatchHook(
                     name="goldenexperience_materializer",
-                    target="LMCache retrieve path before KV is handed back to SGLang",
+                    target="LMCache retrieve path before KV is handed back to the serving engine",
                     purpose="Alias, project, or translate retrieved KV according to a ReusePlan.",
                     order=30,
                 ),
@@ -62,14 +62,15 @@ class PatchManifest:
                 ),
             ),
             invariants=(
-                "Do not modify SGLang scheduling, attention kernels, or token generation semantics.",
+                "Do not modify serving-engine scheduling, attention kernels, or token generation semantics.",
                 "Do not replace LMCache storage, offload, eviction, or prefetch implementations.",
-                "If a ReusePlan is not ready, fall back to the original SGLang plus LMCache path.",
+                "If a ReusePlan is not ready, fall back to the original serving-engine plus LMCache path.",
                 "All cross-model reuse must carry scenario, transform_id, confidence, and calibration metadata.",
             ),
             notes=(
                 "The patch should be small enough to carry as a delta on top of upstream LMCache.",
-                "Source installs of SGLang and LMCache are supported for development and debugging.",
+                "Source installs of vLLM and LMCache are supported for development and debugging.",
+                "SGLang remains supported through explicit legacy control scripts.",
             ),
         )
 

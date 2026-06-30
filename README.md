@@ -2,22 +2,23 @@
 
 [English](README.md) | [中文](README.zh-CN.md)
 
-GoldenExperience is a **cross-model KV Cache reuse patch framework** for an open-source
-serving stack built from **SGLang** + **LMCache**.
+GoldenExperience is a **cross-model KV Cache reuse patch framework** for open-source
+serving stacks. The active disk-reuse baseline is **vLLM + LMCache MP + filesystem L2**;
+**SGLang + LMCache** is retained as a legacy control path.
 
 The new boundary is deliberately narrow:
 
-- SGLang owns model loading, scheduling, decoding, and inference correctness.
+- vLLM owns default model loading, scheduling, decoding, and inference correctness.
 - LMCache owns KV storage, lookup, offload, eviction, and prefetch mechanics.
 - GoldenExperience adds the control plane for **reusing KV Cache across models**.
-- If a reuse plan is not safe or not calibrated, the stack falls back to the original
-  SGLang + LMCache behavior.
+- If a reuse plan is not safe or not calibrated, the stack falls back to normal engine
+  prefill behavior.
 
 ## What This Project Focuses On
 
 GoldenExperience is no longer trying to be an inference engine or a KV offload system.
 It is intended to be carried as a small patch on top of LMCache, with runtime metadata
-flowing from SGLang requests into LMCache lookup and retrieve paths.
+flowing from serving requests into LMCache lookup and retrieve paths.
 
 The research/development target is three GoldenExperience reuse tracks:
 
@@ -34,7 +35,7 @@ and `GoldenBridge` targets `different_base_model`.
 ## Architecture
 
 ```text
-SGLang request/session
+vLLM request/session
         |
         | model refs, prefix hash, experiment flags
         v
@@ -46,12 +47,12 @@ LMCache patch surface
         |
         | secondary lookup -> materialize/transform -> quality accounting
         v
-LMCache storage/offload + SGLang inference remain upstream-owned
+LMCache storage/offload + vLLM inference remain upstream-owned
 ```
 
 The patch surface is described by `PatchManifest.default()`:
 
-1. `sglang_request_metadata`: attach `ModelRef` and prefix metadata before LMCache lookup.
+1. `serving_request_metadata`: attach `ModelRef` and prefix metadata before LMCache lookup.
 2. `lmcache_cross_model_lookup`: on a same-model miss, query cross-model candidates.
 3. `goldenexperience_materializer`: alias/project/translate KV before returning it.
 4. `quality_gate_accounting`: record confidence, calibration, and fallback reasons.
@@ -62,10 +63,10 @@ The patch surface is described by `PatchManifest.default()`:
 goldenexperience/
   reuse/             ModelRef, KVShape, ReuseRequest, ReusePlan, scenario planner.
   lmcache_patch/     Patch manifest and sidecar key metadata for LMCache deltas.
-  sglang_runtime/    Dependency checks and namespaced env helpers for wrappers.
+  vllm_lmcache_runtime/ Dependency checks and namespaced env helpers for wrappers.
   cache_core/        Legacy in-repo cache block metadata utilities for tests/prototypes.
   tiered_store/      Legacy synthetic tiering prototype; not the product runtime path.
-  engine_adapter/    Legacy adapter experiments; SGLang is now the runtime target.
+  engine_adapter/    Legacy adapter experiments; vLLM is now the default runtime target.
 docs/                Design, experiment matrix, artifact, and paper planning notes.
 configs/             Cross-model reuse experiment configuration.
 examples/            Minimal planning examples.
@@ -104,27 +105,29 @@ golden-scale-bench artifacts/golden_scale/qwen25_14b_to_7b_projection_v0.json
 
 ## Deployment Flow
 
-GoldenExperience deploys as a Python package inside the same environment as SGLang and
-LMCache. It is not a standalone daemon.
+GoldenExperience deploys as a Python package inside the same environment as the serving
+runtime. The default same-model disk-reuse baseline is now **vLLM + LMCache MP +
+filesystem L2**. `SGLang + LMCache` is retained as a legacy control path.
 
 ```text
-client -> SGLang OpenAI-compatible server
+client -> vLLM OpenAI-compatible server
              |
-             | --enable-lmcache
+             | LMCacheMPConnector
              v
-          LMCache
+        LMCache MP server
              |
-             | GoldenExperience patch hooks and planner metadata
+             | filesystem L2
              v
-          fallback or cross-model KV reuse
+        disk KV store
 ```
 
 Runtime ownership:
 
-- SGLang starts the inference server and owns request scheduling and generation.
-- LMCache owns KV lookup, storage, offload, eviction, and prefetch.
+- vLLM starts the default inference server and owns request scheduling and generation.
+- LMCache MP owns KV lookup, storage, offload, eviction, prefetch, and filesystem L2.
 - GoldenExperience owns `ModelRef`, `ReuseRequest`, `ReusePlan`, patch metadata, and
   quality/fallback accounting.
+- SGLang remains available through `GE_KV_BACKEND=legacy GE_ENGINE=sglang` for comparison.
 
 ### 1. Install Runtime Packages
 
@@ -136,7 +139,7 @@ source .venv/bin/activate
 ./scripts/install_runtime.sh --mode package
 ```
 
-Use source mode when you need to patch LMCache or debug SGLang/LMCache internals:
+Use source mode when you need to patch vLLM or LMCache internals:
 
 ```bash
 python3 -m venv .venv
@@ -144,26 +147,28 @@ source .venv/bin/activate
 ./scripts/install_runtime.sh --mode source
 ```
 
-`--mode source` clones SGLang and LMCache into `third_party/` and installs editable copies.
+`--mode source` clones vLLM and LMCache into `third_party/` and installs editable copies.
 Override the defaults when using forks:
 
 ```bash
 GE_THIRD_PARTY_DIR=third_party \
-GE_SGLANG_REPO_URL=https://github.com/sgl-project/sglang.git \
+GE_VLLM_REPO_URL=https://github.com/vllm-project/vllm.git \
 GE_LMCACHE_REPO_URL=https://github.com/LMCache/LMCache.git \
 ./scripts/install_runtime.sh --mode source
 ```
 
-Install only GoldenExperience if SGLang and LMCache are already available:
+Install only GoldenExperience if vLLM and LMCache are already available:
 
 ```bash
 ./scripts/install_runtime.sh --mode golden-only
 ```
 
 The script prefers `uv pip install` when `uv` is installed; otherwise it falls back to
-`python3 -m pip install`. SGLang and LMCache install details should still be checked
-against their upstream docs when changing CUDA, Python, or package versions:
+`python3 -m pip install`. Add `--with-legacy-sglang` only when you need the SGLang
+control path. Runtime install details should still be checked against upstream docs when
+changing CUDA, Python, or package versions:
 
+- vLLM docs: <https://docs.vllm.ai/>
 - SGLang docs: <https://docs.sglang.ai/>
 - LMCache docs: <https://docs.lmcache.ai/>
 
@@ -179,8 +184,9 @@ Expected planner output includes three rows:
 - `same_model_different_parameter_size`: calibrated GoldenScale projection plan.
 - `different_base_model`: conservative unready cross-base plan.
 
-If `--check-runtime` reports missing `sglang` or `lmcache`, install the runtime stack before
-starting model-backed serving.
+If `--check-runtime` reports missing `vllm` or `lmcache`, install the runtime stack before
+starting model-backed serving. Use `--check-legacy-sglang` to include the optional SGLang
+control path in the import check.
 
 ### 3. Generate Patch Manifest
 
@@ -188,53 +194,7 @@ starting model-backed serving.
 golden-patch-manifest --output docs/patch_manifest.md
 ```
 
-The manifest is also generated automatically by `scripts/start_sglang_lmcache.sh`.
-
-### 4. Start SGLang With LMCache
-
-The default launch command starts a SGLang OpenAI-compatible server with LMCache enabled:
-
-```bash
-GE_MODEL_PATH=Qwen/Qwen3-8B \
-./scripts/start_sglang_lmcache.sh
-```
-
-Common overrides:
-
-```bash
-GE_MODEL_PATH=Qwen/Qwen3-8B \
-GE_HOST=0.0.0.0 \
-GE_PORT=30000 \
-GE_LMCACHE_CONFIG_FILE=artifacts/runtime/lmc_config.yaml \
-GE_LMCACHE_CHUNK_SIZE=256 \
-GE_LMCACHE_LOCAL_CPU_GB=10 \
-./scripts/start_sglang_lmcache.sh --tp 1
-```
-
-The start script does the following before `exec python3 -m sglang.launch_server`:
-
-1. Writes an LMCache config if `GE_LMCACHE_CONFIG_FILE` does not exist.
-2. Renders `docs/patch_manifest.md`.
-3. Checks that `sglang`, `lmcache`, and `goldenexperience` are importable.
-4. Exports GoldenExperience metadata variables:
-   - `GE_ENABLE_CROSS_MODEL_REUSE=1`
-   - `GE_PATCH_MANIFEST=docs/patch_manifest.md`
-   - `GE_LMCACHE_CONFIG=configs/lmcache.example.yaml`
-   - `GE_SGLANG_MODEL_ID=$GE_MODEL_PATH`
-5. Starts SGLang with `--enable-lmcache`.
-
-The generated LMCache config is intentionally small:
-
-```yaml
-chunk_size: 256
-local_cpu: true
-use_layerwise: true
-max_local_cpu_size: 10
-```
-
-Set `GE_OVERWRITE_LMCACHE_CONFIG=1` to regenerate an existing config.
-
-### 5. Send a Request
+### 4. Send a Request
 
 ```bash
 curl http://localhost:30000/v1/chat/completions \
@@ -247,34 +207,33 @@ curl http://localhost:30000/v1/chat/completions \
   }'
 ```
 
-### 6. Run the First KV Offload/Reuse Baseline
+### 5. Run the vLLM + LMCache MP Filesystem-L2 Baseline
 
-Use this baseline after SGLang, LMCache, and GoldenExperience are installed in the same
-Python environment. The script starts one SGLang + LMCache server, sends a deterministic
-GSM8K-style prompt to populate/offload KV, restarts SGLang with the same LMCache disk
-directory, sends the same prompt again, and records timing/log evidence for reuse.
+Use this baseline after vLLM, LMCache, and GoldenExperience are installed in the same
+Python environment. The script starts a standalone LMCache MP server with filesystem L2,
+starts vLLM with `LMCacheMPConnector`, sends an offload request, restarts only vLLM, sends
+the same prompt again, and records evidence for disk reuse.
 
 ```bash
 source .venv/bin/activate
 
 GE_MODEL_PATH=Qwen/Qwen3-8B \
 GE_PORT=30000 \
-scripts/kv_baseline/run_sglang_lmcache_kv_baseline.sh -- --tp 1
+scripts/kv_baseline/run_vllm_lmcache_mp_l2_baseline.sh -- --tensor-parallel-size 1
 ```
 
 Default outputs are written under `artifacts/kv_baseline/<run_id>/`:
 
 - `metadata.json`: model, prompt, mode, cache path, and runtime settings.
-- `lmc_config.yaml`: generated LMCache config with local CPU plus persistent local disk.
+- `runtime.json`: generated command/config state used by the lightweight shell runner.
+- `lmc_config.yaml`: recorded LMCache MP and filesystem-L2 configuration.
 - `requests/offload.json`: first request output, usage, end-to-end latency, and TTFT.
 - `requests/reuse.json`: second request with the same prompt after restart.
-- `logs/offload_server.log` and `logs/reuse_server.log`: SGLang/LMCache evidence.
-- `summary.json`: request deltas and best-effort log counters for store/retrieve events.
+- `logs/offload_server.log`, `logs/reuse_server.log`, and LMCache MP log slices.
+- `summary.json`: request deltas plus disk/reuse/PID evidence.
 
-The default prompt lives in `configs/kv_baseline_prompts.json` and uses the classic GSM8K
-Natalia clips question. The default `GE_KV_CHUNK_SIZE=16` is intentionally small so this
-short prompt crosses at least one LMCache chunk. For longer workloads, raise it back toward
-the production-style value used in your LMCache experiments.
+When `GE_FORCE_DISK_OFFLOAD=1` and no prompt file is provided, the script writes a long
+deterministic prompt into the run directory so repo configs are not modified.
 
 Useful overrides:
 
@@ -282,22 +241,19 @@ Useful overrides:
 GE_MODEL_PATH=/models/Qwen3-8B \
 GE_MODEL_NAME=/models/Qwen3-8B \
 GE_RUN_ID=qwen3_8b_gsm8k_restart_001 \
-GE_KV_LOCAL_CPU_GB=20 \
-GE_KV_LOCAL_DISK_GB=200 \
-GE_PROMPT_ID=gsm8k_natalia_clips \
-scripts/kv_baseline/run_sglang_lmcache_kv_baseline.sh -- --tp 1
+GE_REQUIRE_REUSE_EVIDENCE=1 \
+GE_FORCE_DISK_OFFLOAD=1 \
+scripts/kv_baseline/run_vllm_lmcache_mp_l2_baseline.sh -- --tensor-parallel-size 1
 ```
 
 Interpretation checklist:
 
 1. Confirm the first run finished and `requests/offload.json` contains the expected answer.
-2. Confirm `logs/offload_server.log` contains LMCache store/offload messages.
-3. Confirm the second run starts from a fresh process and `logs/reuse_server.log` contains
-   LMCache lookup/retrieve/hit evidence.
-4. Compare `summary.json` fields `reuse_minus_offload_ttft_ms` and
-   `reuse_minus_offload_e2e_ms`; negative values indicate the second request was faster.
-5. Keep the whole `artifacts/kv_baseline/<run_id>/` directory as the same-model baseline for
-   later cross-model KV reuse experiments.
+2. Confirm `summary.json` has `offload_engine_pid != reuse_engine_pid`.
+3. Confirm `summary.json` has a non-null `lmcache_mp_pid`.
+4. Confirm `cache.file_count > 0` and `cache.total_bytes > 0`.
+5. Confirm `evidence.reuse_has_cache_evidence=true` and `evidence.disk_reuse_success=true`.
+6. Treat TTFT deltas as performance context only; they are not sufficient reuse proof.
 
 If your installed LMCache version does not rebuild local-disk metadata across process
 restart, run a diagnostic same-process baseline instead:
@@ -305,20 +261,30 @@ restart, run a diagnostic same-process baseline instead:
 ```bash
 GE_MODEL_PATH=Qwen/Qwen3-8B \
 GE_BASELINE_MODE=same-process \
-scripts/kv_baseline/run_sglang_lmcache_kv_baseline.sh -- --tp 1
+scripts/kv_baseline/run_vllm_lmcache_mp_l2_baseline.sh -- --tensor-parallel-size 1
 ```
 
-`GE_DISABLE_RADIX_CACHE=1` is enabled by default so the baseline is not hidden by SGLang's
-in-process radix cache. Set `GE_DISABLE_RADIX_CACHE=0` only when you want to measure the
-combined SGLang radix cache plus LMCache behavior.
+### 6. Legacy SGLang Control Path
+
+`scripts/start_sglang_lmcache.sh` is retained for legacy experiments. The old baseline
+filename is now a wrapper that forwards to the vLLM-named runner. To run the old in-process
+SGLang + LMCache control path:
+
+```bash
+GE_KV_BACKEND=legacy \
+GE_ENGINE=sglang \
+GE_MODEL_PATH=/models/Qwen3-8B \
+scripts/kv_baseline/run_vllm_lmcache_mp_l2_baseline.sh -- --tp 1
+```
 
 ### Current Runtime Limitation
 
 The repository currently contains the GoldenExperience planner, metadata model, patch
 manifest, and deployment wrappers. The real LMCache hook implementation is the next step.
 Until `lmcache_cross_model_lookup` and `goldenexperience_materializer` are wired into an
-LMCache patch or fork, SGLang + LMCache will run normally and GoldenExperience can validate
-plans/metadata, but accepted cross-model KV reuse will not yet be executed inside LMCache.
+LMCache patch or fork, the vLLM + LMCache MP baseline validates same-model disk reuse and
+GoldenExperience can validate plans/metadata, but accepted cross-model KV reuse will not yet
+be executed inside LMCache.
 
 ## GoldenScale Reuse
 
@@ -352,7 +318,7 @@ Runtime behavior remains conservative:
 - The materializer must output full target-shaped KV for every target layer.
 - `estimated_materialization_ms` must be <= 70% of target prefill cost.
 - Any tokenizer, RoPE, config hash, artifact, layer-map, projection, or quality mismatch
-  falls back to the original SGLang + LMCache target prefill path.
+  falls back to the original serving-engine + LMCache target prefill path.
 
 ## Minimal Planner Example
 
@@ -393,11 +359,11 @@ golden-patch-manifest --output docs/patch_manifest.md
 
 ## Development Roadmap
 
-- M0: Lock the project boundary around SGLang + LMCache + GoldenExperience patch metadata.
+- M0: Lock the vLLM + LMCache MP filesystem-L2 same-model disk reuse baseline.
 - M1: Implement LMCache secondary lookup sidecar for base/LoRA mutual reuse.
 - M2: Add layer/head mapping and calibrated projection for same-model size variants.
 - M3: Add experimental learned translator interface for different-base reuse.
-- M4: Build SGLang model-backed benchmarks and quality/fallback accounting.
+- M4: Build vLLM model-backed benchmarks plus SGLang legacy controls.
 - M5: Keep the patch small enough to rebase on upstream LMCache.
 
 See `docs/design.md`, `docs/experiment_matrix.md`, and `docs/artifact.md` for the detailed

@@ -14,7 +14,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from goldenexperience.reuse import CrossModelReusePlanner, KVShape, ModelRef, ReuseRequest
-from goldenexperience.sglang_runtime import RuntimeConfig, check_runtime
+from goldenexperience.vllm_lmcache_runtime import RuntimeConfig, check_runtime
 
 
 def make_model(
@@ -97,8 +97,10 @@ def build_plans() -> list[dict[str, object]]:
     ]
 
 
-def runtime_imports() -> dict[str, object]:
-    status = check_runtime(RuntimeConfig(model_id="smoke"))
+def runtime_imports(*, include_legacy_sglang: bool = False) -> dict[str, object]:
+    status = check_runtime(
+        RuntimeConfig(model_id="smoke", include_legacy_sglang=include_legacy_sglang)
+    )
     return {
         "ready": status.ready,
         "available": status.available,
@@ -110,12 +112,24 @@ def runtime_imports() -> dict[str, object]:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
-    parser.add_argument("--check-runtime", action="store_true", help="Also report SGLang/LMCache imports.")
+    parser.add_argument("--check-runtime", action="store_true", help="Also report vLLM/LMCache imports.")
+    parser.add_argument(
+        "--check-legacy-sglang",
+        action="store_true",
+        help="Include the optional SGLang legacy runtime in dependency checks.",
+    )
+    parser.add_argument(
+        "--check-sglang-legacy",
+        action="store_true",
+        help=argparse.SUPPRESS,
+    )
     args = parser.parse_args()
 
     payload: dict[str, object] = {"plans": build_plans()}
     if args.check_runtime:
-        payload["runtime"] = runtime_imports()
+        payload["runtime"] = runtime_imports(
+            include_legacy_sglang=args.check_legacy_sglang or args.check_sglang_legacy
+        )
 
     if args.json:
         print(json.dumps(payload, indent=2, sort_keys=True))

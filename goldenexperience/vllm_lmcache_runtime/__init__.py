@@ -1,6 +1,6 @@
-"""SGLang runtime configuration helpers."""
+"""vLLM + LMCache runtime configuration helpers."""
 
-from goldenexperience.sglang_runtime.config import (
+from goldenexperience.vllm_lmcache_runtime.config import (
     RuntimeConfig,
     RuntimeDependency,
     RuntimeStatus,

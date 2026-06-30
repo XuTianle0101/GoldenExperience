@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "goldenexperience"
 version = "0.1.0"
-description = "Cross-model KV cache reuse patch framework for SGLang and LMCache."
+description = "Cross-model KV cache reuse patch framework for vLLM, SGLang legacy, and LMCache."
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "Apache-2.0" }
@@ -17,6 +17,7 @@ keywords = [
   "kv-cache",
   "cross-model-reuse",
   "lmcache",
+  "vllm",
   "sglang",
   "serving",
   "systems",
@@ -28,6 +29,8 @@ dependencies = []
 [project.optional-dependencies]
 torch = ["torch>=2.1"]
 legacy-hf = ["transformers>=4.40", "torch>=2.1"]
+runtime-vllm = ["vllm", "lmcache"]
+legacy-sglang = ["sglang"]
 legacy-vllm = ["vllm>=0.5"]
 dev = ["pytest>=8", "ruff>=0.5", "mypy>=1.10"]
 

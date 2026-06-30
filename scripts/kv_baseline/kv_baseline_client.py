@@ -279,13 +279,22 @@ def _summarize_metrics(path: Path) -> dict[str, Any]:
     cache_hit_rates = _metric_values(text, "sglang:cache_hit_rate")
     prompt_sums = _metric_values(text, "sglang:prompt_tokens_histogram_sum")
     uncached_prompt_sums = _metric_values(text, "sglang:uncached_prompt_tokens_histogram_sum")
+    vllm_gpu_prefix_hits = _metric_values(text, "vllm:gpu_prefix_cache_hits")
+    vllm_cpu_prefix_hits = _metric_values(text, "vllm:cpu_prefix_cache_hits")
+    vllm_prompt_sums = _metric_values(text, "vllm:request_prompt_tokens_sum")
     return {
         "path": str(path),
         "cache_hit_rate_max": max(cache_hit_rates) if cache_hit_rates else None,
+        "vllm_prefix_cache_hits_total": (
+            sum(vllm_gpu_prefix_hits) + sum(vllm_cpu_prefix_hits)
+            if vllm_gpu_prefix_hits or vllm_cpu_prefix_hits
+            else None
+        ),
         "prompt_tokens_histogram_sum": sum(prompt_sums) if prompt_sums else None,
         "uncached_prompt_tokens_histogram_sum": (
             sum(uncached_prompt_sums) if uncached_prompt_sums else None
         ),
+        "vllm_request_prompt_tokens_sum": sum(vllm_prompt_sums) if vllm_prompt_sums else None,
     }
 
 
@@ -339,6 +348,17 @@ def _summarize_cache_dir(path: Path) -> dict[str, Any]:
     }
 
 
+def _read_pid(path: Path) -> int | None:
+    try:
+        text = path.read_text(encoding="utf-8").strip()
+    except FileNotFoundError:
+        return None
+    try:
+        return int(text)
+    except ValueError:
+        return None
+
+
 def summarize(args: argparse.Namespace) -> int:
     run_dir = Path(args.run_dir)
     request_dir = run_dir / "requests"
@@ -380,6 +400,15 @@ def summarize(args: argparse.Namespace) -> int:
     reuse_ttft = timing("reuse", "ttft_ms")
     offload_e2e = timing("offload", "e2e_ms")
     reuse_e2e = timing("reuse", "e2e_ms")
+    offload_engine_pid = _read_pid(run_dir / "offload.pid")
+    reuse_engine_pid = _read_pid(run_dir / "reuse.pid")
+    lmcache_mp_pid = _read_pid(run_dir / "lmcache_mp.pid")
+    engine_restarted = (
+        offload_engine_pid is not None
+        and reuse_engine_pid is not None
+        and offload_engine_pid != reuse_engine_pid
+    )
+    lmcache_mp_persistent = lmcache_mp_pid is not None
     reuse_logs = [log for log in logs if Path(str(log["path"])).name.startswith("reuse")]
     reuse_retrieve_events = sum(int(log["lmcache_retrieve_events"]) for log in reuse_logs)
     reuse_strict_retrieve_events = sum(
@@ -394,6 +423,7 @@ def summarize(args: argparse.Namespace) -> int:
     reuse_max_cached_tokens = max(reuse_cached_mentions) if reuse_cached_mentions else None
     reuse_metric = metrics.get("reuse", {})
     reuse_cache_hit_rate = reuse_metric.get("cache_hit_rate_max")
+    reuse_vllm_prefix_cache_hits = reuse_metric.get("vllm_prefix_cache_hits_total")
     prompt_sum = reuse_metric.get("prompt_tokens_histogram_sum")
     uncached_prompt_sum = reuse_metric.get("uncached_prompt_tokens_histogram_sum")
     reuse_uncached_prompt_less_than_total = (
@@ -405,12 +435,20 @@ def summarize(args: argparse.Namespace) -> int:
         reuse_strict_retrieve_events > 0
         or (reuse_max_cached_tokens is not None and reuse_max_cached_tokens > 0)
         or (isinstance(reuse_cache_hit_rate, (int, float)) and reuse_cache_hit_rate > 0)
+        or (
+            isinstance(reuse_vllm_prefix_cache_hits, (int, float))
+            and reuse_vllm_prefix_cache_hits > 0
+        )
         or reuse_uncached_prompt_less_than_total
     )
     disk_cache_file_count = int(cache["file_count"])
     disk_cache_total_bytes = int(cache["total_bytes"])
     offload_has_disk_evidence = disk_cache_file_count > 0 and disk_cache_total_bytes > 0
-    disk_reuse_success = offload_has_disk_evidence and reuse_has_cache_evidence
+    kv_backend = str(metadata.get("kv_backend") or "")
+    baseline_mode = str(metadata.get("mode") or "")
+    pid_evidence_required = kv_backend == "mp" and baseline_mode == "restart"
+    pid_evidence_ok = not pid_evidence_required or (engine_restarted and lmcache_mp_persistent)
+    disk_reuse_success = offload_has_disk_evidence and reuse_has_cache_evidence and pid_evidence_ok
     evidence_warnings: list[str] = []
     if not offload_has_disk_evidence:
         evidence_warnings.append(
@@ -421,9 +459,21 @@ def summarize(args: argparse.Namespace) -> int:
             "No reuse-side cache evidence was found: retrieve events, cached-token mentions, "
             "cache hit rate, and uncached prompt token reduction are all absent or zero."
         )
+    if pid_evidence_required and not engine_restarted:
+        evidence_warnings.append(
+            "The offload/reuse engine PID evidence is absent or does not prove an engine restart."
+        )
+    if pid_evidence_required and not lmcache_mp_persistent:
+        evidence_warnings.append("The LMCache MP PID evidence is absent.")
 
     summary = {
         "run_dir": str(run_dir),
+        "disk_reuse_success": disk_reuse_success,
+        "offload_has_disk_evidence": offload_has_disk_evidence,
+        "reuse_has_cache_evidence": reuse_has_cache_evidence,
+        "offload_engine_pid": offload_engine_pid,
+        "reuse_engine_pid": reuse_engine_pid,
+        "lmcache_mp_pid": lmcache_mp_pid,
         "metadata": metadata,
         "requests": requests,
         "logs": logs,
@@ -466,9 +516,17 @@ def summarize(args: argparse.Namespace) -> int:
             "reuse_lmcache_strict_retrieve_events": reuse_strict_retrieve_events,
             "reuse_max_cached_tokens_mentioned": reuse_max_cached_tokens,
             "reuse_cache_hit_rate_max": reuse_cache_hit_rate,
+            "reuse_vllm_prefix_cache_hits_total": reuse_vllm_prefix_cache_hits,
             "reuse_uncached_prompt_tokens_less_than_total": (
                 reuse_uncached_prompt_less_than_total
             ),
+            "offload_engine_pid": offload_engine_pid,
+            "reuse_engine_pid": reuse_engine_pid,
+            "lmcache_mp_pid": lmcache_mp_pid,
+            "engine_restarted": engine_restarted,
+            "lmcache_mp_persistent": lmcache_mp_persistent,
+            "pid_evidence_required": pid_evidence_required,
+            "pid_evidence_ok": pid_evidence_ok,
             "disk_cache_file_count": disk_cache_file_count,
             "disk_cache_total_bytes": disk_cache_total_bytes,
             "offload_has_disk_evidence": offload_has_disk_evidence,

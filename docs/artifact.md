@@ -2,9 +2,9 @@
 
 ## Reproduction Levels
 
-1. Planner smoke test: run unit tests without SGLang, LMCache, GPUs, or model weights.
-2. Runtime dependency check: verify SGLang and LMCache imports or local source paths.
-3. Base/LoRA single-GPU test: run SGLang with LMCache and the GoldenExperience metadata patch.
+1. Planner smoke test: run unit tests without vLLM, LMCache, GPUs, or model weights.
+2. Runtime dependency check: verify vLLM and LMCache imports or local source paths.
+3. Base/LoRA single-GPU test: run vLLM with LMCache MP and the GoldenExperience metadata patch.
 4. GoldenScale test: enable calibrated layer/head mapping and projection.
 5. Cross-base exploratory test: enable only with calibration id and explicit task allowlist.
 
@@ -22,7 +22,8 @@ golden-scale-validate /tmp/ge-golden-scale/qwen25_7b_to_14b_projection_v0.json
 
 ## Runtime Stack
 
-GoldenExperience assumes SGLang and LMCache are installed before model-backed experiments.
+GoldenExperience assumes vLLM and LMCache are installed before default model-backed experiments.
+SGLang is optional for legacy control runs.
 Use upstream packages, local forks, or the convenience helper:
 
 ```bash
@@ -30,13 +31,13 @@ Use upstream packages, local forks, or the convenience helper:
 ```
 
 The helper is intentionally optional. Artifact scripts should record the exact upstream
-commits or package versions used for SGLang and LMCache.
+commits or package versions used for vLLM, LMCache, and optional SGLang legacy runs.
 
 ## Expected Artifact Contents
 
 - Source code and tests for the planner and patch metadata.
 - LMCache patch diff or fork commit.
-- SGLang launch scripts and LMCache config files.
+- vLLM/LMCache MP launch scripts, LMCache config files, and optional SGLang legacy scripts.
 - Model pair manifests with `ModelRef` and `KVShape` fields.
 - Calibration datasets or manifests for projection/translator paths.
 - Size-variant artifacts: `CalibrationManifest`, `LayerMap`, `ProjectionSpec`, and
@@ -47,7 +48,7 @@ commits or package versions used for SGLang and LMCache.
 
 Every reported run should store:
 
-- GoldenExperience, SGLang, and LMCache commit hashes.
+- GoldenExperience, vLLM, LMCache, and optional SGLang legacy commit hashes.
 - Python, CUDA, GPU, and driver versions.
 - Model ids, tokenizer ids, LoRA adapter ids, and revisions.
 - Reuse scenario, strategy, transform id, confidence, and calibration id.

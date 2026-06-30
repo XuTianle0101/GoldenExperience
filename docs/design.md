@@ -3,10 +3,12 @@
 ## Goal
 
 GoldenExperience focuses on **KV Cache reuse across models** while delegating serving and
-cache mechanics to existing projects:
+cache mechanics to existing projects. The current same-model disk-reuse baseline is
+vLLM + LMCache MP + filesystem L2; SGLang + LMCache is retained as a legacy control path.
 
-- SGLang is the inference engine.
-- LMCache is the KV Cache storage/offload layer.
+- vLLM is the default inference engine for the disk-reuse baseline.
+- LMCache MP is the KV Cache storage/offload layer.
+- SGLang remains available for legacy/experimental control runs.
 - GoldenExperience is a small LMCache patch plus Python control-plane library for deciding
   when cross-model reuse is safe enough to try.
 
@@ -17,12 +19,12 @@ materialize compatible KV, and record quality/fallback evidence.
 ## Runtime Boundary
 
 ```text
-SGLang owns: request scheduling, model execution, attention kernels, decoding
-LMCache owns: cache storage, lookup, offload, eviction, prefetch
+vLLM owns: request scheduling, model execution, attention kernels, decoding
+LMCache MP owns: cache storage, lookup, offload, eviction, prefetch
 GoldenExperience owns: model identity, reuse planning, transform metadata, quality gates
 ```
 
-When a request arrives, SGLang should pass enough model and prefix metadata for the LMCache
+When a request arrives, the serving engine should pass enough model and prefix metadata for the LMCache
 patch to build a `ReuseRequest`. The `CrossModelReusePlanner` returns a `ReusePlan`. If the
 plan is `ready`, LMCache may run a secondary lookup and materialize source KV for the target
 model. Otherwise, the original LMCache miss path proceeds unchanged.
@@ -85,23 +87,23 @@ the default for every uncalibrated or low-confidence case.
 
 `PatchManifest.default()` defines four narrow hooks:
 
-1. `sglang_request_metadata`: attach source/target model identity and prefix metadata.
+1. `serving_request_metadata`: attach source/target model identity and prefix metadata.
 2. `lmcache_cross_model_lookup`: query cross-model candidates after normal lookup fails.
 3. `goldenexperience_materializer`: alias, project, or translate KV for the target model.
 4. `quality_gate_accounting`: record confidence, calibration provenance, and fallback reason.
 
 The patch must preserve these invariants:
 
-- Do not modify SGLang scheduling, attention kernels, or token generation semantics.
+- Do not modify serving-engine scheduling, attention kernels, or token generation semantics.
 - Do not replace LMCache storage, offload, eviction, or prefetch implementations.
-- Always fall back to the original SGLang + LMCache path when a plan is not ready.
+- Always fall back to the original serving-engine + LMCache path when a plan is not ready.
 - Attach scenario, transform id, confidence, and calibration metadata to every reuse attempt.
 
 ## Development Shape
 
 The current repository contains legacy synthetic cache-core and tiered-store utilities.
 They remain useful for unit tests and paper-prototype thinking, but the product runtime path
-is now `reuse/` + `lmcache_patch/` + `sglang_runtime/`.
+is now `reuse/` + `lmcache_patch/` + runtime wrapper scripts.
 
 Near-term implementation should avoid building a second cache system. Instead:
 
