@@ -2,9 +2,9 @@
 
 ## Baselines
 
-- SGLang without LMCache.
-- SGLang with unmodified LMCache.
-- SGLang with LMCache plus GoldenExperience metadata, but cross-model reuse disabled.
+- vLLM without external KV reuse.
+- vLLM + LMCache MP + Mooncake Store with cross-model reuse disabled.
+- Same-model offload/reuse across vLLM restart through LMCache MP and Mooncake L2.
 - GoldenScale shadow mode, where projected KV is validated but not injected.
 - GoldenExperience base/LoRA reuse enabled.
 - GoldenScale reuse enabled.
@@ -28,12 +28,13 @@
 
 ## Main Metrics
 
-- TTFT delta versus unmodified SGLang + LMCache.
+- TTFT delta versus unmodified vLLM + LMCache MP + Mooncake Store.
 - Cross-model cache hit rate and accepted reuse rate.
 - Fallback rate by reason: no candidate, not calibrated, shape mismatch, quality gate fail.
 - Materialization overhead: alias, projection, or learned translator latency.
 - Quality gate metrics: perplexity drift, probe-logit drift, exact match/F1, task score.
-- LMCache overhead: secondary lookup latency and metadata/index memory.
+- LMCache MP overhead: secondary lookup latency and metadata/index memory.
+- Mooncake Store evidence: storage-root bytes, L2 operation logs, and metadata stability.
 
 ## Ablations
 

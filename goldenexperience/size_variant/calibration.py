@@ -108,8 +108,9 @@ def build_calibration_manifest(
         artifact_root=artifact_root,
         prompts_count=prompts_count,
         references=(
-            "lmcache_sglang_connector",
-            "sglang_radixattention",
+            "vllm_lmcache_mp_connector",
+            "vllm_paged_attention",
+            "mooncake_store_l2",
             "pagedattention_block_kv",
             "cka_layer_alignment",
         ),

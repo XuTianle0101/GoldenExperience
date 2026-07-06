@@ -14,7 +14,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from goldenexperience.reuse import CrossModelReusePlanner, KVShape, ModelRef, ReuseRequest
-from goldenexperience.sglang_runtime import RuntimeConfig, check_runtime
+from goldenexperience.runtime import RuntimeConfig, check_runtime
 
 
 def make_model(
@@ -107,11 +107,22 @@ def runtime_imports() -> dict[str, object]:
     }
 
 
-def main() -> None:
+def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
-    parser.add_argument("--check-runtime", action="store_true", help="Also report SGLang/LMCache imports.")
+    parser.add_argument(
+        "--check-runtime",
+        action="store_true",
+        help="Also report vLLM/LMCache/Mooncake runtime availability.",
+    )
+    parser.add_argument(
+        "--strict-runtime",
+        action="store_true",
+        help="Exit non-zero when any runtime dependency is missing.",
+    )
     args = parser.parse_args()
+    if args.strict_runtime:
+        args.check_runtime = True
 
     payload: dict[str, object] = {"plans": build_plans()}
     if args.check_runtime:
@@ -119,21 +130,26 @@ def main() -> None:
 
     if args.json:
         print(json.dumps(payload, indent=2, sort_keys=True))
-        return
+        if args.strict_runtime and not payload["runtime"]["ready"]:  # type: ignore[index]
+            return 1
+        return 0
 
     for plan in payload["plans"]:  # type: ignore[index]
-        print(
-            "{scenario}: {source} -> {target} | {strategy} | {status} | confidence={confidence} | direction={direction}".format(
-                **plan
-            )
+        line = (
+            "{scenario}: {source} -> {target} | {strategy} | {status} | "
+            "confidence={confidence} | direction={direction}"
         )
+        print(line.format(**plan))
     if args.check_runtime:
         runtime = payload["runtime"]  # type: ignore[index]
         print("runtime ready:", runtime["ready"])
         print("runtime imports:", runtime["available"])
         for hint in runtime["missing_hints"]:
             print("missing:", hint)
+        if args.strict_runtime and not runtime["ready"]:
+            return 1
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

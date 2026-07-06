@@ -120,7 +120,9 @@ def run_request(args: argparse.Namespace) -> int:
     if not isinstance(generation, dict):
         generation = {}
 
-    max_tokens = args.max_tokens if args.max_tokens is not None else generation.get("max_tokens", 128)
+    max_tokens = (
+        args.max_tokens if args.max_tokens is not None else generation.get("max_tokens", 128)
+    )
     temperature = (
         args.temperature if args.temperature is not None else generation.get("temperature", 0)
     )
@@ -276,9 +278,9 @@ def _metric_values(text: str, metric_name: str) -> list[float]:
 
 def _summarize_metrics(path: Path) -> dict[str, Any]:
     text = path.read_text(encoding="utf-8", errors="replace")
-    cache_hit_rates = _metric_values(text, "sglang:cache_hit_rate")
-    prompt_sums = _metric_values(text, "sglang:prompt_tokens_histogram_sum")
-    uncached_prompt_sums = _metric_values(text, "sglang:uncached_prompt_tokens_histogram_sum")
+    cache_hit_rates = _metric_values(text, "vllm:cache_hit_rate")
+    prompt_sums = _metric_values(text, "vllm:prompt_tokens_histogram_sum")
+    uncached_prompt_sums = _metric_values(text, "vllm:uncached_prompt_tokens_histogram_sum")
     return {
         "path": str(path),
         "cache_hit_rate_max": max(cache_hit_rates) if cache_hit_rates else None,
@@ -300,6 +302,8 @@ def _summarize_log(path: Path) -> dict[str, Any]:
         "lmcache_strict_store_events": _count_regex(
             r"\blmcache\b.*\b(store|stored|put|offload|write|written|save|saved)\b|"
             r"\bl2\b.*\b(store|stored|write|written|save|saved)\b|"
+            r"\bmooncake[_ -]?store\b.*\b(store|stored|put|set|write|written|save|saved)\b|"
+            r"\bStoreController\b|\bSET\b|"
             r"\b(stored|offloaded|written|saved)\s+[0-9]+\s+"
             r"(?:tokens|token|chunks|chunk|objects|object)\b",
             text,
@@ -308,12 +312,27 @@ def _summarize_log(path: Path) -> dict[str, Any]:
             r"\b(retrieve|retrieved|lookup|hit|prefetch|prefetched|load|loaded|read)", text
         ),
         "lmcache_strict_retrieve_events": _count_regex(
-            r"\blmcache\b.*\b(retrieve|retrieved|lookup|hit|prefetch|prefetched|load|loaded|read)\b|"
+            r"\blmcache\b.*\b"
+            r"(retrieve|retrieved|lookup|hit|prefetch|prefetched|load|loaded|read)\b|"
             r"\bl2\b.*\b(retrieve|retrieved|hit|prefetch|prefetched|load|loaded|read)\b|"
+            r"\bmooncake[_ -]?store\b.*\b"
+            r"(exists|get|retrieve|retrieved|lookup|hit|prefetch|prefetched|load|loaded|read)\b|"
+            r"\bPrefetchController\b|\b(EXISTS|GET)\b|"
             r"\b(retrieved|hit|prefetched|loaded|read)\s+[0-9]+\s+"
             r"(?:tokens|token|chunks|chunk|objects|object)\b",
             text,
         ),
+        "lmcache_mooncake_store_mentions": _count_regex(
+            r"\bmooncake[_ -]?store\b|\bMooncakeStore\b", text
+        ),
+        "lmcache_l2_controller_mentions": _count_regex(
+            r"\b(StoreController|PrefetchController)\b|\bL2\b", text
+        ),
+        "lmcache_l2_operation_mentions": _count_regex(
+            r"\b(EXISTS|GET|SET)\b|\bstorage_root_dir\b", text
+        ),
+        "lmcache_l2_retrieve_operation_mentions": _count_regex(r"\b(EXISTS|GET)\b", text),
+        "lmcache_l2_store_operation_mentions": _count_regex(r"\bSET\b", text),
         "stored_token_mentions": _sum_regex_int(r"stored\s+([0-9]+)\s+(?:tokens|token)", text),
         "retrieved_token_mentions": _sum_regex_int(
             r"retrieved\s+([0-9]+)\s+(?:tokens|token)", text
@@ -339,6 +358,13 @@ def _summarize_cache_dir(path: Path) -> dict[str, Any]:
     }
 
 
+def _metadata_path(value: Any, default: Path) -> Path:
+    if isinstance(value, str) and value:
+        path = Path(value)
+        return path if path.is_absolute() else Path.cwd() / path
+    return default
+
+
 def summarize(args: argparse.Namespace) -> int:
     run_dir = Path(args.run_dir)
     request_dir = run_dir / "requests"
@@ -346,13 +372,13 @@ def summarize(args: argparse.Namespace) -> int:
     metrics_dir = run_dir / "metrics"
     metadata_path = run_dir / "metadata.json"
     metadata = _read_json(metadata_path) if metadata_path.exists() else {}
-    metadata_cache_dir = metadata.get("kv_cache_dir")
-    if isinstance(metadata_cache_dir, str) and metadata_cache_dir:
-        cache_dir = Path(metadata_cache_dir)
-        if not cache_dir.is_absolute():
-            cache_dir = Path.cwd() / cache_dir
-    else:
-        cache_dir = run_dir / "cache"
+    cache_dir = _metadata_path(metadata.get("kv_cache_dir"), run_dir / "cache")
+    mooncake_metadata = metadata.get("mooncake", {})
+    mooncake_storage_root = None
+    if isinstance(mooncake_metadata, dict):
+        mooncake_storage_root = _metadata_path(
+            mooncake_metadata.get("storage_root"), run_dir / "cache" / "mooncake"
+        )
 
     requests: dict[str, dict[str, Any]] = {}
     if request_dir.exists():
@@ -371,6 +397,11 @@ def summarize(args: argparse.Namespace) -> int:
         else {}
     )
     cache = _summarize_cache_dir(cache_dir)
+    mooncake_storage = (
+        _summarize_cache_dir(mooncake_storage_root)
+        if mooncake_storage_root is not None
+        else None
+    )
 
     def timing(phase: str, key: str) -> float | None:
         value = requests.get(phase, {}).get("timing", {}).get(key)
@@ -384,6 +415,12 @@ def summarize(args: argparse.Namespace) -> int:
     reuse_retrieve_events = sum(int(log["lmcache_retrieve_events"]) for log in reuse_logs)
     reuse_strict_retrieve_events = sum(
         int(log["lmcache_strict_retrieve_events"]) for log in reuse_logs
+    )
+    reuse_l2_operation_mentions = sum(
+        int(log["lmcache_l2_operation_mentions"]) for log in reuse_logs
+    )
+    reuse_l2_retrieve_operation_mentions = sum(
+        int(log["lmcache_l2_retrieve_operation_mentions"]) for log in reuse_logs
     )
     strict_store_events = sum(int(log["lmcache_strict_store_events"]) for log in logs)
     reuse_cached_mentions = [
@@ -403,18 +440,29 @@ def summarize(args: argparse.Namespace) -> int:
     )
     reuse_has_cache_evidence = bool(
         reuse_strict_retrieve_events > 0
+        or reuse_l2_retrieve_operation_mentions > 0
         or (reuse_max_cached_tokens is not None and reuse_max_cached_tokens > 0)
         or (isinstance(reuse_cache_hit_rate, (int, float)) and reuse_cache_hit_rate > 0)
         or reuse_uncached_prompt_less_than_total
     )
     disk_cache_file_count = int(cache["file_count"])
     disk_cache_total_bytes = int(cache["total_bytes"])
-    offload_has_disk_evidence = disk_cache_file_count > 0 and disk_cache_total_bytes > 0
+    mooncake_file_count = int(mooncake_storage["file_count"]) if mooncake_storage else 0
+    mooncake_total_bytes = int(mooncake_storage["total_bytes"]) if mooncake_storage else 0
+    cache_has_files = disk_cache_file_count > 0 and disk_cache_total_bytes > 0
+    mooncake_has_files = mooncake_file_count > 0 and mooncake_total_bytes > 0
+    offload_has_disk_evidence = cache_has_files or mooncake_has_files
+    offload_disk_evidence_sources: list[str] = []
+    if cache_has_files:
+        offload_disk_evidence_sources.append(str(cache_dir))
+    if mooncake_has_files and str(mooncake_storage_root) not in offload_disk_evidence_sources:
+        offload_disk_evidence_sources.append(str(mooncake_storage_root))
     disk_reuse_success = offload_has_disk_evidence and reuse_has_cache_evidence
     evidence_warnings: list[str] = []
     if not offload_has_disk_evidence:
         evidence_warnings.append(
-            "No disk cache files were found under the run cache directory after offload."
+            "No disk cache files were found under the run cache directory or Mooncake "
+            "storage root after offload."
         )
     if not reuse_has_cache_evidence:
         evidence_warnings.append(
@@ -429,6 +477,7 @@ def summarize(args: argparse.Namespace) -> int:
         "logs": logs,
         "metrics": metrics,
         "cache": cache,
+        "mooncake_storage": mooncake_storage,
         "deltas": {
             "reuse_minus_offload_ttft_ms": (
                 (
@@ -454,6 +503,21 @@ def summarize(args: argparse.Namespace) -> int:
             "lmcache_strict_retrieve_events_total": sum(
                 int(log["lmcache_strict_retrieve_events"]) for log in logs
             ),
+            "lmcache_mooncake_store_mentions_total": sum(
+                int(log["lmcache_mooncake_store_mentions"]) for log in logs
+            ),
+            "lmcache_l2_controller_mentions_total": sum(
+                int(log["lmcache_l2_controller_mentions"]) for log in logs
+            ),
+            "lmcache_l2_operation_mentions_total": sum(
+                int(log["lmcache_l2_operation_mentions"]) for log in logs
+            ),
+            "lmcache_l2_retrieve_operation_mentions_total": sum(
+                int(log["lmcache_l2_retrieve_operation_mentions"]) for log in logs
+            ),
+            "lmcache_l2_store_operation_mentions_total": sum(
+                int(log["lmcache_l2_store_operation_mentions"]) for log in logs
+            ),
             "max_cached_tokens_mentioned": max(
                 [
                     log["max_cached_tokens_mentioned"]
@@ -464,6 +528,8 @@ def summarize(args: argparse.Namespace) -> int:
             ),
             "reuse_lmcache_retrieve_events": reuse_retrieve_events,
             "reuse_lmcache_strict_retrieve_events": reuse_strict_retrieve_events,
+            "reuse_l2_operation_mentions": reuse_l2_operation_mentions,
+            "reuse_l2_retrieve_operation_mentions": reuse_l2_retrieve_operation_mentions,
             "reuse_max_cached_tokens_mentioned": reuse_max_cached_tokens,
             "reuse_cache_hit_rate_max": reuse_cache_hit_rate,
             "reuse_uncached_prompt_tokens_less_than_total": (
@@ -471,6 +537,9 @@ def summarize(args: argparse.Namespace) -> int:
             ),
             "disk_cache_file_count": disk_cache_file_count,
             "disk_cache_total_bytes": disk_cache_total_bytes,
+            "mooncake_storage_file_count": mooncake_file_count,
+            "mooncake_storage_total_bytes": mooncake_total_bytes,
+            "offload_disk_evidence_sources": offload_disk_evidence_sources,
             "offload_has_disk_evidence": offload_has_disk_evidence,
             "reuse_has_cache_evidence": reuse_has_cache_evidence,
             "disk_reuse_success": disk_reuse_success,

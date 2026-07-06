@@ -1,6 +1,6 @@
-"""SGLang runtime configuration helpers."""
+"""Runtime helpers for the vLLM + LMCache MP + Mooncake Store stack."""
 
-from goldenexperience.sglang_runtime.config import (
+from goldenexperience.runtime.config import (
     RuntimeConfig,
     RuntimeDependency,
     RuntimeStatus,

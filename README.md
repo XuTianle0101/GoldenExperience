@@ -2,22 +2,24 @@
 
 [English](README.md) | [中文](README.zh-CN.md)
 
-GoldenExperience is a **cross-model KV Cache reuse patch framework** for an open-source
-serving stack built from **SGLang** + **LMCache**.
+GoldenExperience is a **cross-model KV Cache reuse framework** for the shared KV serving
+substrate built from **vLLM + LMCache MP + Mooncake Store**.
 
-The new boundary is deliberately narrow:
+The runtime boundary is deliberately narrow:
 
-- SGLang owns model loading, scheduling, decoding, and inference correctness.
-- LMCache owns KV storage, lookup, offload, eviction, and prefetch mechanics.
+- vLLM owns model loading, scheduling, decoding, and inference correctness.
+- LMCache MP owns shared KV lookup, offload, eviction, and prefetch orchestration.
+- Mooncake Store owns the persistent L2 metadata/storage root used across engine restarts.
 - GoldenExperience adds the control plane for **reusing KV Cache across models**.
 - If a reuse plan is not safe or not calibrated, the stack falls back to the original
-  SGLang + LMCache behavior.
+  vLLM + LMCache MP behavior.
 
 ## What This Project Focuses On
 
-GoldenExperience is no longer trying to be an inference engine or a KV offload system.
-It is intended to be carried as a small patch on top of LMCache, with runtime metadata
-flowing from SGLang requests into LMCache lookup and retrieve paths.
+GoldenExperience is not an inference engine and does not replace cache storage. It is
+intended to be carried as a small LMCache MP patch plus Python control-plane library, with
+runtime metadata flowing through the vLLM/LMCache MP connector path into lookup and retrieve
+logic.
 
 The research/development target is three GoldenExperience reuse tracks:
 
@@ -34,43 +36,52 @@ and `GoldenBridge` targets `different_base_model`.
 ## Architecture
 
 ```text
-SGLang request/session
-        |
-        | model refs, prefix hash, experiment flags
-        v
-GoldenExperience planner
-        |
-        | ReusePlan: scenario, strategy, confidence, gates
-        v
-LMCache patch surface
-        |
-        | secondary lookup -> materialize/transform -> quality accounting
-        v
-LMCache storage/offload + SGLang inference remain upstream-owned
+client -> vLLM OpenAI-compatible server
+             |
+             | LMCacheMPConnector
+             v
+      standalone LMCache MP server
+             |
+             | L2 adapter: type=mooncake_store
+             v
+      Mooncake Store on local TCP + SSD
+             |
+             | metadata sidecars, secondary lookup, materialization, accounting
+             v
+      GoldenExperience planner and LMCache patch surface
 ```
 
 The patch surface is described by `PatchManifest.default()`:
 
-1. `sglang_request_metadata`: attach `ModelRef` and prefix metadata before LMCache lookup.
+1. `engine_request_metadata`: attach `ModelRef` and prefix metadata before LMCache MP lookup.
 2. `lmcache_cross_model_lookup`: on a same-model miss, query cross-model candidates.
 3. `goldenexperience_materializer`: alias/project/translate KV before returning it.
 4. `quality_gate_accounting`: record confidence, calibration, and fallback reasons.
 
 ## Repository Layout
 
+The source tree is organized in the same spirit as C2C: a core Python package, thin script
+entrypoints, configs, runnable recipes, docs, examples, tests, and artifacts. C2C's repo
+separates `rosetta/` as the package from `script/`, `bash/`, `recipe/`, and `resource/`;
+GoldenExperience follows that shape with runtime orchestration under `goldenexperience/`,
+thin launchers under `scripts/`, and reproducible run overlays under `recipes/`.
+
 ```text
 goldenexperience/
+  runtime/           vLLM + LMCache MP + Mooncake runtime checks and baseline scheduler.
   reuse/             ModelRef, KVShape, ReuseRequest, ReusePlan, scenario planner.
-  lmcache_patch/     Patch manifest and sidecar key metadata for LMCache deltas.
-  sglang_runtime/    Dependency checks and namespaced env helpers for wrappers.
+  lmcache_patch/     Patch manifest and sidecar key metadata for LMCache MP deltas.
+  size_variant/      GoldenScale calibration, layer mapping, and projection scaffolds.
+  benchmarks/        Synthetic and model-backed benchmark harnesses.
   cache_core/        Legacy in-repo cache block metadata utilities for tests/prototypes.
   tiered_store/      Legacy synthetic tiering prototype; not the product runtime path.
-  engine_adapter/    Legacy adapter experiments; SGLang is now the runtime target.
-docs/                Design, experiment matrix, artifact, and paper planning notes.
-configs/             Cross-model reuse experiment configuration.
+scripts/
+  kv_baseline/       Thin shell launchers plus stdlib OpenAI-compatible client/summarizer.
+recipes/             Source-able env overlays for reproducible runtime launches.
+docs/                Design, shared KV substrate, experiment matrix, artifact, paper notes.
+configs/             Runtime env examples and cross-model reuse experiment configuration.
 examples/            Minimal planning examples.
-scripts/             Optional bootstrap helpers.
-tests/               Unit tests for the current framework and legacy utilities.
+tests/               Unit tests for planner, runtime config, and baseline generation.
 ```
 
 ## Quick Start
@@ -104,31 +115,21 @@ golden-scale-bench artifacts/golden_scale/qwen25_14b_to_7b_projection_v0.json
 
 ## Deployment Flow
 
-GoldenExperience deploys as a Python package inside the same environment as SGLang and
-LMCache. It is not a standalone daemon.
-
-```text
-client -> SGLang OpenAI-compatible server
-             |
-             | --enable-lmcache
-             v
-          LMCache
-             |
-             | GoldenExperience patch hooks and planner metadata
-             v
-          fallback or cross-model KV reuse
-```
+GoldenExperience deploys as a Python package inside the same environment as vLLM, LMCache,
+and Mooncake. It is not a standalone daemon.
 
 Runtime ownership:
 
-- SGLang starts the inference server and owns request scheduling and generation.
-- LMCache owns KV lookup, storage, offload, eviction, and prefetch.
+- vLLM starts the OpenAI-compatible inference server and owns request scheduling/generation.
+- LMCache MP owns shared KV lookup, storage policy, offload, eviction, and prefetch.
+- Mooncake Store owns persistent L2 metadata and SSD-backed objects.
 - GoldenExperience owns `ModelRef`, `ReuseRequest`, `ReusePlan`, patch metadata, and
   quality/fallback accounting.
 
 ### 1. Install Runtime Packages
 
-Use package mode when you only need to run the stack:
+Use package mode when you only need to run the stack and Mooncake binaries are already
+available on `PATH`:
 
 ```bash
 python3 -m venv .venv
@@ -136,7 +137,7 @@ source .venv/bin/activate
 ./scripts/install_runtime.sh --mode package
 ```
 
-Use source mode when you need to patch LMCache or debug SGLang/LMCache internals:
+Use source mode when you need to patch LMCache or debug vLLM/LMCache/Mooncake internals:
 
 ```bash
 python3 -m venv .venv
@@ -144,33 +145,36 @@ source .venv/bin/activate
 ./scripts/install_runtime.sh --mode source
 ```
 
-`--mode source` clones SGLang and LMCache into `third_party/` and installs editable copies.
-Override the defaults when using forks:
+`--mode source` clones vLLM, LMCache, and Mooncake into `third_party/`. It installs editable
+vLLM and LMCache copies with `BUILD_MOONCAKE=1` by default; build Mooncake according to
+upstream instructions and ensure `mooncake_master` plus `mooncake_http_metadata_server` are
+on `PATH`. Override defaults when using forks:
 
 ```bash
 GE_THIRD_PARTY_DIR=third_party \
-GE_SGLANG_REPO_URL=https://github.com/sgl-project/sglang.git \
+GE_VLLM_REPO_URL=https://github.com/vllm-project/vllm.git \
 GE_LMCACHE_REPO_URL=https://github.com/LMCache/LMCache.git \
+GE_MOONCAKE_REPO_URL=https://github.com/kvcache-ai/Mooncake.git \
 ./scripts/install_runtime.sh --mode source
 ```
 
-Install only GoldenExperience if SGLang and LMCache are already available:
+Install only GoldenExperience if the runtime stack is already available:
 
 ```bash
 ./scripts/install_runtime.sh --mode golden-only
 ```
 
 The script prefers `uv pip install` when `uv` is installed; otherwise it falls back to
-`python3 -m pip install`. SGLang and LMCache install details should still be checked
-against their upstream docs when changing CUDA, Python, or package versions:
+`python3 -m pip install`. It runs a strict `vLLM`/`LMCache`/`Mooncake` runtime check for
+package and golden-only modes; source mode defaults to a warning because Mooncake still
+needs its upstream build step. Use `--runtime-check strict|warn|skip` to override this.
+Runtime install details should still be checked against upstream vLLM, LMCache, and
+Mooncake docs when changing CUDA, Python, or package versions.
 
-- SGLang docs: <https://docs.sglang.ai/>
-- LMCache docs: <https://docs.lmcache.ai/>
-
-### 2. Verify Planner and Imports
+### 2. Verify Planner and Runtime
 
 ```bash
-python3 scripts/smoke_cross_model_plan.py --check-runtime
+python3 scripts/smoke_cross_model_plan.py --check-runtime --strict-runtime
 ```
 
 Expected planner output includes three rows:
@@ -179,8 +183,8 @@ Expected planner output includes three rows:
 - `same_model_different_parameter_size`: calibrated GoldenScale projection plan.
 - `different_base_model`: conservative unready cross-base plan.
 
-If `--check-runtime` reports missing `sglang` or `lmcache`, install the runtime stack before
-starting model-backed serving.
+The runtime check reports `vLLM`, `LMCache`, and `Mooncake`. If any are missing, install the
+runtime stack before starting model-backed serving.
 
 ### 3. Generate Patch Manifest
 
@@ -188,137 +192,110 @@ starting model-backed serving.
 golden-patch-manifest --output docs/patch_manifest.md
 ```
 
-The manifest is also generated automatically by `scripts/start_sglang_lmcache.sh`.
+### 4. Run the Shared KV Baseline
 
-### 4. Start SGLang With LMCache
-
-The default launch command starts a SGLang OpenAI-compatible server with LMCache enabled:
-
-```bash
-GE_MODEL_PATH=Qwen/Qwen3-8B \
-./scripts/start_sglang_lmcache.sh
-```
-
-Common overrides:
+The recommended launch path is the engineered Python scheduler exposed by the thin shell
+wrapper:
 
 ```bash
 GE_MODEL_PATH=Qwen/Qwen3-8B \
-GE_HOST=0.0.0.0 \
 GE_PORT=30000 \
-GE_LMCACHE_CONFIG_FILE=artifacts/runtime/lmc_config.yaml \
-GE_LMCACHE_CHUNK_SIZE=256 \
-GE_LMCACHE_LOCAL_CPU_GB=10 \
-./scripts/start_sglang_lmcache.sh --tp 1
+scripts/kv_baseline/run_vllm_lmcache_mooncake_kv_baseline.sh -- --tensor-parallel-size 1
 ```
 
-The start script does the following before `exec python3 -m sglang.launch_server`:
-
-1. Writes an LMCache config if `GE_LMCACHE_CONFIG_FILE` does not exist.
-2. Renders `docs/patch_manifest.md`.
-3. Checks that `sglang`, `lmcache`, and `goldenexperience` are importable.
-4. Exports GoldenExperience metadata variables:
-   - `GE_ENABLE_CROSS_MODEL_REUSE=1`
-   - `GE_PATCH_MANIFEST=docs/patch_manifest.md`
-   - `GE_LMCACHE_CONFIG=configs/lmcache.example.yaml`
-   - `GE_SGLANG_MODEL_ID=$GE_MODEL_PATH`
-5. Starts SGLang with `--enable-lmcache`.
-
-The generated LMCache config is intentionally small:
-
-```yaml
-chunk_size: 256
-local_cpu: true
-use_layerwise: true
-max_local_cpu_size: 10
-```
-
-Set `GE_OVERWRITE_LMCACHE_CONFIG=1` to regenerate an existing config.
-
-### 5. Send a Request
+You can also call the console entry point directly after installation:
 
 ```bash
-curl http://localhost:30000/v1/chat/completions \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "Qwen/Qwen3-8B",
-    "messages": [{"role": "user", "content": "Hello"}],
-    "max_tokens": 64,
-    "temperature": 0
-  }'
+GE_MODEL_PATH=Qwen/Qwen3-8B golden-kv-baseline -- --tensor-parallel-size 1
 ```
 
-### 6. Run the First KV Offload/Reuse Baseline
+### 5. Run the Same-Model KV Offload/Reuse Baseline
 
-Use this baseline after SGLang, LMCache, and GoldenExperience are installed in the same
-Python environment. The script starts one SGLang + LMCache server, sends a deterministic
-GSM8K-style prompt to populate/offload KV, restarts SGLang with the same LMCache disk
-directory, sends the same prompt again, and records timing/log evidence for reuse.
+Use this baseline after vLLM, LMCache, Mooncake, and GoldenExperience are installed in the
+same Python environment. The default path is now `vLLM + LMCache MP + Mooncake Store`:
+
+1. start Mooncake master plus HTTP metadata service on local TCP,
+2. start a standalone LMCache MP server with `type=mooncake_store` L2,
+3. start vLLM with `LMCacheMPConnector`,
+4. send an offload request, restart only vLLM, then send the same reuse request.
+
+This keeps the shared KV substrate outside the inference process. Cross-model work can later
+plug into LMCache MP persistent L2 instead of depending on engine-local caches.
 
 ```bash
 source .venv/bin/activate
+source recipes/kv_baseline_mooncake_local.env
 
 GE_MODEL_PATH=Qwen/Qwen3-8B \
 GE_PORT=30000 \
-scripts/kv_baseline/run_sglang_lmcache_kv_baseline.sh -- --tp 1
+scripts/kv_baseline/run_vllm_lmcache_mooncake_kv_baseline.sh -- --tensor-parallel-size 1
 ```
+
+Default local TCP + SSD settings:
+
+- `GE_KV_BACKEND=mp`, `GE_ENGINE=vllm`, `GE_LMCACHE_MP_L2_ADAPTER_TYPE=mooncake_store`.
+- `GE_MOONCAKE_MASTER_HOST=127.0.0.1`, `GE_MOONCAKE_MASTER_PORT=50051`.
+- `GE_MOONCAKE_METADATA_PORT=8080`, producing `http://127.0.0.1:8080/metadata`.
+- `GE_LMCACHE_MP_HTTP_PORT=8081`, so LMCache MP HTTP does not collide with Mooncake metadata.
+- `GE_MOONCAKE_PROTOCOL=tcp`, `GE_MOONCAKE_STORAGE_ROOT=$GE_KV_CACHE_DIR/mooncake`.
+- `GE_MOONCAKE_PER_OP_WORKERS_JSON='{"lookup":2,"retrieve":8,"store":4}'`.
 
 Default outputs are written under `artifacts/kv_baseline/<run_id>/`:
 
-- `metadata.json`: model, prompt, mode, cache path, and runtime settings.
-- `lmc_config.yaml`: generated LMCache config with local CPU plus persistent local disk.
+- `metadata.json`: model, prompt, MP connector, Mooncake endpoints, adapter JSON, pids, and logs.
+- `lmc_config.yaml`: generated run config with `LMCacheMPConnector` and Mooncake Store L2.
 - `requests/offload.json`: first request output, usage, end-to-end latency, and TTFT.
-- `requests/reuse.json`: second request with the same prompt after restart.
-- `logs/offload_server.log` and `logs/reuse_server.log`: SGLang/LMCache evidence.
-- `summary.json`: request deltas and best-effort log counters for store/retrieve events.
+- `requests/reuse.json`: second request with the same prompt after vLLM restart.
+- `logs/lmcache_mp_server.log`: persistent LMCache MP server evidence.
+- `logs/mooncake_master.log` and `logs/mooncake_metadata_server.log`: Mooncake service evidence.
+- `summary.json`: request deltas plus store/retrieve/L2/Mooncake counters.
 
-The default prompt lives in `configs/kv_baseline_prompts.json` and uses the classic GSM8K
-Natalia clips question. The default `GE_KV_CHUNK_SIZE=16` is intentionally small so this
-short prompt crosses at least one LMCache chunk. For longer workloads, raise it back toward
-the production-style value used in your LMCache experiments.
+The script generates a long deterministic disk-offload prompt by default when
+`GE_FORCE_DISK_OFFLOAD=1`. Set `GE_PROMPT_FILE` and `GE_PROMPT_ID` to use your own prompt
+manifest, or tune `GE_DISK_PROMPT_REPEAT` if the generated prompt exceeds the model context.
 
 Useful overrides:
 
 ```bash
 GE_MODEL_PATH=/models/Qwen3-8B \
 GE_MODEL_NAME=/models/Qwen3-8B \
-GE_RUN_ID=qwen3_8b_gsm8k_restart_001 \
-GE_KV_LOCAL_CPU_GB=20 \
-GE_KV_LOCAL_DISK_GB=200 \
-GE_PROMPT_ID=gsm8k_natalia_clips \
-scripts/kv_baseline/run_sglang_lmcache_kv_baseline.sh -- --tp 1
+GE_RUN_ID=qwen3_8b_mooncake_restart_001 \
+GE_MOONCAKE_STORAGE_ROOT=/ssd/ge-kv/mooncake \
+GE_MOONCAKE_GLOBAL_SEGMENT_SIZE=4294967296 \
+GE_MOONCAKE_LOCAL_BUFFER_SIZE=4294967296 \
+scripts/kv_baseline/run_vllm_lmcache_mooncake_kv_baseline.sh -- --tensor-parallel-size 1
 ```
 
 Interpretation checklist:
 
-1. Confirm the first run finished and `requests/offload.json` contains the expected answer.
-2. Confirm `logs/offload_server.log` contains LMCache store/offload messages.
-3. Confirm the second run starts from a fresh process and `logs/reuse_server.log` contains
-   LMCache lookup/retrieve/hit evidence.
-4. Compare `summary.json` fields `reuse_minus_offload_ttft_ms` and
-   `reuse_minus_offload_e2e_ms`; negative values indicate the second request was faster.
+1. Confirm `requests/offload.json` contains the expected answer.
+2. Confirm `summary.json` reports `offload_has_disk_evidence=true`,
+   `reuse_has_cache_evidence=true`, and `disk_reuse_success=true`.
+3. Confirm `logs/lmcache_mp_server.log` includes L2 or Mooncake store/retrieve evidence such
+   as `mooncake_store`, `StoreController`, `PrefetchController`, `EXISTS`, `GET`, or `SET`.
+4. Confirm `metadata.json` records the Mooncake storage root and service pids/log paths.
 5. Keep the whole `artifacts/kv_baseline/<run_id>/` directory as the same-model baseline for
    later cross-model KV reuse experiments.
 
-If your installed LMCache version does not rebuild local-disk metadata across process
-restart, run a diagnostic same-process baseline instead:
+Compatibility and diagnostics:
 
 ```bash
-GE_MODEL_PATH=Qwen/Qwen3-8B \
-GE_BASELINE_MODE=same-process \
-scripts/kv_baseline/run_sglang_lmcache_kv_baseline.sh -- --tp 1
+# Use the older MP filesystem L2 adapter instead of Mooncake Store.
+GE_LMCACHE_MP_L2_ADAPTER_TYPE=fs \
+scripts/kv_baseline/run_vllm_lmcache_mooncake_kv_baseline.sh -- --tensor-parallel-size 1
 ```
 
-`GE_DISABLE_RADIX_CACHE=1` is enabled by default so the baseline is not hidden by SGLang's
-in-process radix cache. Set `GE_DISABLE_RADIX_CACHE=0` only when you want to measure the
-combined SGLang radix cache plus LMCache behavior.
+Set `GE_KEEP_LMCACHE_MP_AFTER_RUN=1` or `GE_KEEP_MOONCAKE_AFTER_RUN=1` when you want to
+inspect live services after a run.
 
 ### Current Runtime Limitation
 
 The repository currently contains the GoldenExperience planner, metadata model, patch
 manifest, and deployment wrappers. The real LMCache hook implementation is the next step.
 Until `lmcache_cross_model_lookup` and `goldenexperience_materializer` are wired into an
-LMCache patch or fork, SGLang + LMCache will run normally and GoldenExperience can validate
-plans/metadata, but accepted cross-model KV reuse will not yet be executed inside LMCache.
+LMCache patch or fork, vLLM + LMCache MP + Mooncake Store will run normally and
+GoldenExperience can validate plans/metadata, but accepted cross-model KV reuse will not yet
+be executed inside LMCache MP.
 
 ## GoldenScale Reuse
 
@@ -352,7 +329,7 @@ Runtime behavior remains conservative:
 - The materializer must output full target-shaped KV for every target layer.
 - `estimated_materialization_ms` must be <= 70% of target prefill cost.
 - Any tokenizer, RoPE, config hash, artifact, layer-map, projection, or quality mismatch
-  falls back to the original SGLang + LMCache target prefill path.
+  falls back to the original vLLM + LMCache MP target prefill path.
 
 ## Minimal Planner Example
 
@@ -393,11 +370,11 @@ golden-patch-manifest --output docs/patch_manifest.md
 
 ## Development Roadmap
 
-- M0: Lock the project boundary around SGLang + LMCache + GoldenExperience patch metadata.
+- M0: Lock the project boundary around vLLM + LMCache MP + Mooncake Store + GoldenExperience metadata.
 - M1: Implement LMCache secondary lookup sidecar for base/LoRA mutual reuse.
 - M2: Add layer/head mapping and calibrated projection for same-model size variants.
 - M3: Add experimental learned translator interface for different-base reuse.
-- M4: Build SGLang model-backed benchmarks and quality/fallback accounting.
+- M4: Build vLLM model-backed benchmarks and quality/fallback accounting.
 - M5: Keep the patch small enough to rebase on upstream LMCache.
 
 See `docs/design.md`, `docs/experiment_matrix.md`, and `docs/artifact.md` for the detailed

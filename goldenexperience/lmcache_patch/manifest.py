@@ -1,4 +1,4 @@
-"""Patch manifest describing how GoldenExperience layers on top of LMCache."""
+"""Patch manifest describing how GoldenExperience layers on top of LMCache MP."""
 
 from __future__ import annotations
 
@@ -23,11 +23,11 @@ class PatchManifest:
 
     GoldenExperience is intentionally a control-plane layer. The manifest makes that
     boundary explicit so future implementation work patches lookup/materialization paths
-    without replacing SGLang inference or LMCache storage/offload internals.
+    without replacing vLLM inference or LMCache MP/Mooncake storage internals.
     """
 
-    runtime_engine: str = "SGLang"
-    cache_backend: str = "LMCache"
+    runtime_engine: str = "vLLM"
+    cache_backend: str = "LMCache MP + Mooncake Store"
     hooks: tuple[PatchHook, ...] = field(default_factory=tuple)
     invariants: tuple[str, ...] = field(default_factory=tuple)
     notes: tuple[str, ...] = field(default_factory=tuple)
@@ -37,20 +37,23 @@ class PatchManifest:
         return cls(
             hooks=(
                 PatchHook(
-                    name="sglang_request_metadata",
-                    target="SGLang request/session metadata before LMCache lookup",
+                    name="engine_request_metadata",
+                    target="OpenAI-compatible request metadata before LMCache MP lookup",
                     purpose="Attach source/target ModelRef, prefix hash, and experiment flags.",
                     order=10,
                 ),
                 PatchHook(
                     name="lmcache_cross_model_lookup",
                     target="LMCache lookup miss path or secondary index lookup",
-                    purpose="Ask the GoldenExperience planner whether a compatible source model entry exists.",
+                    purpose=(
+                        "Ask the GoldenExperience planner whether a compatible source "
+                        "model entry exists."
+                    ),
                     order=20,
                 ),
                 PatchHook(
                     name="goldenexperience_materializer",
-                    target="LMCache retrieve path before KV is handed back to SGLang",
+                    target="LMCache MP retrieve path before KV is handed back to vLLM",
                     purpose="Alias, project, or translate retrieved KV according to a ReusePlan.",
                     order=30,
                 ),
@@ -62,14 +65,18 @@ class PatchManifest:
                 ),
             ),
             invariants=(
-                "Do not modify SGLang scheduling, attention kernels, or token generation semantics.",
-                "Do not replace LMCache storage, offload, eviction, or prefetch implementations.",
-                "If a ReusePlan is not ready, fall back to the original SGLang plus LMCache path.",
-                "All cross-model reuse must carry scenario, transform_id, confidence, and calibration metadata.",
+                "Do not modify vLLM scheduling, attention kernels, or token generation semantics.",
+                "Do not replace LMCache MP storage, offload, eviction, or prefetch "
+                "implementations.",
+                "Do not replace Mooncake Store; only configure and observe it as persistent L2.",
+                "If a ReusePlan is not ready, fall back to the original vLLM plus LMCache MP path.",
+                "All cross-model reuse must carry scenario, transform_id, confidence, "
+                "and calibration metadata.",
             ),
             notes=(
                 "The patch should be small enough to carry as a delta on top of upstream LMCache.",
-                "Source installs of SGLang and LMCache are supported for development and debugging.",
+                "The default baseline is vLLM + LMCache MP + Mooncake Store; filesystem "
+                "L2 adapters are diagnostics only.",
             ),
         )
 

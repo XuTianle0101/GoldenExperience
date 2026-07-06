@@ -5,8 +5,9 @@
 GoldenExperience focuses on **KV Cache reuse across models** while delegating serving and
 cache mechanics to existing projects:
 
-- SGLang is the inference engine.
-- LMCache is the KV Cache storage/offload layer.
+- vLLM is the default inference engine.
+- LMCache MP is the shared KV Cache service.
+- Mooncake Store is the persistent L2 storage substrate.
 - GoldenExperience is a small LMCache patch plus Python control-plane library for deciding
   when cross-model reuse is safe enough to try.
 
@@ -17,15 +18,23 @@ materialize compatible KV, and record quality/fallback evidence.
 ## Runtime Boundary
 
 ```text
-SGLang owns: request scheduling, model execution, attention kernels, decoding
-LMCache owns: cache storage, lookup, offload, eviction, prefetch
+vLLM owns: request scheduling, model execution, attention kernels, decoding
+LMCache MP owns: shared KV lookup, offload, eviction, prefetch
+Mooncake Store owns: persistent L2 metadata and SSD-backed object storage
 GoldenExperience owns: model identity, reuse planning, transform metadata, quality gates
 ```
 
-When a request arrives, SGLang should pass enough model and prefix metadata for the LMCache
-patch to build a `ReuseRequest`. The `CrossModelReusePlanner` returns a `ReusePlan`. If the
-plan is `ready`, LMCache may run a secondary lookup and materialize source KV for the target
-model. Otherwise, the original LMCache miss path proceeds unchanged.
+For same-model persistence evidence, the stable shared KV substrate is now
+`vLLM + LMCache MP + Mooncake Store`: vLLM is only the inference process, LMCache MP is the
+long-lived cross-instance KV service, and Mooncake Store is the inspectable L2. Cross-model
+lookup and materialization should be designed around LMCache MP/L2 metadata rather than
+engine-local caches. See `docs/shared_kv_substrate.md`.
+
+When a request arrives, the vLLM/LMCache MP connector path should carry enough model and
+prefix metadata for the LMCache patch to build a `ReuseRequest`. The
+`CrossModelReusePlanner` returns a `ReusePlan`. If the plan is `ready`, LMCache MP may run a
+secondary lookup and materialize source KV for the target model. Otherwise, the original
+LMCache MP miss path proceeds unchanged.
 
 ## Core Abstractions
 
@@ -85,23 +94,24 @@ the default for every uncalibrated or low-confidence case.
 
 `PatchManifest.default()` defines four narrow hooks:
 
-1. `sglang_request_metadata`: attach source/target model identity and prefix metadata.
+1. `engine_request_metadata`: attach source/target model identity and prefix metadata.
 2. `lmcache_cross_model_lookup`: query cross-model candidates after normal lookup fails.
 3. `goldenexperience_materializer`: alias, project, or translate KV for the target model.
 4. `quality_gate_accounting`: record confidence, calibration provenance, and fallback reason.
 
 The patch must preserve these invariants:
 
-- Do not modify SGLang scheduling, attention kernels, or token generation semantics.
-- Do not replace LMCache storage, offload, eviction, or prefetch implementations.
-- Always fall back to the original SGLang + LMCache path when a plan is not ready.
+- Do not modify vLLM scheduling, attention kernels, or token generation semantics.
+- Do not replace LMCache MP storage, offload, eviction, or prefetch implementations.
+- Do not replace Mooncake Store; only configure and observe it as persistent L2.
+- Always fall back to the original vLLM + LMCache MP path when a plan is not ready.
 - Attach scenario, transform id, confidence, and calibration metadata to every reuse attempt.
 
 ## Development Shape
 
 The current repository contains legacy synthetic cache-core and tiered-store utilities.
 They remain useful for unit tests and paper-prototype thinking, but the product runtime path
-is now `reuse/` + `lmcache_patch/` + `sglang_runtime/`.
+is now `reuse/` + `lmcache_patch/` + `runtime/`.
 
 Near-term implementation should avoid building a second cache system. Instead:
 

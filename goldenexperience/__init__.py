@@ -19,7 +19,12 @@ from goldenexperience.reuse import (
     ScenarioDescriptor,
     SizeVariantDirection,
 )
-from goldenexperience.sglang_runtime import RuntimeConfig, RuntimeStatus, build_patch_environment, check_runtime
+from goldenexperience.runtime import (
+    RuntimeConfig,
+    RuntimeStatus,
+    build_patch_environment,
+    check_runtime,
+)
 
 __all__ = [
     "CrossModelCacheKey",

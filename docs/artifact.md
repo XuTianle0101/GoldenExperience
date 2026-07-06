@@ -2,11 +2,15 @@
 
 ## Reproduction Levels
 
-1. Planner smoke test: run unit tests without SGLang, LMCache, GPUs, or model weights.
-2. Runtime dependency check: verify SGLang and LMCache imports or local source paths.
-3. Base/LoRA single-GPU test: run SGLang with LMCache and the GoldenExperience metadata patch.
-4. GoldenScale test: enable calibrated layer/head mapping and projection.
-5. Cross-base exploratory test: enable only with calibration id and explicit task allowlist.
+1. Planner smoke test: run unit tests without vLLM, LMCache, Mooncake, GPUs, or model weights.
+2. Runtime dependency check: verify vLLM, LMCache, and Mooncake imports/commands or local
+   source paths.
+3. Same-model KV baseline: run vLLM + LMCache MP + Mooncake Store and prove offload/reuse
+   across an inference-engine restart.
+4. Base/LoRA single-GPU test: run the GoldenExperience metadata patch against the shared
+   LMCache MP substrate.
+5. GoldenScale test: enable calibrated layer/head mapping and projection.
+6. Cross-base exploratory test: enable only with calibration id and explicit task allowlist.
 
 ## Smoke Test
 
@@ -22,21 +26,22 @@ golden-scale-validate /tmp/ge-golden-scale/qwen25_7b_to_14b_projection_v0.json
 
 ## Runtime Stack
 
-GoldenExperience assumes SGLang and LMCache are installed before model-backed experiments.
-Use upstream packages, local forks, or the convenience helper:
+GoldenExperience assumes vLLM, LMCache, and Mooncake are installed before the recommended
+same-model KV baseline. Use upstream packages, local forks, or the convenience helper:
 
 ```bash
 ./scripts/bootstrap_runtime.sh
 ```
 
 The helper is intentionally optional. Artifact scripts should record the exact upstream
-commits or package versions used for SGLang and LMCache.
+commits or package versions used for vLLM, LMCache, and Mooncake.
 
 ## Expected Artifact Contents
 
 - Source code and tests for the planner and patch metadata.
 - LMCache patch diff or fork commit.
-- SGLang launch scripts and LMCache config files.
+- vLLM/LMCache MP/Mooncake launch scripts and generated adapter config files.
+- Non-default diagnostic configs only when filesystem-L2 fallback comparisons are used.
 - Model pair manifests with `ModelRef` and `KVShape` fields.
 - Calibration datasets or manifests for projection/translator paths.
 - Size-variant artifacts: `CalibrationManifest`, `LayerMap`, `ProjectionSpec`, and
@@ -47,7 +52,8 @@ commits or package versions used for SGLang and LMCache.
 
 Every reported run should store:
 
-- GoldenExperience, SGLang, and LMCache commit hashes.
+- GoldenExperience, vLLM, and LMCache commit hashes.
+- Mooncake commit/package version and service logs.
 - Python, CUDA, GPU, and driver versions.
 - Model ids, tokenizer ids, LoRA adapter ids, and revisions.
 - Reuse scenario, strategy, transform id, confidence, and calibration id.

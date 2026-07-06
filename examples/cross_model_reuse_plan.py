@@ -1,4 +1,4 @@
-"""Plan cross-model KV reuse without launching SGLang or LMCache."""
+"""Plan cross-model KV reuse without launching vLLM or LMCache MP."""
 
 from pathlib import Path
 import sys

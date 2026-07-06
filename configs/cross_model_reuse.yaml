@@ -1,16 +1,19 @@
 experiment:
   name: goldenexperience_cross_model_reuse_m0
   runtime_stack:
-    inference_engine: sglang
-    cache_backend: lmcache
+    inference_engine: vllm
+    cache_backend: lmcache_mp
+    l2_backend: mooncake_store
     goldenexperience_role: lmcache_patch_control_plane
   primary_metric: ttft_delta_with_quality_gated_reuse
 
 runtime:
   install:
-    sglang: external_or_third_party_clone
+    vllm: external_or_third_party_clone
     lmcache: external_or_third_party_clone
+    mooncake: external_or_third_party_clone
   lmcache_config_path: configs/lmcache.example.yaml
+  kv_baseline_script: scripts/kv_baseline/run_vllm_lmcache_mooncake_kv_baseline.sh
   patch_manifest: docs/patch_manifest.md
 
 reuse_scenarios:
