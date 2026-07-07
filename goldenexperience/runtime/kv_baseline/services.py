@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import os
 import shutil
 import signal
+import site
 import socket
 import subprocess
+import sys
+import sysconfig
 import time
 from pathlib import Path
 from typing import Any
@@ -18,6 +22,69 @@ from goldenexperience.runtime.kv_baseline.config import BaselineConfig, REPO_ROO
 def ensure_command(command_name: str) -> None:
     if shutil.which(command_name) is None:
         raise FileNotFoundError(f"Required command {command_name!r} was not found in PATH.")
+
+
+def _lmcache_mooncake_extension_found() -> bool:
+    lmcache_spec = importlib.util.find_spec("lmcache")
+    if lmcache_spec is None or lmcache_spec.submodule_search_locations is None:
+        return False
+    return any(
+        candidate.exists()
+        for location in lmcache_spec.submodule_search_locations
+        for candidate in Path(location).glob("lmcache_mooncake*")
+    )
+
+
+def _prepend_library_paths(env: dict[str, str]) -> None:
+    paths: list[str] = []
+
+    def add(path: Path) -> None:
+        if path.is_dir():
+            value = str(path)
+            if value not in paths:
+                paths.append(value)
+
+    torch_spec = importlib.util.find_spec("torch")
+    if torch_spec and torch_spec.submodule_search_locations:
+        for location in torch_spec.submodule_search_locations:
+            add(Path(location) / "lib")
+
+    site_roots = {Path(sys.prefix) / "lib"}
+    for key in ("purelib", "platlib"):
+        if value := sysconfig.get_paths().get(key):
+            site_roots.add(Path(value))
+    try:
+        site_roots.update(Path(value) for value in site.getsitepackages())
+    except AttributeError:
+        pass
+
+    for root in site_roots:
+        add(root)
+        nvidia_root = root / "nvidia"
+        if nvidia_root.is_dir():
+            for lib_dir in nvidia_root.glob("*/lib"):
+                add(lib_dir)
+    add(Path("/usr/local/cuda/lib64"))
+    add(Path("/usr/local/nvidia/lib64"))
+
+    if paths:
+        existing = env.get("LD_LIBRARY_PATH")
+        env["LD_LIBRARY_PATH"] = ":".join(paths + ([existing] if existing else []))
+
+
+def validate_runtime_requirements(config: BaselineConfig) -> None:
+    if not config.use_mooncake_store:
+        return
+    if _lmcache_mooncake_extension_found():
+        return
+    raise RuntimeError(
+        "GE_LMCACHE_MP_L2_ADAPTER_TYPE=mooncake_store requires the LMCache Mooncake "
+        "C++ extension, but Python module 'lmcache.lmcache_mooncake' is missing. "
+        "Reinstall LMCache from source with Mooncake support, for example: "
+        "MOONCAKE_INCLUDE_DIR=/path/to/mooncake-store/include BUILD_MOONCAKE=1 "
+        "python3 -m pip install -e /path/to/LMCache. "
+        "For a non-Mooncake filesystem L2 run, set GE_LMCACHE_MP_L2_ADAPTER_TYPE=fs."
+    )
 
 
 def tail_lines(path: Path, limit: int = 120) -> str:
@@ -80,10 +147,16 @@ class ProcessGroup:
             cwd=REPO_ROOT,
             stdout=log_handle,
             stderr=subprocess.STDOUT,
-            env=env,
+            env=self._child_env(env),
+            start_new_session=True,
         )
         log_handle.close()
         return proc
+
+    def _child_env(self, env: dict[str, str] | None = None) -> dict[str, str]:
+        child_env = dict(os.environ if env is None else env)
+        _prepend_library_paths(child_env)
+        return child_env
 
     def start_mooncake_services(self) -> None:
         if not self.config.use_mooncake_store:
@@ -431,14 +504,17 @@ class ProcessGroup:
             return
         print(f"Stopping {label} pid={proc.pid}")
         try:
-            proc.send_signal(signal.SIGTERM)
+            os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
         except ProcessLookupError:
             return
         try:
             proc.wait(timeout=60)
         except subprocess.TimeoutExpired:
             print(f"{label} pid={proc.pid} did not exit after SIGTERM; sending SIGKILL")
-            proc.kill()
+            try:
+                os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+            except ProcessLookupError:
+                return
             proc.wait(timeout=10)
 
     def cleanup(self) -> None:

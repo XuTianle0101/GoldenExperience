@@ -1,0 +1,38 @@
+{
+  "base_url": "http://127.0.0.1:30000",
+  "model": "/workspace/volume/softdata/models/Qwen3-8B",
+  "phase": "offload_warmup",
+  "prompt": {
+    "dataset": "synthetic",
+    "expected_final_answer": "OK",
+    "id": "kv_baseline_warmup",
+    "message_chars": 50,
+    "message_count": 2,
+    "source": "short unrelated warmup prompt for engine stabilization",
+    "split": "warmup"
+  },
+  "request": {
+    "include_usage": true,
+    "max_tokens": 8,
+    "stream": true,
+    "temperature": 0
+  },
+  "response": {
+    "chars": 31,
+    "contains_expected_final_answer": false,
+    "id": "chatcmpl-9635391e7bc8a176",
+    "text": "<think>\nOkay, the user wants me"
+  },
+  "timing": {
+    "e2e_ms": 170.23534793406725,
+    "ended_unix": 1783408658.44188,
+    "started_unix": 1783408658.2716715,
+    "ttfb_ms": 111.80734634399414,
+    "ttft_ms": 111.96350306272507
+  },
+  "usage": {
+    "completion_tokens": 8,
+    "prompt_tokens": 24,
+    "total_tokens": 32
+  }
+}

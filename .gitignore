@@ -18,3 +18,4 @@ artifacts/results/
 *.bin
 *.safetensors
 models/
+*.data

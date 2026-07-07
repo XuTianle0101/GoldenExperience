@@ -57,6 +57,16 @@ class RuntimeConfig:
                     "built with Mooncake support for the mooncake_store L2 adapter."
                 ),
             ),
+            RuntimeDependency(
+                name="LMCache Mooncake extension",
+                import_name="lmcache.lmcache_mooncake",
+                command_name=None,
+                repo_url="https://github.com/LMCache/LMCache.git",
+                install_hint=(
+                    "Reinstall LMCache from source with BUILD_MOONCAKE=1 and "
+                    "MOONCAKE_INCLUDE_DIR pointing at Mooncake Store headers."
+                ),
+            ),
         )
 
 
@@ -79,6 +89,19 @@ def _command_exists(command_name: str) -> bool:
     return shutil.which(command_name) is not None
 
 
+def _import_exists(import_name: str) -> bool:
+    if import_name == "lmcache.lmcache_mooncake":
+        lmcache_spec = importlib.util.find_spec("lmcache")
+        if lmcache_spec is None or lmcache_spec.submodule_search_locations is None:
+            return False
+        return any(
+            candidate.exists()
+            for location in lmcache_spec.submodule_search_locations
+            for candidate in Path(location).glob("lmcache_mooncake*")
+        )
+    return importlib.util.find_spec(import_name) is not None
+
+
 def check_runtime(config: RuntimeConfig) -> RuntimeStatus:
     available: dict[str, bool] = {}
     repo_paths = {
@@ -91,7 +114,7 @@ def check_runtime(config: RuntimeConfig) -> RuntimeStatus:
         import_found = (
             True
             if dependency.import_name is None
-            else importlib.util.find_spec(dependency.import_name) is not None
+            else _import_exists(dependency.import_name)
         )
         command_found = (
             True

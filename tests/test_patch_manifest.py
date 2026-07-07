@@ -41,5 +41,10 @@ def test_runtime_environment_is_namespaced() -> None:
 def test_runtime_check_reports_dependency_names() -> None:
     status = check_runtime(RuntimeConfig(model_id="qwen2.5-7b"))
 
-    assert set(status.available) == {"vLLM", "LMCache", "Mooncake"}
+    assert set(status.available) == {
+        "vLLM",
+        "LMCache",
+        "Mooncake",
+        "LMCache Mooncake extension",
+    }
     assert isinstance(status.ready, bool)

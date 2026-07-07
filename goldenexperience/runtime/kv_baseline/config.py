@@ -6,6 +6,7 @@ import json
 import os
 import time
 from dataclasses import dataclass, field
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any
 
@@ -15,6 +16,26 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 
 def _env_bool(name: str, default: str = "0") -> bool:
     return os.environ.get(name, default).lower() in {"1", "true", "yes", "on"}
+
+
+def _tcp_url(host: str) -> str:
+    return host if "://" in host else f"tcp://{host}"
+
+
+def _env_int(name: str, default: str) -> int:
+    value = os.environ.get(name, default)
+    try:
+        return int(value)
+    except ValueError:
+        pass
+
+    try:
+        parsed = Decimal(value)
+    except InvalidOperation as exc:
+        raise ValueError(f"{name} must be an integer, got {value!r}") from exc
+    if parsed != parsed.to_integral_value():
+        raise ValueError(f"{name} must be an integer, got {value!r}")
+    return int(parsed)
 
 
 def _abs_path(value: str | Path) -> Path:
@@ -90,7 +111,7 @@ class BaselineConfig:
     lmcache_mp_http_port: int
     lmcache_mp_prometheus_port: int
     lmcache_mp_l1_gb: float
-    lmcache_mp_l1_init_gb: float
+    lmcache_mp_l1_init_gb: int
     lmcache_mp_eviction_policy: str
     lmcache_mp_l2_store_policy: str
     lmcache_mp_l2_adapter_type: str
@@ -169,6 +190,9 @@ class BaselineConfig:
         )
 
         lmcache_mp_host = os.environ.get("GE_LMCACHE_MP_HOST", "127.0.0.1")
+        lmcache_mp_connect_host = os.environ.get(
+            "GE_LMCACHE_MP_CONNECT_HOST", _tcp_url(lmcache_mp_host)
+        )
         lmcache_mp_l2_adapter_type = os.environ.get(
             "GE_LMCACHE_MP_L2_ADAPTER_TYPE", "mooncake_store"
         )
@@ -254,7 +278,7 @@ class BaselineConfig:
             dry_run=_env_bool("GE_DRY_RUN", "0"),
             lmcache_mp_host=lmcache_mp_host,
             lmcache_mp_bind_host=os.environ.get("GE_LMCACHE_MP_BIND_HOST", lmcache_mp_host),
-            lmcache_mp_connect_host=os.environ.get("GE_LMCACHE_MP_CONNECT_HOST", lmcache_mp_host),
+            lmcache_mp_connect_host=lmcache_mp_connect_host,
             lmcache_mp_port=int(os.environ.get("GE_LMCACHE_MP_PORT", "6555")),
             lmcache_mp_http_host=os.environ.get("GE_LMCACHE_MP_HTTP_HOST", "127.0.0.1"),
             lmcache_mp_http_port=int(os.environ.get("GE_LMCACHE_MP_HTTP_PORT", "8081")),
@@ -262,7 +286,7 @@ class BaselineConfig:
                 os.environ.get("GE_LMCACHE_MP_PROMETHEUS_PORT", "9090")
             ),
             lmcache_mp_l1_gb=float(os.environ.get("GE_LMCACHE_MP_L1_GB", "4")),
-            lmcache_mp_l1_init_gb=float(os.environ.get("GE_LMCACHE_MP_L1_INIT_GB", "1")),
+            lmcache_mp_l1_init_gb=_env_int("GE_LMCACHE_MP_L1_INIT_GB", "1"),
             lmcache_mp_eviction_policy=os.environ.get("GE_LMCACHE_MP_EVICTION_POLICY", "noop"),
             lmcache_mp_l2_store_policy=os.environ.get(
                 "GE_LMCACHE_MP_L2_STORE_POLICY", "skip_l1"

@@ -132,10 +132,10 @@ PY
 
 if [ "$use_uv" = "1" ] && command -v uv >/dev/null 2>&1; then
   install_cmd=(uv pip install)
-  package_runtime_cmd=(uv pip install --prerelease=allow vllm lmcache)
+  package_runtime_cmd=(uv pip install --upgrade --prerelease=allow vllm "lmcache>=0.4.6")
 else
   install_cmd=("$python_bin" -m pip install)
-  package_runtime_cmd=("$python_bin" -m pip install --pre vllm lmcache)
+  package_runtime_cmd=("$python_bin" -m pip install --upgrade --pre vllm "lmcache>=0.4.6")
 fi
 
 install_goldenexperience() {
@@ -172,6 +172,8 @@ MSG
 case "$mode" in
   package)
     "${package_runtime_cmd[@]}"
+    "$python_bin" -m pip uninstall -y cupy-cuda12x >/dev/null 2>&1 || true
+    "$python_bin" -m pip install --force-reinstall --no-deps cupy-cuda13x
     install_goldenexperience
     ;;
   source)

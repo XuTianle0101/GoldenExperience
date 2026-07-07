@@ -4,6 +4,11 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
+from goldenexperience.runtime.kv_baseline.config import BaselineConfig
+from goldenexperience.runtime.kv_baseline.services import validate_runtime_requirements
+
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 BASELINE_SCRIPT = (
@@ -43,6 +48,8 @@ def test_mooncake_store_adapter_is_default(tmp_path: Path) -> None:
 
     assert metadata["kv_backend"] == "mp"
     assert metadata["engine"] == "vllm"
+    assert metadata["lmcache_mp"]["connect_host"] == "tcp://127.0.0.1"
+    assert "tcp://127.0.0.1" in metadata["vllm_kv_transfer_config"]
     assert metadata["mooncake"]["enabled"] is True
     assert adapter["type"] == "mooncake_store"
     assert adapter["num_workers"] == 4
@@ -69,6 +76,27 @@ def test_filesystem_adapter_override_disables_mooncake(tmp_path: Path) -> None:
     assert adapter["type"] == "fs"
     assert adapter["base_path"].endswith("/cache")
     assert not (run_dir / "mooncake_master.pid").exists()
+
+
+def test_l1_init_size_is_rendered_as_integer_for_lmcache_cli(tmp_path: Path) -> None:
+    run_dir = _run_baseline_dry_run(tmp_path, GE_LMCACHE_MP_L1_INIT_GB="1.0")
+    metadata = json.loads((run_dir / "metadata.json").read_text(encoding="utf-8"))
+    lmc_config = (run_dir / "lmc_config.yaml").read_text(encoding="utf-8")
+
+    assert metadata["lmcache_mp"]["l1_init_size_gb"] == 1
+    assert "  l1_init_size_gb: 1\n" in lmc_config
+    assert "  l1_init_size_gb: 1.0\n" not in lmc_config
+
+
+def test_mooncake_store_requires_lmcache_extension(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        "goldenexperience.runtime.kv_baseline.services._lmcache_mooncake_extension_found",
+        lambda: False,
+    )
+    config = BaselineConfig.from_env([])
+
+    with pytest.raises(RuntimeError, match="lmcache.lmcache_mooncake"):
+        validate_runtime_requirements(config)
 
 
 def _write_minimal_metadata(run_dir: Path, cache_dir: Path, mooncake_root: Path) -> None:

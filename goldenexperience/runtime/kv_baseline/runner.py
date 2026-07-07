@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+import os
 import subprocess
 import time
 from pathlib import Path
 
 from goldenexperience.runtime.kv_baseline.config import BaselineConfig, REPO_ROOT
 from goldenexperience.runtime.kv_baseline.prompts import write_generated_disk_prompt
-from goldenexperience.runtime.kv_baseline.services import ProcessGroup
+from goldenexperience.runtime.kv_baseline.services import ProcessGroup, validate_runtime_requirements
 
 
 CLIENT = REPO_ROOT / "scripts" / "kv_baseline" / "kv_baseline_client.py"
@@ -170,6 +171,8 @@ def run_baseline(config: BaselineConfig) -> int:
         print("GE_DRY_RUN=1: generated config and metadata without starting services.")
         return 0
 
+    validate_runtime_requirements(config)
+
     processes = ProcessGroup(config)
     try:
         processes.start_mooncake_services()
@@ -183,7 +186,7 @@ def run_baseline(config: BaselineConfig) -> int:
 
         if config.baseline_mode == "restart":
             processes.stop_server("offload")
-            time.sleep(3)
+            time.sleep(float(os.environ.get("GE_AFTER_ENGINE_STOP_SLEEP_SEC", "10")))
             processes.start_engine_server("reuse")
             processes.wait_for_engine_ready("reuse")
 
