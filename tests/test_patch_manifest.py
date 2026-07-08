@@ -18,7 +18,7 @@ def test_patch_manifest_documents_non_invasive_hooks() -> None:
 
 def test_runtime_environment_is_namespaced() -> None:
     config = RuntimeConfig(
-        model_id="qwen2.5-7b",
+        model_id="qwen3-8b",
         lmcache_config_path="configs/lmcache.example.yaml",
         vllm_repo_path="third_party/vllm",
         lmcache_repo_path="third_party/LMCache",
@@ -28,7 +28,7 @@ def test_runtime_environment_is_namespaced() -> None:
     env = build_patch_environment(config, manifest_path="docs/generated_patch_manifest.md")
 
     assert env["GE_ENABLE_CROSS_MODEL_REUSE"] == "1"
-    assert env["GE_MODEL_ID"] == "qwen2.5-7b"
+    assert env["GE_MODEL_ID"] == "qwen3-8b"
     assert env["GE_INFERENCE_ENGINE"] == "vllm"
     assert env["GE_ENGINE"] == "vllm"
     assert env["GE_KV_BACKEND"] == "mp"
@@ -39,7 +39,7 @@ def test_runtime_environment_is_namespaced() -> None:
 
 
 def test_runtime_check_reports_dependency_names() -> None:
-    status = check_runtime(RuntimeConfig(model_id="qwen2.5-7b"))
+    status = check_runtime(RuntimeConfig(model_id="qwen3-8b"))
 
     assert set(status.available) == {
         "vLLM",

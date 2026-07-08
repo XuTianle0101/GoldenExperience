@@ -11,7 +11,7 @@ from goldenexperience.size_variant import (
     QualityGateResult,
     build_calibration_manifest,
     load_prompt_count,
-    qwen25_model_pair,
+    qwen3_model_pair,
     save_prompt_manifest,
 )
 
@@ -25,7 +25,7 @@ DEFAULT_PROMPTS = [
 
 def main_collect() -> None:
     parser = argparse.ArgumentParser(description="Create a prompt manifest for GoldenScale calibration.")
-    parser.add_argument("--direction", choices=["7b_to_14b", "14b_to_7b"], default="7b_to_14b")
+    parser.add_argument("--direction", choices=["8b_to_14b", "14b_to_8b"], default="8b_to_14b")
     parser.add_argument("--output", type=Path, default=DEFAULT_ARTIFACT_DIR / "prompts.json")
     parser.add_argument("--prompt", action="append", default=None, help="Prompt text. Can be repeated.")
     parser.add_argument("--prompt-file", type=Path, default=None, help="One prompt per line.")
@@ -41,7 +41,7 @@ def main_collect() -> None:
     if not prompts:
         prompts = DEFAULT_PROMPTS
 
-    source, target = qwen25_model_pair(args.direction)
+    source, target = qwen3_model_pair(args.direction)
     save_prompt_manifest(args.output, prompts, source, target)
     print(json.dumps({"output": str(args.output), "prompt_count": len(prompts)}, indent=2, sort_keys=True))
 
@@ -50,7 +50,7 @@ def main_fit() -> None:
     parser = argparse.ArgumentParser(description="Fit deterministic MVP GoldenScale artifacts.")
     parser.add_argument(
         "--direction",
-        choices=["7b_to_14b", "14b_to_7b", "bidirectional"],
+        choices=["8b_to_14b", "14b_to_8b", "bidirectional"],
         default="bidirectional",
     )
     parser.add_argument("--prompt-manifest", type=Path, default=DEFAULT_ARTIFACT_DIR / "prompts.json")
@@ -58,14 +58,14 @@ def main_fit() -> None:
     parser.add_argument("--calibration-id", default=None, help="Use only for single-direction fit.")
     args = parser.parse_args()
 
-    directions = ["7b_to_14b", "14b_to_7b"] if args.direction == "bidirectional" else [args.direction]
+    directions = ["8b_to_14b", "14b_to_8b"] if args.direction == "bidirectional" else [args.direction]
     prompt_count = load_prompt_count(args.prompt_manifest)
     outputs = []
     for direction in directions:
-        source, target = qwen25_model_pair(direction)
+        source, target = qwen3_model_pair(direction)
         calibration_id = args.calibration_id
         if calibration_id is None:
-            calibration_id = f"qwen25_{direction}_projection_v0"
+            calibration_id = f"qwen3_{direction}_projection_v0"
         quality = QualityGateResult.from_metrics(
             kv_cosine=0.99,
             attention_proxy_cosine=0.99,

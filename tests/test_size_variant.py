@@ -7,7 +7,7 @@ from goldenexperience.size_variant import (
     SizeVariantDirection,
     SizeVariantMaterializer,
     build_calibration_manifest,
-    qwen25_model_pair,
+    qwen3_model_pair,
 )
 
 
@@ -15,7 +15,7 @@ def model_ref(model_id: str, size_b: float, layers: int, kv_heads: int, head_dim
     return ModelRef(
         model_id=model_id,
         family="qwen",
-        architecture="qwen2",
+        architecture="qwen3",
         tokenizer_id="qwen-tokenizer",
         parameter_count_b=size_b,
         kv_shape=KVShape(
@@ -133,10 +133,10 @@ def test_planner_blocks_artifact_hash_mismatch(tmp_path: Path) -> None:
     assert plan.fallback_reason == "artifact_hash_mismatch"
 
 
-def test_qwen25_bidirectional_presets_are_valid() -> None:
-    for direction in ("7b_to_14b", "14b_to_7b"):
-        source, target = qwen25_model_pair(direction)
-        manifest = build_calibration_manifest(source, target, calibration_id=f"qwen25_{direction}_projection_v0")
+def test_qwen3_bidirectional_presets_are_valid() -> None:
+    for direction in ("8b_to_14b", "14b_to_8b"):
+        source, target = qwen3_model_pair(direction)
+        manifest = build_calibration_manifest(source, target, calibration_id=f"qwen3_{direction}_projection_v0")
         assert manifest.validate() == []
         assert manifest.projection.source_width == source.kv_shape.num_key_value_heads * source.kv_shape.head_dim
         assert manifest.projection.target_width == target.kv_shape.num_key_value_heads * target.kv_shape.head_dim

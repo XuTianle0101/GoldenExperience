@@ -63,7 +63,7 @@ small LMCache key/metadata patch plus quality accounting.
 
 ### 2. Same Model Line, Different Parameter Sizes
 
-This covers pairs such as 7B and 14B variants from the same family/architecture. If KV
+This covers pairs such as 8B and 14B variants from the same family/architecture. If KV
 layout is identical, direct aliasing can be tested. If layer count, KV heads, or head dim
 differs, the plan becomes `layerwise_projection` and must wait for calibration. The main
 development work is layer mapping, head mapping, projection materialization, and partial

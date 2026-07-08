@@ -9,22 +9,22 @@ from goldenexperience.reuse import CrossModelReusePlanner, KVShape, ModelRef, Re
 
 
 def main() -> None:
-    shape = KVShape(num_layers=32, num_key_value_heads=8, head_dim=128)
+    shape = KVShape(num_layers=36, num_key_value_heads=8, head_dim=128)
     base = ModelRef(
-        model_id="qwen2.5-7b",
+        model_id="qwen3-8b",
         family="qwen",
-        architecture="qwen2",
-        tokenizer_id="qwen2.5",
-        parameter_count_b=7,
+        architecture="qwen3",
+        tokenizer_id="qwen3",
+        parameter_count_b=8,
         kv_shape=shape,
     )
     lora = ModelRef(
-        model_id="qwen2.5-7b-lora-math",
+        model_id="qwen3-8b-lora-math",
         family="qwen",
-        architecture="qwen2",
-        tokenizer_id="qwen2.5",
-        parameter_count_b=7,
-        base_model_id="qwen2.5-7b",
+        architecture="qwen3",
+        tokenizer_id="qwen3",
+        parameter_count_b=8,
+        base_model_id="qwen3-8b",
         lora_adapter_id="math-adapter",
         kv_shape=shape,
     )

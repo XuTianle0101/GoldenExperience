@@ -18,51 +18,51 @@ from goldenexperience.size_variant.models import (
 from goldenexperience.size_variant.projection import build_projection_spec
 
 
-QWEN25_7B = ModelRef(
-    model_id="Qwen/Qwen2.5-7B-Instruct",
+QWEN3_8B = ModelRef(
+    model_id="Qwen/Qwen3-8B",
     family="qwen",
-    architecture="qwen2",
-    tokenizer_id="Qwen/Qwen2.5",
-    parameter_count_b=7,
+    architecture="qwen3",
+    tokenizer_id="Qwen/Qwen3",
+    parameter_count_b=8,
     kv_shape=KVShape(
-        num_layers=28,
-        hidden_size=3584,
-        num_attention_heads=28,
-        num_key_value_heads=4,
+        num_layers=36,
+        hidden_size=4096,
+        num_attention_heads=32,
+        num_key_value_heads=8,
         head_dim=128,
-        dtype="float16",
+        dtype="bfloat16",
         rope_theta=1_000_000.0,
-        model_config_hash="qwen25-7b-default",
-        tokenizer_hash="qwen25-tokenizer-default",
+        model_config_hash="qwen3-8b-default",
+        tokenizer_hash="qwen3-tokenizer-default",
     ),
 )
 
-QWEN25_14B = ModelRef(
-    model_id="Qwen/Qwen2.5-14B-Instruct",
+QWEN3_14B = ModelRef(
+    model_id="Qwen/Qwen3-14B",
     family="qwen",
-    architecture="qwen2",
-    tokenizer_id="Qwen/Qwen2.5",
+    architecture="qwen3",
+    tokenizer_id="Qwen/Qwen3",
     parameter_count_b=14,
     kv_shape=KVShape(
-        num_layers=48,
+        num_layers=40,
         hidden_size=5120,
         num_attention_heads=40,
         num_key_value_heads=8,
         head_dim=128,
-        dtype="float16",
+        dtype="bfloat16",
         rope_theta=1_000_000.0,
-        model_config_hash="qwen25-14b-default",
-        tokenizer_hash="qwen25-tokenizer-default",
+        model_config_hash="qwen3-14b-default",
+        tokenizer_hash="qwen3-tokenizer-default",
     ),
 )
 
 
-def qwen25_model_pair(direction: str = "7b_to_14b") -> tuple[ModelRef, ModelRef]:
-    if direction in {"7b_to_14b", "small_to_large"}:
-        return QWEN25_7B, QWEN25_14B
-    if direction in {"14b_to_7b", "large_to_small"}:
-        return QWEN25_14B, QWEN25_7B
-    raise ValueError(f"Unknown Qwen2.5 direction: {direction}")
+def qwen3_model_pair(direction: str = "8b_to_14b") -> tuple[ModelRef, ModelRef]:
+    if direction in {"8b_to_14b", "small_to_large"}:
+        return QWEN3_8B, QWEN3_14B
+    if direction in {"14b_to_8b", "large_to_small"}:
+        return QWEN3_14B, QWEN3_8B
+    raise ValueError(f"Unknown Qwen3 direction: {direction}")
 
 
 def build_calibration_manifest(

@@ -26,7 +26,7 @@ The research/development target is three GoldenExperience reuse tracks:
 | Track Name | Scenario | Goal | Default Strategy | Safety Gate |
 | --- | --- | --- | --- | --- |
 | GoldenLoRA | Base model <-> LoRA model | Reuse KV between a model and its LoRA fine-tuned variant | Adapter-delta gated aliasing | Same base, tokenizer, KV layout, LoRA drift probe |
-| GoldenScale | Same model, different parameter sizes | Reuse KV across variants such as 7B <-> 14B | Direct alias if shapes match; otherwise layerwise projection | Layer/head mapping and projection calibration |
+| GoldenScale | Same model, different parameter sizes | Reuse KV across variants such as 8B <-> 14B | Direct alias if shapes match; otherwise layerwise projection | Layer/head mapping and projection calibration |
 | GoldenBridge | Different base models | Explore broader cross-base reuse | Learned translator | Explicit calibration set, tokenizer bridge, task allowlist |
 
 The names map to the implementation scenarios as follows: `GoldenLoRA` targets
@@ -101,7 +101,7 @@ Run the planner smoke test:
 python3 scripts/smoke_cross_model_plan.py
 ```
 
-Build the Qwen2.5 7B <-> 14B GoldenScale calibration scaffold:
+Build the Qwen3 8B <-> 14B GoldenScale calibration scaffold:
 
 ```bash
 golden-scale-collect --output artifacts/golden_scale/prompts.json
@@ -109,8 +109,8 @@ golden-scale-fit \
   --direction bidirectional \
   --prompt-manifest artifacts/golden_scale/prompts.json \
   --output-dir artifacts/golden_scale
-golden-scale-validate artifacts/golden_scale/qwen25_7b_to_14b_projection_v0.json
-golden-scale-bench artifacts/golden_scale/qwen25_14b_to_7b_projection_v0.json
+golden-scale-validate artifacts/golden_scale/qwen3_8b_to_14b_projection_v0.json
+golden-scale-bench artifacts/golden_scale/qwen3_14b_to_8b_projection_v0.json
 ```
 
 ## Deployment Flow
@@ -334,9 +334,9 @@ be executed inside LMCache MP.
 
 ## GoldenScale Reuse
 
-The first GoldenScale MVP targets bidirectional `Qwen/Qwen2.5-7B-Instruct` and
-`Qwen/Qwen2.5-14B-Instruct` reuse. GoldenExperience treats each direction as an independent
-artifact because 7B->14B and 14B->7B need different layer maps, projection specs, cost
+The first GoldenScale MVP targets bidirectional `Qwen/Qwen3-8B` and
+`Qwen/Qwen3-14B` reuse. GoldenExperience treats each direction as an independent
+artifact because 8B->14B and 14B->8B need different layer maps, projection specs, cost
 estimates, and quality gates.
 
 The artifact flow is:
@@ -371,22 +371,22 @@ Runtime behavior remains conservative:
 ```python
 from goldenexperience.reuse import CrossModelReusePlanner, KVShape, ModelRef, ReuseRequest
 
-shape = KVShape(num_layers=32, num_key_value_heads=8, head_dim=128)
+shape = KVShape(num_layers=36, num_key_value_heads=8, head_dim=128)
 base = ModelRef(
-    model_id="qwen2.5-7b",
+    model_id="qwen3-8b",
     family="qwen",
-    architecture="qwen2",
-    tokenizer_id="qwen2.5",
-    parameter_count_b=7,
+    architecture="qwen3",
+    tokenizer_id="qwen3",
+    parameter_count_b=8,
     kv_shape=shape,
 )
 lora = ModelRef(
-    model_id="qwen2.5-7b-lora-math",
+    model_id="qwen3-8b-lora-math",
     family="qwen",
-    architecture="qwen2",
-    tokenizer_id="qwen2.5",
-    parameter_count_b=7,
-    base_model_id="qwen2.5-7b",
+    architecture="qwen3",
+    tokenizer_id="qwen3",
+    parameter_count_b=8,
+    base_model_id="qwen3-8b",
     lora_adapter_id="math-adapter",
     kv_shape=shape,
 )

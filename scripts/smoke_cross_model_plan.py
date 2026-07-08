@@ -23,8 +23,8 @@ def make_model(
     layers: int,
     head_dim: int,
     family: str = "qwen",
-    architecture: str = "qwen2",
-    tokenizer_id: str = "qwen2.5",
+    architecture: str = "qwen3",
+    tokenizer_id: str = "qwen3",
 ) -> ModelRef:
     return ModelRef(
         model_id=model_id,
@@ -38,18 +38,18 @@ def make_model(
 
 def build_plans() -> list[dict[str, object]]:
     planner = CrossModelReusePlanner()
-    base = make_model("qwen2.5-7b", size_b=7, layers=32, head_dim=128)
+    base = make_model("qwen3-8b", size_b=8, layers=36, head_dim=128)
     lora = ModelRef(
-        model_id="qwen2.5-7b-lora-math",
+        model_id="qwen3-8b-lora-math",
         family="qwen",
-        architecture="qwen2",
-        tokenizer_id="qwen2.5",
-        parameter_count_b=7,
-        base_model_id="qwen2.5-7b",
+        architecture="qwen3",
+        tokenizer_id="qwen3",
+        parameter_count_b=8,
+        base_model_id="qwen3-8b",
         lora_adapter_id="math-adapter",
         kv_shape=base.kv_shape,
     )
-    large = make_model("qwen2.5-14b", size_b=14, layers=48, head_dim=128)
+    large = make_model("qwen3-14b", size_b=14, layers=40, head_dim=128)
     llama = make_model(
         "llama-3.1-8b",
         size_b=8,
@@ -66,7 +66,7 @@ def build_plans() -> list[dict[str, object]]:
             source=base,
             target=large,
             prefix_hash="shared-system-prompt",
-            calibration_id="qwen25_projection_v0",
+            calibration_id="qwen3_projection_v0",
             estimated_target_prefill_ms=100.0,
             estimated_materialization_ms=30.0,
         ),

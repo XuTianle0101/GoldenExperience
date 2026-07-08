@@ -7,7 +7,7 @@ def signature(model_id: str, head_dim: int) -> ArchitectureSignature:
     return ArchitectureSignature(
         model_id=model_id,
         family="qwen",
-        architecture="qwen2",
+        architecture="qwen3",
         num_layers=2,
         hidden_size=head_dim * 2,
         num_attention_heads=2,
@@ -17,8 +17,8 @@ def signature(model_id: str, head_dim: int) -> ArchitectureSignature:
 
 
 def test_linear_mapper_projects_last_dimension() -> None:
-    source = signature("qwen2.5-7b", 2)
-    target = signature("qwen2.5-14b", 3)
+    source = signature("qwen3-8b", 2)
+    target = signature("qwen3-14b", 3)
     block = CacheBlock.from_payload(
         payload=KVPayload(key=[[[1.0, 2.0]]], value=[[[3.0, 4.0]]]),
         model_id=source.model_id,
@@ -39,8 +39,8 @@ def test_linear_mapper_projects_last_dimension() -> None:
 
 
 def test_reuse_policy_falls_back_for_low_quality() -> None:
-    source = signature("qwen2.5-7b", 2)
-    target = signature("qwen2.5-14b", 3)
+    source = signature("qwen3-8b", 2)
+    target = signature("qwen3-14b", 3)
     block = CacheBlock.from_payload(
         payload=KVPayload(key=[[[1.0, 2.0]]], value=[[[3.0, 4.0]]]),
         model_id=source.model_id,

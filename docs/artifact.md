@@ -21,7 +21,7 @@ python3 -m pip install -e ".[dev]"
 pytest
 golden-patch-manifest --output artifacts/patch_manifest.md
 golden-scale-fit --direction bidirectional --output-dir /tmp/ge-golden-scale
-golden-scale-validate /tmp/ge-golden-scale/qwen25_7b_to_14b_projection_v0.json
+golden-scale-validate /tmp/ge-golden-scale/qwen3_8b_to_14b_projection_v0.json
 ```
 
 ## Runtime Stack

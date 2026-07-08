@@ -16,8 +16,8 @@ def make_model(
     layers: int = 32,
     head_dim: int = 128,
     family: str = "qwen",
-    architecture: str = "qwen2",
-    tokenizer_id: str = "qwen2.5",
+    architecture: str = "qwen3",
+    tokenizer_id: str = "qwen3",
 ) -> ModelRef:
     return ModelRef(
         model_id=model_id,
@@ -30,14 +30,14 @@ def make_model(
 
 
 def test_lora_pair_is_ready_when_layout_matches() -> None:
-    base = make_model("qwen2.5-7b", 7)
+    base = make_model("qwen3-8b", 8)
     lora = ModelRef(
-        model_id="qwen2.5-7b-lora-math",
+        model_id="qwen3-8b-lora-math",
         family="qwen",
-        architecture="qwen2",
-        tokenizer_id="qwen2.5",
-        parameter_count_b=7,
-        base_model_id="qwen2.5-7b",
+        architecture="qwen3",
+        tokenizer_id="qwen3",
+        parameter_count_b=8,
+        base_model_id="qwen3-8b",
         lora_adapter_id="math-adapter",
         kv_shape=base.kv_shape,
     )
@@ -55,8 +55,8 @@ def test_lora_pair_is_ready_when_layout_matches() -> None:
 
 
 def test_size_variant_requires_calibration_when_shape_differs() -> None:
-    small = make_model("qwen2.5-7b", 7, layers=32)
-    large = make_model("qwen2.5-14b", 14, layers=48)
+    small = make_model("qwen3-8b", 8, layers=36)
+    large = make_model("qwen3-14b", 14, layers=40)
 
     plan = CrossModelReusePlanner().plan(
         ReuseRequest(source=small, target=large, prefix_hash="shared")
@@ -70,15 +70,15 @@ def test_size_variant_requires_calibration_when_shape_differs() -> None:
 
 
 def test_size_variant_with_calibration_is_executable() -> None:
-    small = make_model("qwen2.5-7b", 7, layers=32)
-    large = make_model("qwen2.5-14b", 14, layers=48)
+    small = make_model("qwen3-8b", 8, layers=36)
+    large = make_model("qwen3-14b", 14, layers=40)
 
     plan = CrossModelReusePlanner().plan(
         ReuseRequest(
             source=small,
             target=large,
             prefix_hash="shared",
-            calibration_id="qwen25_projection_v0",
+            calibration_id="qwen3_projection_v0",
         )
     )
 
@@ -87,7 +87,7 @@ def test_size_variant_with_calibration_is_executable() -> None:
 
 
 def test_cross_base_is_conservative_without_opt_in_and_calibration() -> None:
-    qwen = make_model("qwen2.5-7b", 7)
+    qwen = make_model("qwen3-8b", 8)
     llama = make_model(
         "llama-3.1-8b",
         8,
@@ -108,7 +108,7 @@ def test_cross_base_is_conservative_without_opt_in_and_calibration() -> None:
 
 
 def test_cross_base_with_calibration_and_opt_in_is_ready() -> None:
-    qwen = make_model("qwen2.5-7b", 7)
+    qwen = make_model("qwen3-8b", 8)
     llama = make_model(
         "llama-3.1-8b",
         8,

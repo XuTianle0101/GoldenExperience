@@ -13,8 +13,8 @@ def model(model_id: str, size_b: float, layers: int, head_dim: int) -> ModelRef:
     return ModelRef(
         model_id=model_id,
         family="qwen",
-        architecture="qwen2",
-        tokenizer_id="qwen2.5",
+        architecture="qwen3",
+        tokenizer_id="qwen3",
         parameter_count_b=size_b,
         kv_shape=KVShape(num_layers=layers, num_key_value_heads=8, head_dim=head_dim),
     )
@@ -22,18 +22,18 @@ def model(model_id: str, size_b: float, layers: int, head_dim: int) -> ModelRef:
 
 def main() -> None:
     planner = CrossModelReusePlanner()
-    base = model("qwen2.5-7b", size_b=7, layers=32, head_dim=128)
+    base = model("qwen3-8b", size_b=8, layers=36, head_dim=128)
     lora = ModelRef(
-        model_id="qwen2.5-7b-lora-math",
+        model_id="qwen3-8b-lora-math",
         family="qwen",
-        architecture="qwen2",
-        tokenizer_id="qwen2.5",
-        parameter_count_b=7,
-        base_model_id="qwen2.5-7b",
+        architecture="qwen3",
+        tokenizer_id="qwen3",
+        parameter_count_b=8,
+        base_model_id="qwen3-8b",
         lora_adapter_id="math-adapter",
         kv_shape=base.kv_shape,
     )
-    large = model("qwen2.5-14b", size_b=14, layers=48, head_dim=128)
+    large = model("qwen3-14b", size_b=14, layers=40, head_dim=128)
 
     for target in (lora, large):
         plan = planner.plan(
@@ -41,7 +41,7 @@ def main() -> None:
                 source=base,
                 target=target,
                 prefix_hash="shared-system-prompt",
-                calibration_id="qwen25_projection_v0" if target is large else None,
+                calibration_id="qwen3_projection_v0" if target is large else None,
             )
         )
         print(plan.scenario.value, plan.strategy.value, plan.status.value, plan.confidence)

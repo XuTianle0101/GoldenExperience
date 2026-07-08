@@ -14,9 +14,9 @@
 
 | Scenario | Example Pair | Required Evidence | Primary Risk |
 | --- | --- | --- | --- |
-| Base <-> LoRA | `qwen2.5-7b` <-> `qwen2.5-7b-lora-math` | same base, tokenizer, KV shape, adapter drift gate | LoRA changes hidden states enough to hurt quality |
-| Size variant | `qwen2.5-7b` <-> `qwen2.5-14b` | layer/head map, projection calibration, prefix match | projection overhead or quality drift |
-| Different base | `qwen2.5-7b` <-> `llama-3.1-8b` | calibration set, tokenizer bridge, task allowlist | unsafe semantic mismatch |
+| Base <-> LoRA | `qwen3-8b` <-> `qwen3-8b-lora-math` | same base, tokenizer, KV shape, adapter drift gate | LoRA changes hidden states enough to hurt quality |
+| Size variant | `qwen3-8b` <-> `qwen3-14b` | layer/head map, projection calibration, prefix match | projection overhead or quality drift |
+| Different base | `qwen3-8b` <-> `llama-3.1-8b` | calibration set, tokenizer bridge, task allowlist | unsafe semantic mismatch |
 
 ## Workloads
 
@@ -42,7 +42,7 @@
 - Prefix length sweep.
 - Layer subset: early layers, middle layers, late layers, all layers.
 - Projection type for size variants: direct alias, linear projection, learned projection.
-- Direction for size variants: 7B->14B, 14B->7B, and bidirectional serving.
+- Direction for size variants: 8B->14B, 14B->8B, and bidirectional serving.
 - Runtime gate: materialization cost ratio from 0.3 to 0.9 of target prefill.
 - Calibration set size.
 - Cross-base task allowlist versus no allowlist.

@@ -5,7 +5,7 @@ def test_cache_block_metadata_and_query_match() -> None:
     payload = KVPayload(key=[[[1.0, 2.0]]], value=[[[3.0, 4.0]]])
     block = CacheBlock.from_payload(
         payload=payload,
-        model_id="qwen2.5-7b",
+        model_id="qwen3-8b",
         layer_id=1,
         head_id=0,
         token_range=(10, 11),
@@ -18,6 +18,6 @@ def test_cache_block_metadata_and_query_match() -> None:
     assert block.metadata.shape == ((1, 1, 2), (1, 1, 2))
     assert block.metadata.bytes_size == 32
     assert len(block.metadata.checksum) == 64
-    assert CacheQuery(model_id="qwen2.5-7b", token_range=(10, 20)).matches(block.metadata)
-    assert not CacheQuery(model_id="qwen2.5-14b").matches(block.metadata)
+    assert CacheQuery(model_id="qwen3-8b", token_range=(10, 20)).matches(block.metadata)
+    assert not CacheQuery(model_id="qwen3-14b").matches(block.metadata)
 

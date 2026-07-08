@@ -1,11 +1,11 @@
 """Same-model different-parameter-size KV reuse support."""
 
 from goldenexperience.size_variant.calibration import (
-    QWEN25_14B,
-    QWEN25_7B,
+    QWEN3_14B,
+    QWEN3_8B,
     build_calibration_manifest,
     load_prompt_count,
-    qwen25_model_pair,
+    qwen3_model_pair,
     save_prompt_manifest,
 )
 from goldenexperience.size_variant.layer_mapping import build_linear_layer_map
@@ -39,8 +39,8 @@ __all__ = [
     "MaterializationResult",
     "MaterializedKVChunk",
     "ProjectionSpec",
-    "QWEN25_14B",
-    "QWEN25_7B",
+    "QWEN3_14B",
+    "QWEN3_8B",
     "QualityGateResult",
     "SizeVariantDirection",
     "SizeVariantMaterializer",
@@ -51,7 +51,7 @@ __all__ = [
     "kv_width",
     "load_prompt_count",
     "pair_id_for",
-    "qwen25_model_pair",
+    "qwen3_model_pair",
     "save_prompt_manifest",
     "validate_projection_cost",
 ]
