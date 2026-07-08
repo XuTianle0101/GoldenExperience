@@ -19,7 +19,9 @@ class ReuseStrategy(str, Enum):
 
     ADAPTER_DELTA_GATED_ALIAS = "adapter_delta_gated_alias"
     DIRECT_SHAPE_ALIAS = "direct_shape_alias"
+    HIDDEN_STATE_BRIDGE = "hidden_state_bridge"
     LAYERWISE_PROJECTION = "layerwise_projection"
+    KV_PROJECTION_BASELINE = "kv_projection_baseline"
     LEARNED_CROSS_BASE_TRANSLATOR = "learned_cross_base_translator"
     FALLBACK_RECOMPUTE = "fallback_recompute"
 
@@ -142,6 +144,11 @@ class ReusePlan:
     artifact_uri: str | None = None
     layer_map_id: str | None = None
     projection_id: str | None = None
+    hidden_bridge_id: str | None = None
+    restore_id: str | None = None
+    state_kind: str | None = None
+    hidden_contract: str | None = None
+    target_kv_layout: str | None = None
     estimated_prefill_saved_ms: float | None = None
     estimated_materialization_ms: float | None = None
     fallback_reason: str | None = None
@@ -172,6 +179,11 @@ class ReusePlan:
             "ge_artifact_uri": self.artifact_uri,
             "ge_layer_map_id": self.layer_map_id,
             "ge_projection_id": self.projection_id,
+            "ge_hidden_bridge_id": self.hidden_bridge_id,
+            "ge_restore_id": self.restore_id,
+            "ge_state_kind": self.state_kind,
+            "ge_hidden_contract": self.hidden_contract,
+            "ge_target_kv_layout": self.target_kv_layout,
             "ge_estimated_prefill_saved_ms": self.estimated_prefill_saved_ms,
             "ge_estimated_materialization_ms": self.estimated_materialization_ms,
             "ge_fallback_reason": self.fallback_reason,

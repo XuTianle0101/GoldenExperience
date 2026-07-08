@@ -13,7 +13,7 @@ cache mechanics to existing projects:
 
 The core invariant is simple: GoldenExperience must not change model decoding behavior or
 replace LMCache offload. It may only enrich metadata, perform secondary cross-model lookup,
-materialize compatible KV, and record quality/fallback evidence.
+materialize compatible hidden/KV state, and record quality/fallback evidence.
 
 ## Runtime Boundary
 
@@ -33,7 +33,7 @@ engine-local caches. See `docs/shared_kv_substrate.md`.
 When a request arrives, the vLLM/LMCache MP connector path should carry enough model and
 prefix metadata for the LMCache patch to build a `ReuseRequest`. The
 `CrossModelReusePlanner` returns a `ReusePlan`. If the plan is `ready`, LMCache MP may run a
-secondary lookup and materialize source KV for the target model. Otherwise, the original
+secondary lookup and materialize source hidden/KV state for the target model. Otherwise, the original
 LMCache MP miss path proceeds unchanged.
 
 ## Core Abstractions
@@ -65,21 +65,23 @@ small LMCache key/metadata patch plus quality accounting.
 
 This covers pairs such as 8B and 14B variants from the same family/architecture. If KV
 layout is identical, direct aliasing can be tested. If layer count, KV heads, or head dim
-differs, the plan becomes `layerwise_projection` and must wait for calibration. The main
-development work is layer mapping, head mapping, projection materialization, and partial
+differs, the plan becomes `hidden_state_bridge` and must wait for calibration. The main
+development work is layer mapping, pre-KV hidden-state bridging, target W_K/W_V/RoPE restore, and partial
 reuse policy.
 
 The implemented MVP makes this scenario artifact-driven:
 
 - `CalibrationManifest` binds one source model, one target model, one direction, a layer
-  map, a projection spec, and quality-gate results.
+  map, a hidden bridge spec, a target KV restore spec, a legacy projection spec, and quality-gate results.
 - `LayerMap` must cover every target layer. The default builder uses linear depth
   interpolation; later calibration can replace the score with CKA/SVCCA alignment.
-- `ProjectionSpec` records source/target KV width. The current deterministic materializer
-  uses identity-pad-truncate projection as a scaffold for learned per-layer projections.
-- Planner execution requires a `calibration_id`; when an `artifact_uri` is supplied, model
-  ids, tokenizer/shape contract, config hashes, layer coverage, projection shape, and
-  quality gates are validated before returning `ready`.
+- `HiddenBridgeSpec` records `pre_kv_hidden` width/depth mapping. The current deterministic
+  materializer uses identity-pad-truncate as a scaffold for learned low-rank bridge weights.
+- `KVRestoreSpec` records that target-shaped KV is restored by the target model W_K/W_V/RoPE path.
+- `ProjectionSpec` remains as a legacy KV-projection baseline/control artifact.
+- Planner execution requires both `calibration_id` and a local `artifact_uri`; model ids,
+  tokenizer/shape contract, config hashes, layer coverage, hidden bridge shape, restore shape,
+  and quality gates are validated before returning `ready`.
 - Runtime cost gating rejects reuse when estimated materialization cost exceeds 70% of the
   target native prefill cost.
 

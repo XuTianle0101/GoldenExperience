@@ -1,0 +1,61 @@
+{
+  "config": {
+    "calibration_prompts": 8,
+    "ranked_with_interpolated_layer_map": true,
+    "max_length": 128,
+    "max_samples_per_layer": 512,
+    "prefix_tokens": 64,
+    "value_loss_weight": 0.0,
+    "key_loss_weight": 0.0
+  },
+  "results": [
+    {
+      "rank": 16,
+      "hidden_cosine_mean": 0.6922211063404878,
+      "key_cosine_mean": 0.8792894467711448,
+      "value_cosine_mean": 0.43581028425445156,
+      "decode_logit_cosine_mean": -0.1481684980293115,
+      "decode_top1_match_rate": 0.3333333333333333
+    },
+    {
+      "rank": 32,
+      "hidden_cosine_mean": 0.7165598914027212,
+      "key_cosine_mean": 0.8948158303896586,
+      "value_cosine_mean": 0.4815826702862978,
+      "decode_logit_cosine_mean": -0.0779696653286616,
+      "decode_top1_match_rate": 0.6666666666666666
+    },
+    {
+      "rank": 64,
+      "hidden_cosine_mean": 0.7401040722926457,
+      "key_cosine_mean": 0.9078075627485912,
+      "value_cosine_mean": 0.5309234487513702,
+      "decode_logit_cosine_mean": -0.02358542134364446,
+      "decode_top1_match_rate": 0.3333333333333333
+    },
+    {
+      "rank": 96,
+      "hidden_cosine_mean": 0.7540087851385276,
+      "key_cosine_mean": 0.9144869729876518,
+      "value_cosine_mean": 0.5608749926090241,
+      "decode_logit_cosine_mean": 0.07609646519025166,
+      "decode_top1_match_rate": 0.6666666666666666
+    },
+    {
+      "rank": 128,
+      "hidden_cosine_mean": 0.7631645826001963,
+      "key_cosine_mean": 0.9184405590097109,
+      "value_cosine_mean": 0.5803794535497825,
+      "decode_logit_cosine_mean": 0.07129094501336415,
+      "decode_top1_match_rate": 0.3333333333333333
+    },
+    {
+      "rank": 192,
+      "hidden_cosine_mean": 0.7738010716934999,
+      "key_cosine_mean": 0.9224642569820086,
+      "value_cosine_mean": 0.6028389890988667,
+      "decode_logit_cosine_mean": 0.16521060963471731,
+      "decode_top1_match_rate": 0.3333333333333333
+    }
+  ]
+}

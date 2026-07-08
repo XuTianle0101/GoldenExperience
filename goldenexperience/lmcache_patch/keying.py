@@ -23,6 +23,11 @@ class CrossModelCacheKey:
     target_config_hash: str | None = None
     layer_map_id: str | None = None
     projection_id: str | None = None
+    hidden_bridge_id: str | None = None
+    restore_id: str | None = None
+    state_kind: str | None = None
+    hidden_contract: str | None = None
+    target_kv_layout: str | None = None
     fallback_reason: str | None = None
 
     @classmethod
@@ -40,6 +45,11 @@ class CrossModelCacheKey:
             target_config_hash=plan.request.target.kv_shape.model_config_hash,
             layer_map_id=plan.layer_map_id,
             projection_id=plan.projection_id,
+            hidden_bridge_id=plan.hidden_bridge_id,
+            restore_id=plan.restore_id,
+            state_kind=plan.state_kind,
+            hidden_contract=plan.hidden_contract,
+            target_kv_layout=plan.target_kv_layout,
             fallback_reason=plan.fallback_reason,
         )
 
@@ -60,6 +70,11 @@ class CrossModelCacheKey:
             "ge_target_config_hash": self.target_config_hash,
             "ge_layer_map_id": self.layer_map_id,
             "ge_projection_id": self.projection_id,
+            "ge_hidden_bridge_id": self.hidden_bridge_id,
+            "ge_restore_id": self.restore_id,
+            "ge_state_kind": self.state_kind,
+            "ge_hidden_contract": self.hidden_contract,
+            "ge_target_kv_layout": self.target_kv_layout,
             "ge_fallback_reason": self.fallback_reason,
         }
         for key, value in optional.items():

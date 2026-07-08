@@ -54,7 +54,10 @@ class PatchManifest:
                 PatchHook(
                     name="goldenexperience_materializer",
                     target="LMCache MP retrieve path before KV is handed back to vLLM",
-                    purpose="Alias, project, or translate retrieved KV according to a ReusePlan.",
+                    purpose=(
+                        "Alias KV, bridge hidden states, or translate retrieved state "
+                        "according to a ReusePlan."
+                    ),
                     order=30,
                 ),
                 PatchHook(
@@ -70,8 +73,8 @@ class PatchManifest:
                 "implementations.",
                 "Do not replace Mooncake Store; only configure and observe it as persistent L2.",
                 "If a ReusePlan is not ready, fall back to the original vLLM plus LMCache MP path.",
-                "All cross-model reuse must carry scenario, transform_id, confidence, "
-                "and calibration metadata.",
+                "All cross-model reuse must carry scenario, state_kind, transform_id, "
+                "confidence, and calibration metadata.",
             ),
             notes=(
                 "The patch should be small enough to carry as a delta on top of upstream LMCache.",

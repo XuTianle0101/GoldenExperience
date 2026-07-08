@@ -17,7 +17,7 @@ def build_linear_layer_map(
     target_num_layers: int,
     method: str = "linear_interpolation",
 ) -> LayerMap:
-    """Map every target layer to the closest source layer by depth ratio."""
+    """Map each target layer to one or two source layers by depth interpolation."""
 
     if source_num_layers <= 0 or target_num_layers <= 0:
         raise ValueError("source_num_layers and target_num_layers must be positive")
@@ -27,12 +27,22 @@ def build_linear_layer_map(
     else:
         for target_layer_id in range(target_num_layers):
             ratio = target_layer_id / max(1, target_num_layers - 1)
-            source_layer_id = round(ratio * max(0, source_num_layers - 1))
+            source_position = ratio * max(0, source_num_layers - 1)
+            lower = int(source_position)
+            upper = min(source_num_layers - 1, lower + 1)
+            if lower == upper:
+                source_layer_ids = (lower,)
+                weights = (1.0,)
+            else:
+                upper_weight = source_position - lower
+                lower_weight = 1.0 - upper_weight
+                source_layer_ids = (lower, upper)
+                weights = (lower_weight, upper_weight)
             entries.append(
                 LayerMapEntry(
                     target_layer_id=target_layer_id,
-                    source_layer_ids=(int(source_layer_id),),
-                    weights=(1.0,),
+                    source_layer_ids=source_layer_ids,
+                    weights=weights,
                 )
             )
     layer_map_id = stable_artifact_id(

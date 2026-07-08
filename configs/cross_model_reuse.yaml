@@ -28,14 +28,15 @@ reuse_scenarios:
   golden_scale:
     enabled: true
     bidirectional: true
-    strategy: layerwise_projection
+    strategy: hidden_state_bridge
     default_pair: qwen3_8b_14b
     shadow_mode_first: true
     required_gates:
       - same_family_architecture
       - tokenizer_alignment
       - layer_mapping
-      - projection_calibration
+      - hidden_bridge_calibration
+      - target_kv_restore
       - artifact_hash_match
       - runtime_cost_gate
   cross_base_model:
@@ -61,20 +62,20 @@ model_pairs:
     target_model_id: Qwen/Qwen3-14B
     tokenizer_id: Qwen/Qwen3
     direction: small_to_large
-    calibration_id: qwen3_8b_to_14b_projection_v0
-    artifact_uri: artifacts/golden_scale/qwen3_8b_to_14b_projection_v0.json
+    calibration_id: qwen3_8b_to_14b_hidden_bridge_v0
+    artifact_uri: artifacts/golden_scale/qwen3_8b_to_14b_hidden_bridge_v0.json
   - name: large_to_small
     scenario: golden_scale
     source_model_id: Qwen/Qwen3-14B
     target_model_id: Qwen/Qwen3-8B
     tokenizer_id: Qwen/Qwen3
     direction: large_to_small
-    calibration_id: qwen3_14b_to_8b_projection_v0
-    artifact_uri: artifacts/golden_scale/qwen3_14b_to_8b_projection_v0.json
+    calibration_id: qwen3_14b_to_8b_hidden_bridge_v0
+    artifact_uri: artifacts/golden_scale/qwen3_14b_to_8b_hidden_bridge_v0.json
 
 quality_gates:
   min_lora_confidence: 0.95
-  min_projection_confidence: 0.85
+  min_hidden_bridge_confidence: 0.85
   min_cross_base_confidence: 0.70
   max_probe_logit_drift: null
   max_task_score_drop: null

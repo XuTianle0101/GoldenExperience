@@ -15,7 +15,7 @@
 | Scenario | Example Pair | Required Evidence | Primary Risk |
 | --- | --- | --- | --- |
 | Base <-> LoRA | `qwen3-8b` <-> `qwen3-8b-lora-math` | same base, tokenizer, KV shape, adapter drift gate | LoRA changes hidden states enough to hurt quality |
-| Size variant | `qwen3-8b` <-> `qwen3-14b` | layer/head map, projection calibration, prefix match | projection overhead or quality drift |
+| Size variant | `qwen3-8b` <-> `qwen3-14b` | layer/head map, hidden bridge calibration, prefix match | bridge materialization overhead or quality drift |
 | Different base | `qwen3-8b` <-> `llama-3.1-8b` | calibration set, tokenizer bridge, task allowlist | unsafe semantic mismatch |
 
 ## Workloads

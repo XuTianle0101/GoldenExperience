@@ -56,6 +56,8 @@ def main_fit() -> None:
     parser.add_argument("--prompt-manifest", type=Path, default=DEFAULT_ARTIFACT_DIR / "prompts.json")
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_ARTIFACT_DIR)
     parser.add_argument("--calibration-id", default=None, help="Use only for single-direction fit.")
+    parser.add_argument("--method", choices=["hidden_bridge", "kv_projection"], default="hidden_bridge")
+    parser.add_argument("--bridge-rank", type=int, default=256)
     args = parser.parse_args()
 
     directions = ["8b_to_14b", "14b_to_8b"] if args.direction == "bidirectional" else [args.direction]
@@ -65,8 +67,11 @@ def main_fit() -> None:
         source, target = qwen3_model_pair(direction)
         calibration_id = args.calibration_id
         if calibration_id is None:
-            calibration_id = f"qwen3_{direction}_projection_v0"
+            suffix = "hidden_bridge_v0" if args.method == "hidden_bridge" else "projection_v0"
+            calibration_id = f"qwen3_{direction}_{suffix}"
         quality = QualityGateResult.from_metrics(
+            hidden_cosine=0.99 if args.method == "hidden_bridge" else 0.0,
+            min_hidden_cosine=0.97 if args.method == "hidden_bridge" else None,
             kv_cosine=0.99,
             attention_proxy_cosine=0.99,
             perplexity_drift_pct=0.0,
@@ -79,6 +84,8 @@ def main_fit() -> None:
             prompts_count=prompt_count,
             quality=quality,
             artifact_root=str(args.output_dir),
+            method=args.method,
+            bridge_rank=args.bridge_rank,
         )
         output = args.output_dir / f"{calibration_id}.json"
         manifest.save(output)
@@ -104,6 +111,9 @@ def main_validate() -> None:
         "passed": not errors,
         "errors": errors,
         "quality": manifest.quality.__dict__,
+        "state_kind": manifest.state_kind,
+        "hidden_bridge_id": manifest.hidden_bridge_id,
+        "restore_id": manifest.restore_id,
         "layer_map_id": manifest.layer_map_id,
         "projection_id": manifest.projection_id,
     }
@@ -123,18 +133,19 @@ def main_bench() -> None:
     parser.add_argument("--prompt-tokens", type=int, default=4096)
     parser.add_argument("--target-prefill-ms", type=float, default=None)
     parser.add_argument("--projection-us-per-token-layer", type=float, default=0.35)
+    parser.add_argument("--hidden-bridge-us-per-token-layer", type=float, default=0.50)
     args = parser.parse_args()
 
     manifest = CalibrationManifest.load(args.manifest)
     target_prefill_ms = args.target_prefill_ms
     if target_prefill_ms is None:
         target_prefill_ms = args.prompt_tokens * manifest.target.kv_shape.num_layers * 0.004
-    materialization_ms = (
-        args.prompt_tokens
-        * manifest.target.kv_shape.num_layers
-        * args.projection_us_per_token_layer
-        / 1000.0
+    us_per_token_layer = (
+        args.hidden_bridge_us_per_token_layer
+        if manifest.hidden_bridge is not None
+        else args.projection_us_per_token_layer
     )
+    materialization_ms = args.prompt_tokens * manifest.target.kv_shape.num_layers * us_per_token_layer / 1000.0
     accepted = manifest.passed and materialization_ms <= 0.70 * target_prefill_ms
     payload = {
         "manifest": str(args.manifest),
@@ -144,6 +155,9 @@ def main_bench() -> None:
         "estimated_materialization_ms": round(materialization_ms, 4),
         "estimated_prefill_saved_ms": round(max(0.0, target_prefill_ms - materialization_ms), 4),
         "accepted_by_cost_gate": accepted,
+        "state_kind": manifest.state_kind,
+        "hidden_bridge_id": manifest.hidden_bridge_id,
+        "restore_id": manifest.restore_id,
         "projection_id": manifest.projection_id,
         "layer_map_id": manifest.layer_map_id,
     }

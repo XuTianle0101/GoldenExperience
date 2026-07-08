@@ -13,6 +13,8 @@ from goldenexperience.reuse.planner import CrossModelReusePlanner, ScenarioDescr
 from goldenexperience.size_variant import (
     CalibrationManifest,
     FallbackReason,
+    HiddenBridgeSpec,
+    KVRestoreSpec,
     LayerMap,
     LayerMapEntry,
     ProjectionSpec,
@@ -24,6 +26,8 @@ __all__ = [
     "CalibrationManifest",
     "CrossModelReusePlanner",
     "FallbackReason",
+    "HiddenBridgeSpec",
+    "KVRestoreSpec",
     "KVShape",
     "LayerMap",
     "LayerMapEntry",

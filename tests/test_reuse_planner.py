@@ -8,6 +8,7 @@ from goldenexperience.reuse import (
     ReuseScenario,
     ReuseStrategy,
 )
+from goldenexperience.size_variant import build_calibration_manifest
 
 
 def make_model(
@@ -25,7 +26,17 @@ def make_model(
         architecture=architecture,
         tokenizer_id=tokenizer_id,
         parameter_count_b=size_b,
-        kv_shape=KVShape(num_layers=layers, num_key_value_heads=8, head_dim=head_dim),
+        kv_shape=KVShape(
+            num_layers=layers,
+            hidden_size=4096 if size_b <= 8 else 5120,
+            num_attention_heads=32 if size_b <= 8 else 40,
+            num_key_value_heads=8,
+            head_dim=head_dim,
+            dtype="bfloat16",
+            rope_theta=1_000_000.0,
+            model_config_hash=f"{model_id}-hash",
+            tokenizer_hash="qwen3-tokenizer-hash",
+        ),
     )
 
 
@@ -63,13 +74,13 @@ def test_size_variant_requires_calibration_when_shape_differs() -> None:
     )
 
     assert plan.scenario == ReuseScenario.SAME_MODEL_SIZE_VARIANT
-    assert plan.strategy == ReuseStrategy.LAYERWISE_PROJECTION
+    assert plan.strategy == ReuseStrategy.HIDDEN_STATE_BRIDGE
     assert plan.status == PlanStatus.NEEDS_CALIBRATION
     assert not plan.executable
-    assert "projection_calibration" in plan.required_gates
+    assert "hidden_bridge_calibration" in plan.required_gates
 
 
-def test_size_variant_with_calibration_is_executable() -> None:
+def test_size_variant_with_calibration_id_still_needs_artifact() -> None:
     small = make_model("qwen3-8b", 8, layers=36)
     large = make_model("qwen3-14b", 14, layers=40)
 
@@ -78,11 +89,35 @@ def test_size_variant_with_calibration_is_executable() -> None:
             source=small,
             target=large,
             prefix_hash="shared",
-            calibration_id="qwen3_projection_v0",
+            calibration_id="qwen3_8b_to_14b_hidden_bridge_v0",
+        )
+    )
+
+    assert plan.status == PlanStatus.NEEDS_CALIBRATION
+    assert not plan.executable
+
+
+def test_size_variant_with_hidden_bridge_artifact_is_executable(tmp_path) -> None:
+    small = make_model("qwen3-8b", 8, layers=36)
+    large = make_model("qwen3-14b", 14, layers=40)
+    manifest = build_calibration_manifest(small, large, calibration_id="qwen3_8b_to_14b_hidden_bridge_v0")
+    path = tmp_path / "qwen3_8b_to_14b_hidden_bridge_v0.json"
+    manifest.save(path)
+
+    plan = CrossModelReusePlanner().plan(
+        ReuseRequest(
+            source=small,
+            target=large,
+            prefix_hash="shared",
+            calibration_id=manifest.calibration_id,
+            artifact_uri=str(path),
         )
     )
 
     assert plan.status == PlanStatus.READY
+    assert plan.strategy == ReuseStrategy.HIDDEN_STATE_BRIDGE
+    assert plan.hidden_bridge_id == manifest.hidden_bridge_id
+    assert plan.restore_id == manifest.restore_id
     assert plan.executable
 
 

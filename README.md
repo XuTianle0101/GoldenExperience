@@ -26,7 +26,7 @@ The research/development target is three GoldenExperience reuse tracks:
 | Track Name | Scenario | Goal | Default Strategy | Safety Gate |
 | --- | --- | --- | --- | --- |
 | GoldenLoRA | Base model <-> LoRA model | Reuse KV between a model and its LoRA fine-tuned variant | Adapter-delta gated aliasing | Same base, tokenizer, KV layout, LoRA drift probe |
-| GoldenScale | Same model, different parameter sizes | Reuse KV across variants such as 8B <-> 14B | Direct alias if shapes match; otherwise layerwise projection | Layer/head mapping and projection calibration |
+| GoldenScale | Same model, different parameter sizes | Reuse KV across variants such as 8B <-> 14B | Direct alias if shapes match; otherwise hidden-state bridge | Layer/head mapping and hidden bridge calibration |
 | GoldenBridge | Different base models | Explore broader cross-base reuse | Learned translator | Explicit calibration set, tokenizer bridge, task allowlist |
 
 The names map to the implementation scenarios as follows: `GoldenLoRA` targets
@@ -109,8 +109,8 @@ golden-scale-fit \
   --direction bidirectional \
   --prompt-manifest artifacts/golden_scale/prompts.json \
   --output-dir artifacts/golden_scale
-golden-scale-validate artifacts/golden_scale/qwen3_8b_to_14b_projection_v0.json
-golden-scale-bench artifacts/golden_scale/qwen3_14b_to_8b_projection_v0.json
+golden-scale-validate artifacts/golden_scale/qwen3_8b_to_14b_hidden_bridge_v0.json
+golden-scale-bench artifacts/golden_scale/qwen3_14b_to_8b_hidden_bridge_v0.json
 ```
 
 ## Deployment Flow
@@ -336,7 +336,7 @@ be executed inside LMCache MP.
 
 The first GoldenScale MVP targets bidirectional `Qwen/Qwen3-8B` and
 `Qwen/Qwen3-14B` reuse. GoldenExperience treats each direction as an independent
-artifact because 8B->14B and 14B->8B need different layer maps, projection specs, cost
+artifact because 8B->14B and 14B->8B need different layer maps, hidden bridge specs, target KV restore specs, cost
 estimates, and quality gates.
 
 The artifact flow is:
@@ -353,17 +353,19 @@ shared prompts
 The MVP artifact contains:
 
 - `LayerMap`: covers every target layer and maps it to source layer ids.
-- `ProjectionSpec`: source/target KV width, KV heads, head dim, method, and projection id.
-- `QualityGateResult`: offline/shadow gate metrics such as KV cosine and perplexity drift.
-- sidecar ids: `pair_id`, `direction`, `calibration_id`, `layer_map_id`, `projection_id`,
-  source/target config hashes, and fallback reason.
+- `HiddenBridgeSpec`: maps `pre_kv_hidden` from small-model width to large-model width.
+- `KVRestoreSpec`: records target-model W_K/W_V/RoPE restore contract and GQA KV layout.
+- `ProjectionSpec`: retained as a legacy KV-projection baseline/control artifact.
+- `QualityGateResult`: offline/shadow metrics such as hidden cosine, KV cosine, attention proxy cosine, and perplexity drift.
+- sidecar ids: `pair_id`, `direction`, `calibration_id`, `layer_map_id`, `hidden_bridge_id`, `restore_id`,
+  source/target config hashes, state kind, and fallback reason.
 
 Runtime behavior remains conservative:
 
 - Prefix token ids must match exactly; chunk alignment is required.
-- The materializer must output full target-shaped KV for every target layer.
+- The materializer bridges `h_small -> h_large_hat`, then target-model W_K/W_V/RoPE restores full target-shaped KV.
 - `estimated_materialization_ms` must be <= 70% of target prefill cost.
-- Any tokenizer, RoPE, config hash, artifact, layer-map, projection, or quality mismatch
+- Any tokenizer, RoPE, config hash, artifact, layer-map, hidden-bridge, restore, or quality mismatch
   falls back to the original vLLM + LMCache MP target prefill path.
 
 ## Minimal Planner Example

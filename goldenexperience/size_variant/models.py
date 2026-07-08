@@ -124,10 +124,74 @@ class ProjectionSpec:
 
 
 @dataclass(frozen=True)
+class HiddenBridgeSpec:
+    """Hidden-state bridge contract for cross-scale KV restoration."""
+
+    bridge_id: str
+    pair_id: str
+    direction: SizeVariantDirection
+    source_hidden_size: int
+    target_hidden_size: int
+    source_num_layers: int
+    target_num_layers: int
+    method: str = "low_rank_linear"
+    capture_point: str = "pre_kv_hidden"
+    weight_uri: str | None = None
+    rank: int | None = 256
+
+    def validate(self) -> list[str]:
+        errors = []
+        if self.source_hidden_size <= 0 or self.target_hidden_size <= 0:
+            errors.append("hidden bridge widths must be positive")
+        if self.source_num_layers <= 0 or self.target_num_layers <= 0:
+            errors.append("hidden bridge layer counts must be positive")
+        if self.capture_point != "pre_kv_hidden":
+            errors.append("only pre_kv_hidden capture is supported")
+        if self.method not in {"low_rank_linear", "identity_pad_truncate"}:
+            errors.append("unsupported hidden bridge method")
+        if self.rank is not None and self.rank <= 0:
+            errors.append("hidden bridge rank must be positive")
+        return errors
+
+
+@dataclass(frozen=True)
+class KVRestoreSpec:
+    """Target-model KV restore contract from bridged hidden states."""
+
+    restore_id: str
+    pair_id: str
+    direction: SizeVariantDirection
+    target_model_id: str
+    target_hidden_size: int
+    target_kv_width: int
+    target_kv_heads: int
+    target_head_dim: int
+    method: str = "target_kv_projection"
+    target_kv_layout: str = "gqa_paged_attention"
+    weight_source: str = "target_model"
+    rope_applied: bool = True
+
+    def validate(self) -> list[str]:
+        errors = []
+        if self.target_hidden_size <= 0:
+            errors.append("restore target hidden size must be positive")
+        if self.target_kv_width != self.target_kv_heads * self.target_head_dim:
+            errors.append("restore target_kv_width must equal target_kv_heads * target_head_dim")
+        if self.target_kv_width <= 0:
+            errors.append("restore target KV width must be positive")
+        if self.method != "target_kv_projection":
+            errors.append("unsupported KV restore method")
+        if self.weight_source != "target_model":
+            errors.append("KV restore must use target_model weights")
+        return errors
+
+
+@dataclass(frozen=True)
 class QualityGateResult:
     """Offline or shadow-mode quality gate result."""
 
     passed: bool
+    hidden_cosine: float = 0.0
     kv_cosine: float = 0.0
     attention_proxy_cosine: float = 0.0
     perplexity_drift_pct: float = 0.0
@@ -141,12 +205,16 @@ class QualityGateResult:
         attention_proxy_cosine: float,
         perplexity_drift_pct: float,
         task_score_drop_pct: float,
+        hidden_cosine: float = 0.0,
+        min_hidden_cosine: float | None = None,
         min_kv_cosine: float = 0.90,
         min_attention_proxy_cosine: float = 0.95,
         max_perplexity_drift_pct: float = 5.0,
         max_task_score_drop_pct: float = 2.0,
     ) -> "QualityGateResult":
         reasons: list[str] = []
+        if min_hidden_cosine is not None and hidden_cosine < min_hidden_cosine:
+            reasons.append("hidden_cosine_below_threshold")
         if kv_cosine < min_kv_cosine:
             reasons.append("kv_cosine_below_threshold")
         if attention_proxy_cosine < min_attention_proxy_cosine:
@@ -157,6 +225,7 @@ class QualityGateResult:
             reasons.append("task_score_drop_above_threshold")
         return cls(
             passed=not reasons,
+            hidden_cosine=hidden_cosine,
             kv_cosine=kv_cosine,
             attention_proxy_cosine=attention_proxy_cosine,
             perplexity_drift_pct=perplexity_drift_pct,
@@ -177,6 +246,8 @@ class CalibrationManifest:
     layer_map: LayerMap
     projection: ProjectionSpec
     quality: QualityGateResult
+    hidden_bridge: HiddenBridgeSpec | None = None
+    kv_restore: KVRestoreSpec | None = None
     artifact_root: str = "artifacts/golden_scale"
     prompts_count: int = 0
     created_by: str = "golden-scale-fit"
@@ -190,6 +261,18 @@ class CalibrationManifest:
     @property
     def projection_id(self) -> str:
         return self.projection.projection_id
+
+    @property
+    def hidden_bridge_id(self) -> str | None:
+        return self.hidden_bridge.bridge_id if self.hidden_bridge is not None else None
+
+    @property
+    def restore_id(self) -> str | None:
+        return self.kv_restore.restore_id if self.kv_restore is not None else None
+
+    @property
+    def state_kind(self) -> str:
+        return "hidden" if self.hidden_bridge is not None else "kv"
 
     @property
     def passed(self) -> bool:
@@ -213,6 +296,34 @@ class CalibrationManifest:
             errors.append("layer map/projection pair_id must match manifest pair_id")
         if self.layer_map.direction != self.direction or self.projection.direction != self.direction:
             errors.append("layer map/projection direction must match manifest direction")
+        if self.hidden_bridge is not None:
+            errors.extend(self.hidden_bridge.validate())
+            if self.hidden_bridge.pair_id != self.pair_id:
+                errors.append("hidden bridge pair_id must match manifest pair_id")
+            if self.hidden_bridge.direction != self.direction:
+                errors.append("hidden bridge direction must match manifest direction")
+            if self.hidden_bridge.source_num_layers != self.source.kv_shape.num_layers:
+                errors.append("hidden bridge source depth does not match source model")
+            if self.hidden_bridge.target_num_layers != self.target.kv_shape.num_layers:
+                errors.append("hidden bridge target depth does not match target model")
+            if self.source.kv_shape.hidden_size and self.hidden_bridge.source_hidden_size != self.source.kv_shape.hidden_size:
+                errors.append("hidden bridge source width does not match source model")
+            if self.target.kv_shape.hidden_size and self.hidden_bridge.target_hidden_size != self.target.kv_shape.hidden_size:
+                errors.append("hidden bridge target width does not match target model")
+        if self.kv_restore is not None:
+            errors.extend(self.kv_restore.validate())
+            if self.kv_restore.pair_id != self.pair_id:
+                errors.append("KV restore pair_id must match manifest pair_id")
+            if self.kv_restore.direction != self.direction:
+                errors.append("KV restore direction must match manifest direction")
+            if self.kv_restore.target_model_id != self.target.model_id:
+                errors.append("KV restore target model differs from manifest target")
+            if self.target.kv_shape.hidden_size and self.kv_restore.target_hidden_size != self.target.kv_shape.hidden_size:
+                errors.append("KV restore hidden width does not match target model")
+            if self.kv_restore.target_kv_width != kv_width(self.target.kv_shape):
+                errors.append("KV restore target width does not match target KV shape")
+        if (self.hidden_bridge is None) != (self.kv_restore is None):
+            errors.append("hidden bridge and KV restore specs must be provided together")
         errors.extend(self.layer_map.validate())
         errors.extend(self.projection.validate())
         if not self.quality.passed:
@@ -224,6 +335,10 @@ class CalibrationManifest:
         payload["direction"] = self.direction.value
         payload["layer_map"]["direction"] = self.layer_map.direction.value
         payload["projection"]["direction"] = self.projection.direction.value
+        if payload.get("hidden_bridge") is not None:
+            payload["hidden_bridge"]["direction"] = self.hidden_bridge.direction.value  # type: ignore[union-attr]
+        if payload.get("kv_restore") is not None:
+            payload["kv_restore"]["direction"] = self.kv_restore.direction.value  # type: ignore[union-attr]
         return payload
 
     @classmethod
@@ -264,8 +379,42 @@ class CalibrationManifest:
             weight_uri=projection_payload.get("weight_uri"),
             rank=projection_payload.get("rank"),
         )
+        hidden_bridge = None
+        hidden_bridge_payload = payload.get("hidden_bridge")
+        if hidden_bridge_payload is not None:
+            hidden_bridge = HiddenBridgeSpec(
+                bridge_id=hidden_bridge_payload["bridge_id"],
+                pair_id=hidden_bridge_payload["pair_id"],
+                direction=SizeVariantDirection(hidden_bridge_payload["direction"]),
+                source_hidden_size=int(hidden_bridge_payload["source_hidden_size"]),
+                target_hidden_size=int(hidden_bridge_payload["target_hidden_size"]),
+                source_num_layers=int(hidden_bridge_payload["source_num_layers"]),
+                target_num_layers=int(hidden_bridge_payload["target_num_layers"]),
+                method=hidden_bridge_payload.get("method", "low_rank_linear"),
+                capture_point=hidden_bridge_payload.get("capture_point", "pre_kv_hidden"),
+                weight_uri=hidden_bridge_payload.get("weight_uri"),
+                rank=hidden_bridge_payload.get("rank"),
+            )
+        kv_restore = None
+        kv_restore_payload = payload.get("kv_restore")
+        if kv_restore_payload is not None:
+            kv_restore = KVRestoreSpec(
+                restore_id=kv_restore_payload["restore_id"],
+                pair_id=kv_restore_payload["pair_id"],
+                direction=SizeVariantDirection(kv_restore_payload["direction"]),
+                target_model_id=kv_restore_payload["target_model_id"],
+                target_hidden_size=int(kv_restore_payload["target_hidden_size"]),
+                target_kv_width=int(kv_restore_payload["target_kv_width"]),
+                target_kv_heads=int(kv_restore_payload["target_kv_heads"]),
+                target_head_dim=int(kv_restore_payload["target_head_dim"]),
+                method=kv_restore_payload.get("method", "target_kv_projection"),
+                target_kv_layout=kv_restore_payload.get("target_kv_layout", "gqa_paged_attention"),
+                weight_source=kv_restore_payload.get("weight_source", "target_model"),
+                rope_applied=bool(kv_restore_payload.get("rope_applied", True)),
+            )
         quality = QualityGateResult(
             passed=bool(quality_payload["passed"]),
+            hidden_cosine=float(quality_payload.get("hidden_cosine", 0.0)),
             kv_cosine=float(quality_payload.get("kv_cosine", 0.0)),
             attention_proxy_cosine=float(quality_payload.get("attention_proxy_cosine", 0.0)),
             perplexity_drift_pct=float(quality_payload.get("perplexity_drift_pct", 0.0)),
@@ -281,6 +430,8 @@ class CalibrationManifest:
             layer_map=layer_map,
             projection=projection,
             quality=quality,
+            hidden_bridge=hidden_bridge,
+            kv_restore=kv_restore,
             artifact_root=payload.get("artifact_root", "artifacts/golden_scale"),
             prompts_count=int(payload.get("prompts_count", 0)),
             created_by=payload.get("created_by", "golden-scale-fit"),

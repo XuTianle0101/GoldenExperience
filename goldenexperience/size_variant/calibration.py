@@ -15,7 +15,11 @@ from goldenexperience.size_variant.models import (
     pair_id_for,
     stable_artifact_id,
 )
-from goldenexperience.size_variant.projection import build_projection_spec
+from goldenexperience.size_variant.projection import (
+    build_hidden_bridge_spec,
+    build_kv_restore_spec,
+    build_projection_spec,
+)
 
 
 QWEN3_8B = ModelRef(
@@ -72,6 +76,8 @@ def build_calibration_manifest(
     prompts_count: int = 0,
     quality: QualityGateResult | None = None,
     artifact_root: str = "artifacts/golden_scale",
+    method: str = "hidden_bridge",
+    bridge_rank: int | None = 256,
 ) -> CalibrationManifest:
     direction = infer_direction(source, target)
     pair_id = pair_id_for(source, target)
@@ -90,7 +96,33 @@ def build_calibration_manifest(
         source_head_dim=source.kv_shape.head_dim,
         target_head_dim=target.kv_shape.head_dim,
     )
+    hidden_bridge = None
+    kv_restore = None
+    if method == "hidden_bridge":
+        if source.kv_shape.hidden_size is None or target.kv_shape.hidden_size is None:
+            raise ValueError("hidden_bridge calibration requires source and target hidden_size")
+        hidden_bridge = build_hidden_bridge_spec(
+            pair_id=pair_id,
+            direction=direction,
+            source_hidden_size=source.kv_shape.hidden_size,
+            target_hidden_size=target.kv_shape.hidden_size,
+            source_num_layers=source.kv_shape.num_layers,
+            target_num_layers=target.kv_shape.num_layers,
+            rank=bridge_rank,
+        )
+        kv_restore = build_kv_restore_spec(
+            pair_id=pair_id,
+            direction=direction,
+            target_model_id=target.model_id,
+            target_hidden_size=target.kv_shape.hidden_size,
+            target_kv_heads=target.kv_shape.num_key_value_heads,
+            target_head_dim=target.kv_shape.head_dim,
+        )
+    elif method != "kv_projection":
+        raise ValueError(f"Unknown calibration method: {method}")
     quality = quality or QualityGateResult.from_metrics(
+        hidden_cosine=0.99 if hidden_bridge is not None else 0.0,
+        min_hidden_cosine=0.97 if hidden_bridge is not None else None,
         kv_cosine=0.99,
         attention_proxy_cosine=0.99,
         perplexity_drift_pct=0.0,
@@ -105,6 +137,8 @@ def build_calibration_manifest(
         layer_map=layer_map,
         projection=projection,
         quality=quality,
+        hidden_bridge=hidden_bridge,
+        kv_restore=kv_restore,
         artifact_root=artifact_root,
         prompts_count=prompts_count,
         references=(
@@ -113,8 +147,11 @@ def build_calibration_manifest(
             "mooncake_store_l2",
             "pagedattention_block_kv",
             "cka_layer_alignment",
+            "hcache_hidden_state_recovery",
         ),
         metadata={
+            "state_kind": "hidden" if hidden_bridge is not None else "kv",
+            "hidden_contract": "pre_kv_hidden" if hidden_bridge is not None else "",
             "source_kv_width": kv_width(source.kv_shape),
             "target_kv_width": kv_width(target.kv_shape),
         },

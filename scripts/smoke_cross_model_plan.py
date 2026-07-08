@@ -7,6 +7,7 @@ import argparse
 import importlib.util
 import json
 import sys
+import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -15,6 +16,7 @@ if str(ROOT) not in sys.path:
 
 from goldenexperience.reuse import CrossModelReusePlanner, KVShape, ModelRef, ReuseRequest
 from goldenexperience.runtime import RuntimeConfig, check_runtime
+from goldenexperience.size_variant import build_calibration_manifest
 
 
 def make_model(
@@ -32,7 +34,17 @@ def make_model(
         architecture=architecture,
         tokenizer_id=tokenizer_id,
         parameter_count_b=size_b,
-        kv_shape=KVShape(num_layers=layers, num_key_value_heads=8, head_dim=head_dim),
+        kv_shape=KVShape(
+            num_layers=layers,
+            hidden_size=4096 if size_b <= 8 else 5120,
+            num_attention_heads=32 if size_b <= 8 else 40,
+            num_key_value_heads=8,
+            head_dim=head_dim,
+            dtype="bfloat16" if family == "qwen" else "float16",
+            rope_theta=1_000_000.0 if family == "qwen" else None,
+            model_config_hash=f"{model_id}-hash",
+            tokenizer_hash=f"{tokenizer_id}-hash",
+        ),
     )
 
 
@@ -60,19 +72,24 @@ def build_plans() -> list[dict[str, object]]:
         tokenizer_id="llama-3.1",
     )
 
-    requests = [
-        ReuseRequest(source=base, target=lora, prefix_hash="shared-system-prompt"),
-        ReuseRequest(
-            source=base,
-            target=large,
-            prefix_hash="shared-system-prompt",
-            calibration_id="qwen3_projection_v0",
-            estimated_target_prefill_ms=100.0,
-            estimated_materialization_ms=30.0,
-        ),
-        ReuseRequest(source=base, target=llama, prefix_hash="shared-system-prompt"),
-    ]
-    plans = [planner.plan(request) for request in requests]
+    with tempfile.TemporaryDirectory(prefix="ge-smoke-") as temp_dir:
+        manifest = build_calibration_manifest(base, large, calibration_id="qwen3_8b_to_14b_hidden_bridge_v0")
+        artifact_path = Path(temp_dir) / "qwen3_8b_to_14b_hidden_bridge_v0.json"
+        manifest.save(artifact_path)
+        requests = [
+            ReuseRequest(source=base, target=lora, prefix_hash="shared-system-prompt"),
+            ReuseRequest(
+                source=base,
+                target=large,
+                prefix_hash="shared-system-prompt",
+                calibration_id=manifest.calibration_id,
+                artifact_uri=str(artifact_path),
+                estimated_target_prefill_ms=100.0,
+                estimated_materialization_ms=30.0,
+            ),
+            ReuseRequest(source=base, target=llama, prefix_hash="shared-system-prompt"),
+        ]
+        plans = [planner.plan(request) for request in requests]
     return [
         {
             "source": plan.request.source.model_id,
@@ -87,6 +104,9 @@ def build_plans() -> list[dict[str, object]]:
             "pair_id": plan.pair_id,
             "layer_map_id": plan.layer_map_id,
             "projection_id": plan.projection_id,
+            "hidden_bridge_id": plan.hidden_bridge_id,
+            "restore_id": plan.restore_id,
+            "state_kind": plan.state_kind,
             "estimated_prefill_saved_ms": plan.estimated_prefill_saved_ms,
             "estimated_materialization_ms": plan.estimated_materialization_ms,
             "fallback_reason": plan.fallback_reason,

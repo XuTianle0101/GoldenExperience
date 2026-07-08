@@ -9,7 +9,7 @@
    across an inference-engine restart.
 4. Base/LoRA single-GPU test: run the GoldenExperience metadata patch against the shared
    LMCache MP substrate.
-5. GoldenScale test: enable calibrated layer/head mapping and projection.
+5. GoldenScale test: enable calibrated hidden-state bridge and target KV restore.
 6. Cross-base exploratory test: enable only with calibration id and explicit task allowlist.
 
 ## Smoke Test
@@ -21,7 +21,7 @@ python3 -m pip install -e ".[dev]"
 pytest
 golden-patch-manifest --output artifacts/patch_manifest.md
 golden-scale-fit --direction bidirectional --output-dir /tmp/ge-golden-scale
-golden-scale-validate /tmp/ge-golden-scale/qwen3_8b_to_14b_projection_v0.json
+golden-scale-validate /tmp/ge-golden-scale/qwen3_8b_to_14b_hidden_bridge_v0.json
 ```
 
 ## Runtime Stack
@@ -43,9 +43,9 @@ commits or package versions used for vLLM, LMCache, and Mooncake.
 - vLLM/LMCache MP/Mooncake launch scripts and generated adapter config files.
 - Non-default diagnostic configs only when filesystem-L2 fallback comparisons are used.
 - Model pair manifests with `ModelRef` and `KVShape` fields.
-- Calibration datasets or manifests for projection/translator paths.
-- Size-variant artifacts: `CalibrationManifest`, `LayerMap`, `ProjectionSpec`, and
-  `QualityGateResult` for each direction.
+- Calibration datasets or manifests for hidden-bridge/projection/translator paths.
+- Size-variant artifacts: `CalibrationManifest`, `LayerMap`, `HiddenBridgeSpec`, `KVRestoreSpec`,
+  legacy `ProjectionSpec`, and `QualityGateResult` for each direction.
 - Raw per-request latency, reuse, fallback, and quality logs.
 
 ## Result Integrity

@@ -82,16 +82,16 @@ class CrossModelReusePlanner:
             ScenarioDescriptor(
                 scenario=ReuseScenario.SAME_MODEL_SIZE_VARIANT,
                 goal="Reuse KV across parameter-size variants of the same model line.",
-                default_strategy=ReuseStrategy.LAYERWISE_PROJECTION,
+                default_strategy=ReuseStrategy.HIDDEN_STATE_BRIDGE,
                 required_evidence=(
                     "same family and architecture",
                     "tokenizer alignment",
                     "layer/head mapping",
-                    "projection calibration when KV shapes differ",
+                    "hidden-state bridge calibration when KV shapes differ",
                 ),
                 development_focus=(
                     "layer alignment tables",
-                    "head_dim projection materializers",
+                    "pre-KV hidden-state bridge materializers",
                     "partial-depth reuse policy",
                 ),
             ),
@@ -142,8 +142,13 @@ class CrossModelReusePlanner:
 
     def _plan_size_variant(self, request: ReuseRequest) -> ReusePlan:
         same_layout = request.source.kv_shape.same_layout(request.target.kv_shape)
-        strategy = ReuseStrategy.DIRECT_SHAPE_ALIAS if same_layout else ReuseStrategy.LAYERWISE_PROJECTION
-        status = PlanStatus.READY if same_layout or request.calibration_id else PlanStatus.NEEDS_CALIBRATION
+        manifest = self._load_size_variant_manifest(request)
+        manifest_errors: list[str] = []
+        has_hidden_bridge = manifest is not None and manifest.hidden_bridge is not None
+        strategy = ReuseStrategy.DIRECT_SHAPE_ALIAS if same_layout else ReuseStrategy.HIDDEN_STATE_BRIDGE
+        if manifest is not None and not has_hidden_bridge and not same_layout:
+            strategy = ReuseStrategy.KV_PROJECTION_BASELINE
+        status = PlanStatus.READY if same_layout else PlanStatus.NEEDS_CALIBRATION
         confidence = self.same_shape_confidence if same_layout else self.projection_confidence
         fallback_reason: str | None = None
         gates = [
@@ -152,9 +157,9 @@ class CrossModelReusePlanner:
             "layer_mapping",
         ]
         if not same_layout:
-            gates.append("projection_calibration")
+            gates.extend(("hidden_bridge_calibration", "target_kv_restore"))
         notes = [
-            "Same model line with a parameter-size change; reuse is limited to mapped prefix KV.",
+            "Same model line with a parameter-size change; reuse is limited to mapped prefix state.",
         ]
         if not request.source.shares_tokenizer_with(request.target):
             status = PlanStatus.BLOCKED
@@ -166,9 +171,9 @@ class CrossModelReusePlanner:
             confidence = 0.0
             fallback_reason = FallbackReason.ROPE_MISMATCH.value
             notes.append("Runtime KV contract differs; dtype, RoPE, or sliding-window settings are incompatible.")
-        elif not same_layout and request.calibration_id is None:
+        elif not same_layout and manifest is None:
             fallback_reason = FallbackReason.MISSING_CALIBRATION.value
-            notes.append("Projection path is scaffolded but needs calibration before execution.")
+            notes.append("Hidden-state bridge path needs a validated calibration artifact before execution.")
         elif not validate_projection_cost(
             request.estimated_materialization_ms,
             request.estimated_target_prefill_ms,
@@ -178,7 +183,6 @@ class CrossModelReusePlanner:
             fallback_reason = FallbackReason.COST_GATE_FAILED.value
             notes.append("Projection cost gate failed; target prefill is cheaper than materialization.")
 
-        manifest = self._load_size_variant_manifest(request)
         if manifest is not None:
             manifest_errors = self._manifest_errors(request, manifest)
             if manifest_errors:
@@ -188,12 +192,38 @@ class CrossModelReusePlanner:
                 notes.extend(manifest_errors)
             else:
                 gates.append("artifact_hash_match")
-                confidence = min(confidence, manifest.quality.kv_cosine)
+                if has_hidden_bridge:
+                    status = PlanStatus.READY if status != PlanStatus.WARM_START_RECOMPUTE else status
+                    gates.append("pre_kv_hidden_contract")
+                    confidence = min(confidence, manifest.quality.hidden_cosine or manifest.quality.kv_cosine)
+                    notes.append("Using hidden-state bridge: h_small -> h_large_hat -> target W_K/W_V/RoPE -> KV.")
+                elif not same_layout:
+                    status = PlanStatus.READY if status != PlanStatus.WARM_START_RECOMPUTE else status
+                    gates.append("kv_projection_baseline")
+                    confidence = min(confidence, manifest.quality.kv_cosine)
+                    notes.append("Using legacy KV projection baseline because artifact has no hidden bridge spec.")
 
         direction = infer_direction(request.source, request.target).value
         pair_id = pair_id_for(request.source, request.target)
         layer_map_id = manifest.layer_map_id if manifest is not None and not manifest_errors else None
-        projection_id = manifest.projection_id if manifest is not None and not manifest_errors else None
+        projection_id = (
+            manifest.projection_id
+            if manifest is not None and not manifest_errors and not has_hidden_bridge
+            else None
+        )
+        hidden_bridge_id = manifest.hidden_bridge_id if manifest is not None and not manifest_errors else None
+        restore_id = manifest.restore_id if manifest is not None and not manifest_errors else None
+        state_kind = manifest.state_kind if manifest is not None and not manifest_errors else ("kv" if same_layout else "hidden")
+        hidden_contract = (
+            manifest.hidden_bridge.capture_point
+            if manifest is not None and manifest.hidden_bridge is not None and not manifest_errors
+            else None
+        )
+        target_kv_layout = (
+            manifest.kv_restore.target_kv_layout
+            if manifest is not None and manifest.kv_restore is not None and not manifest_errors
+            else None
+        )
         estimated_prefill_saved_ms = None
         if request.estimated_target_prefill_ms is not None and request.estimated_materialization_ms is not None:
             estimated_prefill_saved_ms = max(
@@ -213,6 +243,11 @@ class CrossModelReusePlanner:
             artifact_uri=request.artifact_uri,
             layer_map_id=layer_map_id,
             projection_id=projection_id,
+            hidden_bridge_id=hidden_bridge_id,
+            restore_id=restore_id,
+            state_kind=state_kind,
+            hidden_contract=hidden_contract,
+            target_kv_layout=target_kv_layout,
             estimated_prefill_saved_ms=estimated_prefill_saved_ms,
             estimated_materialization_ms=request.estimated_materialization_ms,
             fallback_reason=fallback_reason,
@@ -258,11 +293,16 @@ class CrossModelReusePlanner:
         artifact_uri: str | None = None,
         layer_map_id: str | None = None,
         projection_id: str | None = None,
+        hidden_bridge_id: str | None = None,
+        restore_id: str | None = None,
+        state_kind: str | None = None,
+        hidden_contract: str | None = None,
+        target_kv_layout: str | None = None,
         estimated_prefill_saved_ms: float | None = None,
         estimated_materialization_ms: float | None = None,
         fallback_reason: str | None = None,
     ) -> ReusePlan:
-        transform_id = projection_id or self._transform_id(request, scenario, strategy)
+        transform_id = hidden_bridge_id or projection_id or self._transform_id(request, scenario, strategy)
         return ReusePlan(
             request=request,
             scenario=scenario,
@@ -283,6 +323,11 @@ class CrossModelReusePlanner:
             artifact_uri=artifact_uri,
             layer_map_id=layer_map_id,
             projection_id=projection_id,
+            hidden_bridge_id=hidden_bridge_id,
+            restore_id=restore_id,
+            state_kind=state_kind,
+            hidden_contract=hidden_contract,
+            target_kv_layout=target_kv_layout,
             estimated_prefill_saved_ms=estimated_prefill_saved_ms,
             estimated_materialization_ms=estimated_materialization_ms,
             fallback_reason=fallback_reason,

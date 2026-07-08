@@ -1,0 +1,28 @@
+{
+  "config": {
+    "calibration_prompts": 32,
+    "rank": 192,
+    "max_length": 128,
+    "max_samples_per_layer": 2048,
+    "value_loss_weight": 0.0,
+    "key_loss_weight": 0.0
+  },
+  "results": [
+    {
+      "prefix_tokens": 32,
+      "hidden_cosine_mean": 0.7809167419870695,
+      "key_cosine_mean": 0.9270894040664036,
+      "value_cosine_mean": 0.6184066804746787,
+      "decode_logit_cosine_mean": 0.7600183486938477,
+      "decode_top1_match_rate": 0.6666666666666666
+    },
+    {
+      "prefix_tokens": 48,
+      "hidden_cosine_mean": 0.7769511811435222,
+      "key_cosine_mean": 0.9249599208434423,
+      "value_cosine_mean": 0.6086933630208174,
+      "decode_logit_cosine_mean": 0.5113632579644521,
+      "decode_top1_match_rate": 0.3333333333333333
+    }
+  ]
+}
