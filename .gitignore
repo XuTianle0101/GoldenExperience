@@ -19,3 +19,9 @@ artifacts/results/
 *.safetensors
 models/
 *.data
+
+# KV baseline raw runs can contain multi-GB Mooncake/LMCache cache data.
+/artifacts/kv_baseline/*
+!/artifacts/kv_baseline/README.md
+!/artifacts/kv_baseline/manifests/
+!/artifacts/kv_baseline/manifests/**

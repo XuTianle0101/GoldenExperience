@@ -165,16 +165,23 @@ Install only GoldenExperience if the runtime stack is already available:
 ```
 
 The script prefers `uv pip install` when `uv` is installed; otherwise it falls back to
-`python3 -m pip install`. It runs a strict `vLLM`/`LMCache`/`Mooncake` runtime check for
-package and golden-only modes; source mode defaults to a warning because Mooncake still
-needs its upstream build step. Use `--runtime-check strict|warn|skip` to override this.
-Runtime install details should still be checked against upstream vLLM, LMCache, and
-Mooncake docs when changing CUDA, Python, or package versions.
+`python3 -m pip install`. After installing dependencies it runs
+`scripts/patch_lmcache_mooncake_runtime.py` by default. That reproducibility patch creates
+the Mooncake `libmooncake_store.so` alias expected by LMCache, selects the Python
+`MooncakeDistributedStore` SET/GET adapter by default, and bypasses the native
+`batchIsExist` lookup crash path with an LMCache MP in-process key index. Set
+`GE_PATCH_MOONCAKE_RUNTIME=0` only if you intentionally want the unpatched upstream path.
+It runs a strict `vLLM`/`LMCache`/`Mooncake` runtime check for package and golden-only
+modes; source mode defaults to a warning because Mooncake still needs its upstream build
+step. Use `--runtime-check strict|warn|skip` to override this. Runtime install details
+should still be checked against upstream vLLM, LMCache, and Mooncake docs when changing
+CUDA, Python, or package versions.
 
 ### 2. Verify Planner and Runtime
 
 ```bash
 python3 scripts/smoke_cross_model_plan.py --check-runtime --strict-runtime
+python3 scripts/patch_lmcache_mooncake_runtime.py --check
 ```
 
 Expected planner output includes three rows:
@@ -239,6 +246,11 @@ Default local TCP + SSD settings:
 - `GE_LMCACHE_MP_HTTP_PORT=8081`, so LMCache MP HTTP does not collide with Mooncake metadata.
 - `GE_MOONCAKE_PROTOCOL=tcp`, `GE_MOONCAKE_STORAGE_ROOT=$GE_KV_CACHE_DIR/mooncake`.
 - `GE_MOONCAKE_PER_OP_WORKERS_JSON='{"lookup":2,"retrieve":8,"store":4}'`.
+- `LMCACHE_MOONCAKE_PYTHON_ADAPTER=1`, using Python Mooncake Store SET/GET while keeping
+  `LMCACHE_MOONCAKE_NATIVE_EXISTS=0` to avoid native `batchIsExist`.
+- Mooncake master defaults include `--client_ttl=600`, `--root_fs_dir` from the storage
+  root, and `--cluster_id` from `GE_RUN_ID`; override with `GE_MOONCAKE_MASTER_EXTRA_ARGS`
+  when needed.
 
 Default outputs are written under `artifacts/kv_baseline/<run_id>/`:
 
@@ -248,7 +260,19 @@ Default outputs are written under `artifacts/kv_baseline/<run_id>/`:
 - `requests/reuse.json`: second request with the same prompt after vLLM restart.
 - `logs/lmcache_mp_server.log`: persistent LMCache MP server evidence.
 - `logs/mooncake_master.log` and `logs/mooncake_metadata_server.log`: Mooncake service evidence.
+- `metrics/offload.prom` and `metrics/reuse.prom`: vLLM external KV transfer counters.
 - `summary.json`: request deltas plus store/retrieve/L2/Mooncake counters.
+
+Raw KV baseline run directories are ignored by Git. Keep only curated manifests under
+`artifacts/kv_baseline/manifests/` and store large KV seed payloads in an external artifact
+store:
+
+```bash
+python3 scripts/kv_baseline/export_kv_seed_manifest.py \
+  artifacts/kv_baseline/<run_id> \
+  --artifact-uri s3://bucket/ge-kv-seeds/<artifact_id>.tar.zst \
+  --output artifacts/kv_baseline/manifests/<run_id>.json
+```
 
 The script generates a long deterministic disk-offload prompt by default when
 `GE_FORCE_DISK_OFFLOAD=1`. Set `GE_PROMPT_FILE` and `GE_PROMPT_ID` to use your own prompt
@@ -271,10 +295,16 @@ Interpretation checklist:
 1. Confirm `requests/offload.json` contains the expected answer.
 2. Confirm `summary.json` reports `offload_has_disk_evidence=true`,
    `reuse_has_cache_evidence=true`, and `disk_reuse_success=true`.
-3. Confirm `logs/lmcache_mp_server.log` includes L2 or Mooncake store/retrieve evidence such
-   as `mooncake_store`, `StoreController`, `PrefetchController`, `EXISTS`, `GET`, or `SET`.
-4. Confirm `metadata.json` records the Mooncake storage root and service pids/log paths.
-5. Keep the whole `artifacts/kv_baseline/<run_id>/` directory as the same-model baseline for
+3. Confirm `metrics/reuse.prom` has `vllm:external_prefix_cache_hits_total > 0` and
+   `vllm:prompt_tokens_by_source_total{source="external_kv_transfer"} > 0`, while the
+   offload phase is dominated by `source="local_compute"`.
+4. Confirm `logs/lmcache_mp_server.log` includes Python Mooncake Store evidence:
+   `MooncakeStore SET`, `MooncakeStore EXISTS`, `MooncakeStore GET`, and
+   `L2 prefetch load completed`.
+5. Confirm `metadata.json` records `mooncake.enabled=true`, `l2_adapter_type=mooncake_store`,
+   the Mooncake storage root, and distinct offload/reuse vLLM service pids.
+6. Confirm the Mooncake storage root contains non-empty files, then keep the whole
+   `artifacts/kv_baseline/<run_id>/` directory as the same-model baseline for
    later cross-model KV reuse experiments.
 
 Compatibility and diagnostics:
@@ -287,6 +317,11 @@ scripts/kv_baseline/run_vllm_lmcache_mooncake_kv_baseline.sh -- --tensor-paralle
 
 Set `GE_KEEP_LMCACHE_MP_AFTER_RUN=1` or `GE_KEEP_MOONCAKE_AFTER_RUN=1` when you want to
 inspect live services after a run.
+
+The default Mooncake baseline intentionally uses the Python Mooncake Store SET/GET path
+because the native C++ `batchIsExist` path has shown compatibility crashes on missing keys
+in the package stack used for the local baseline. To test the native path explicitly, set
+`LMCACHE_MOONCAKE_PYTHON_ADAPTER=0` and `LMCACHE_MOONCAKE_NATIVE_EXISTS=1`.
 
 ### Current Runtime Limitation
 

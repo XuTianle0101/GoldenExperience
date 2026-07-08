@@ -47,6 +47,13 @@ for root in site_roots:
         for lib_dir in nvidia_root.glob("*/lib"):
             add(lib_dir)
 
+mooncake_spec = importlib.util.find_spec("mooncake")
+if mooncake_spec and mooncake_spec.submodule_search_locations:
+    for location in mooncake_spec.submodule_search_locations:
+        mooncake_dir = Path(location)
+        add(mooncake_dir)
+        add(mooncake_dir.parent / "mooncake_transfer_engine.libs")
+
 add(Path("/usr/local/cuda/lib64"))
 add(Path("/usr/local/nvidia/lib64"))
 print(":".join(paths))

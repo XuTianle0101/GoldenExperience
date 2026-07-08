@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import os
+import shlex
 import shutil
 import signal
 import site
@@ -13,10 +14,11 @@ import subprocess
 import sys
 import sysconfig
 import time
+from contextlib import suppress
 from pathlib import Path
 from typing import Any
 
-from goldenexperience.runtime.kv_baseline.config import BaselineConfig, REPO_ROOT
+from goldenexperience.runtime.kv_baseline.config import REPO_ROOT, BaselineConfig
 
 
 def ensure_command(command_name: str) -> None:
@@ -53,10 +55,8 @@ def _prepend_library_paths(env: dict[str, str]) -> None:
     for key in ("purelib", "platlib"):
         if value := sysconfig.get_paths().get(key):
             site_roots.add(Path(value))
-    try:
+    with suppress(AttributeError):
         site_roots.update(Path(value) for value in site.getsitepackages())
-    except AttributeError:
-        pass
 
     for root in site_roots:
         add(root)
@@ -64,6 +64,13 @@ def _prepend_library_paths(env: dict[str, str]) -> None:
         if nvidia_root.is_dir():
             for lib_dir in nvidia_root.glob("*/lib"):
                 add(lib_dir)
+
+    mooncake_spec = importlib.util.find_spec("mooncake")
+    if mooncake_spec and mooncake_spec.submodule_search_locations:
+        for location in mooncake_spec.submodule_search_locations:
+            mooncake_dir = Path(location)
+            add(mooncake_dir)
+            add(mooncake_dir.parent / "mooncake_transfer_engine.libs")
     add(Path("/usr/local/cuda/lib64"))
     add(Path("/usr/local/nvidia/lib64"))
 
@@ -105,6 +112,10 @@ def wait_for_tcp_port(host: str, port: int, timeout: float) -> bool:
         except OSError:
             time.sleep(1)
     return False
+
+
+def _args_have_flag(args: list[str], flag: str) -> bool:
+    return any(arg == flag or arg.startswith(flag + "=") for arg in args)
 
 
 def _metadata_path(config: BaselineConfig) -> Path:
@@ -203,6 +214,22 @@ class ProcessGroup:
         env["MOONCAKE_TE_META_DATA_SERVER"] = self.config.mooncake_metadata_server
         return env
 
+    def _extend_mooncake_master_args(self, command: list[str]) -> None:
+        extra = shlex.split(os.environ.get("GE_MOONCAKE_MASTER_EXTRA_ARGS", ""))
+        defaults = [
+            ("--client_ttl", os.environ.get("GE_MOONCAKE_MASTER_CLIENT_TTL", "600")),
+            ("--root_fs_dir", str(self.config.mooncake_storage_root)),
+            ("--cluster_id", self.config.run_id),
+        ]
+        for flag, value in defaults:
+            if (
+                value
+                and not _args_have_flag(command, flag)
+                and not _args_have_flag(extra, flag)
+            ):
+                command.extend([flag, value])
+        command.extend(extra)
+
     def _start_mooncake_master_embedded(self) -> None:
         ensure_command(self.config.mooncake_master_bin)
         log_path = self.config.log_dir / "mooncake_master.log"
@@ -216,8 +243,7 @@ class ProcessGroup:
             "--http_metadata_server_port",
             str(self.config.mooncake_metadata_port),
         ]
-        if extra := os.environ.get("GE_MOONCAKE_MASTER_EXTRA_ARGS"):
-            command.extend(extra.split())
+        self._extend_mooncake_master_args(command)
         print(f"Starting Mooncake master with embedded metadata; log: {log_path}")
         self.mooncake_master = self._start(command, log_path, self._mooncake_env())
         (self.config.run_dir / "mooncake_master.pid").write_text(
@@ -235,8 +261,7 @@ class ProcessGroup:
             "--port",
             str(self.config.mooncake_master_port),
         ]
-        if extra := os.environ.get("GE_MOONCAKE_MASTER_EXTRA_ARGS"):
-            command.extend(extra.split())
+        self._extend_mooncake_master_args(command)
         print(f"Starting Mooncake master; log: {log_path}")
         self.mooncake_master = self._start(command, log_path, self._mooncake_env())
         (self.config.run_dir / "mooncake_master.pid").write_text(

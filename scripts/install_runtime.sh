@@ -35,6 +35,8 @@ Environment:
   GE_MOONCAKE_REPO_URL   Same as --mooncake-repo.
   GE_LMCACHE_BUILD_MOONCAKE  Value for BUILD_MOONCAKE when installing LMCache source.
                              Default: 1.
+  GE_PATCH_MOONCAKE_RUNTIME  1 to apply the LMCache/Mooncake compatibility patch after
+                             installing packages; 0 to skip. Default: 1.
   GE_RUNTIME_CHECK       Same as --runtime-check.
 USAGE
 }
@@ -53,6 +55,7 @@ python_bin="${PYTHON_BIN:-python3}"
 use_uv="${GE_USE_UV:-1}"
 lmcache_build_mooncake="${GE_LMCACHE_BUILD_MOONCAKE:-1}"
 runtime_check="${GE_RUNTIME_CHECK:-}"
+patch_mooncake_runtime="${GE_PATCH_MOONCAKE_RUNTIME:-1}"
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
@@ -184,6 +187,12 @@ case "$mode" in
     install_goldenexperience
     ;;
 esac
+
+if [ "$patch_mooncake_runtime" = "1" ]; then
+  "$python_bin" scripts/patch_lmcache_mooncake_runtime.py
+else
+  echo "Skipping LMCache/Mooncake runtime patch."
+fi
 
 case "$runtime_check" in
   strict)

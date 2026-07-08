@@ -1,0 +1,108 @@
+{
+  "artifact": {
+    "artifact_uri": null,
+    "bundle_bytes": null,
+    "bundle_path": null,
+    "bundle_sha256": null,
+    "raw_run_directory_is_git_ignored": true
+  },
+  "generated_at_utc": "2026-07-08T03:00:19Z",
+  "l2": {
+    "adapter_type": "fs",
+    "l2_store_policy": "skip_l1",
+    "mooncake_cluster_id": "qwen3_8b_fs_codex_20260707T071601Z",
+    "mooncake_enabled": false,
+    "mooncake_master_server_addr": "127.0.0.1:50051",
+    "mooncake_metadata_server": "http://127.0.0.1:8080/metadata",
+    "mooncake_protocol": "tcp"
+  },
+  "notes": [
+    "Legacy filesystem-L2 proof manifest retained after removing raw run files from Git."
+  ],
+  "proof": {
+    "disk_reuse_success": true,
+    "log_counts": {
+      "mooncake_store_get": 0,
+      "mooncake_store_set": 0,
+      "reuse_l2_prefetch_load_completed": 1,
+      "reuse_mooncake_store_get": 0
+    },
+    "metrics": {
+      "offload_external_prefix_cache_hits_total": 0.0,
+      "offload_prompt_tokens_local_compute": 13686.0,
+      "reuse_external_prefix_cache_hits_total": 13664.0,
+      "reuse_prompt_tokens_external_kv_transfer": 13664.0,
+      "reuse_prompt_tokens_local_compute": 22.0
+    },
+    "offload_has_disk_evidence": true,
+    "reuse_has_cache_evidence": true
+  },
+  "requests": {
+    "deltas": {
+      "reuse_minus_offload_e2e_ms": 110014.58815764636,
+      "reuse_minus_offload_ttft_ms": 110191.12552981824
+    },
+    "offload": {
+      "completion_tokens": 128,
+      "e2e_ms": 3230.042620562017,
+      "prompt_id": "kv_disk_long_prefix",
+      "prompt_sha256": null,
+      "prompt_tokens": 13662,
+      "total_tokens": 13790,
+      "ttft_ms": 2041.0225642845035
+    },
+    "reuse": {
+      "completion_tokens": 128,
+      "e2e_ms": 113244.63077820837,
+      "prompt_id": "kv_disk_long_prefix",
+      "prompt_sha256": null,
+      "prompt_tokens": 13662,
+      "total_tokens": 13790,
+      "ttft_ms": 112232.14809410274
+    }
+  },
+  "restore_notes": [
+    "Restore the external seed payload outside Git, then set GE_MOONCAKE_STORAGE_ROOT to the restored cache/mooncake path.",
+    "For the current Python Mooncake adapter, keep LMCache MP alive across vLLM restarts or provide a persistent key-index sidecar before expecting reuse after an LMCache MP restart."
+  ],
+  "run": {
+    "chunk_size": 16,
+    "engine": "vllm",
+    "generated_disk_prompt": true,
+    "hash_algorithm": "builtin",
+    "kv_backend": "mp",
+    "mode": "restart",
+    "model_name": "/workspace/volume/softdata/models/Qwen3-8B",
+    "model_path": "/workspace/volume/softdata/models/Qwen3-8B",
+    "prompt_file_relative_to_run": "disk_prompt.json",
+    "prompt_file_sha256": "7001416e8d3bde4624c4131ae106237ae525bda1e4b0db6fc0c9be014dfacfd5",
+    "prompt_id": "kv_disk_long_prefix",
+    "run_id": "qwen3_8b_fs_codex_20260707T071601Z",
+    "source_run_dir": "artifacts/kv_baseline/qwen3_8b_fs_codex_20260707T071601Z"
+  },
+  "runtime": {
+    "goldenexperience": null,
+    "lmcache": "0.4.6",
+    "mooncake": null,
+    "vllm": "0.23.0"
+  },
+  "schema_version": "goldenexperience.kv_seed_manifest.v1",
+  "storage": {
+    "file_count": 1724,
+    "kind": "lmcache_fs",
+    "root_relative_to_run": "cache",
+    "sample_files_relative_to_root": [
+      "-SEP-workspace-SEP-volume-SEP-softdata-SEP-models-SEP-Qwen3-8B@0x02000200@0016a4e1ef0df32e.data",
+      "-SEP-workspace-SEP-volume-SEP-softdata-SEP-models-SEP-Qwen3-8B@0x02000200@008c8d0f968c66a7.data",
+      "-SEP-workspace-SEP-volume-SEP-softdata-SEP-models-SEP-Qwen3-8B@0x02000200@009a7070aa1268b8.data",
+      "-SEP-workspace-SEP-volume-SEP-softdata-SEP-models-SEP-Qwen3-8B@0x02000200@0115cca820a22f93.data",
+      "-SEP-workspace-SEP-volume-SEP-softdata-SEP-models-SEP-Qwen3-8B@0x02000200@0146585797e4788e.data",
+      "-SEP-workspace-SEP-volume-SEP-softdata-SEP-models-SEP-Qwen3-8B@0x02000200@014e65e19be5b3ae.data",
+      "-SEP-workspace-SEP-volume-SEP-softdata-SEP-models-SEP-Qwen3-8B@0x02000200@018439b5821f2487.data",
+      "-SEP-workspace-SEP-volume-SEP-softdata-SEP-models-SEP-Qwen3-8B@0x02000200@027436ae801d928f.data",
+      "-SEP-workspace-SEP-volume-SEP-softdata-SEP-models-SEP-Qwen3-8B@0x02000200@02ab4b040f0be332.data",
+      "-SEP-workspace-SEP-volume-SEP-softdata-SEP-models-SEP-Qwen3-8B@0x02000200@031717342c769928.data"
+    ],
+    "total_bytes": 2033713152
+  }
+}

@@ -7,8 +7,10 @@ from pathlib import Path
 import pytest
 
 from goldenexperience.runtime.kv_baseline.config import BaselineConfig
-from goldenexperience.runtime.kv_baseline.services import validate_runtime_requirements
-
+from goldenexperience.runtime.kv_baseline.services import (
+    ProcessGroup,
+    validate_runtime_requirements,
+)
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 BASELINE_SCRIPT = (
@@ -34,9 +36,8 @@ def _run_baseline_dry_run(tmp_path: Path, **env_overrides: str) -> Path:
         cwd=REPO_ROOT,
         env=env,
         check=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
         text=True,
+        capture_output=True,
     )
     return run_dir
 
@@ -62,6 +63,24 @@ def test_mooncake_store_adapter_is_default(tmp_path: Path) -> None:
     assert "global_segment_size" in adapter
     assert "local_buffer_size" in adapter
     assert "mooncake_store" in (run_dir / "lmc_config.yaml").read_text(encoding="utf-8")
+
+
+def test_mooncake_master_defaults_follow_run_storage(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("GE_RUN_ID", "moon-run")
+    monkeypatch.setenv("GE_RUN_DIR", str(tmp_path / "run"))
+    monkeypatch.setenv("GE_MODEL_PATH", "test/model")
+    monkeypatch.delenv("GE_MOONCAKE_MASTER_EXTRA_ARGS", raising=False)
+    config = BaselineConfig.from_env([])
+    command = ["mooncake_master", "--port", str(config.mooncake_master_port)]
+
+    ProcessGroup(config)._extend_mooncake_master_args(command)
+
+    assert command[command.index("--client_ttl") + 1] == "600"
+    assert command[command.index("--root_fs_dir") + 1] == str(config.mooncake_storage_root)
+    assert command[command.index("--cluster_id") + 1] == "moon-run"
 
 
 def test_filesystem_adapter_override_disables_mooncake(tmp_path: Path) -> None:
@@ -166,8 +185,7 @@ def test_summary_rejects_empty_mooncake_storage_for_required_disk_evidence(tmp_p
         ],
         cwd=REPO_ROOT,
         text=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        capture_output=True,
     )
 
     assert completed.returncode == 3

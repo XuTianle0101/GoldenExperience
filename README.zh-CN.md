@@ -161,15 +161,20 @@ GE_MOONCAKE_REPO_URL=https://github.com/kvcache-ai/Mooncake.git \
 ```
 
 脚本在安装了 `uv` 时优先使用 `uv pip install`，否则回退到 `python3 -m pip install`。
-package 和 golden-only 模式结束时会严格检查 `vLLM`、`LMCache` 和 `Mooncake` 是否可用；
-source 模式默认只警告，因为 Mooncake 仍需要按上游步骤构建。可用
-`--runtime-check strict|warn|skip` 覆盖该行为。当修改 CUDA、Python 或包版本时，仍应对照
-vLLM、LMCache 和 Mooncake 上游文档检查细节。
+安装依赖后默认会执行 `scripts/patch_lmcache_mooncake_runtime.py`。这个可复现补丁会补齐
+LMCache 期望的 Mooncake `libmooncake_store.so` 别名，默认选择 Python
+`MooncakeDistributedStore` SET/GET adapter，并用 LMCache MP 进程内 key index 绕过 native
+`batchIsExist` lookup 崩溃路径。只有在明确想测试未补丁上游路径时，才设置
+`GE_PATCH_MOONCAKE_RUNTIME=0`。package 和 golden-only 模式结束时会严格检查
+`vLLM`、`LMCache` 和 `Mooncake` 是否可用；source 模式默认只警告，因为 Mooncake 仍需要按
+上游步骤构建。可用 `--runtime-check strict|warn|skip` 覆盖该行为。当修改 CUDA、Python 或
+包版本时，仍应对照 vLLM、LMCache 和 Mooncake 上游文档检查细节。
 
 ### 2. 验证 Planner 和运行时
 
 ```bash
 python3 scripts/smoke_cross_model_plan.py --check-runtime --strict-runtime
+python3 scripts/patch_lmcache_mooncake_runtime.py --check
 ```
 
 预期 planner 输出包含三行：
@@ -232,6 +237,10 @@ scripts/kv_baseline/run_vllm_lmcache_mooncake_kv_baseline.sh -- --tensor-paralle
 - `GE_LMCACHE_MP_HTTP_PORT=8081`，避免 LMCache MP HTTP 与 Mooncake metadata 冲突。
 - `GE_MOONCAKE_PROTOCOL=tcp`、`GE_MOONCAKE_STORAGE_ROOT=$GE_KV_CACHE_DIR/mooncake`。
 - `GE_MOONCAKE_PER_OP_WORKERS_JSON='{"lookup":2,"retrieve":8,"store":4}'`。
+- `LMCACHE_MOONCAKE_PYTHON_ADAPTER=1`，使用 Python Mooncake Store SET/GET 路径；
+  `LMCACHE_MOONCAKE_NATIVE_EXISTS=0` 用于避开 native `batchIsExist`。
+- Mooncake master 默认带上 `--client_ttl=600`、来自 storage root 的 `--root_fs_dir`，
+  以及来自 `GE_RUN_ID` 的 `--cluster_id`；需要覆盖时使用 `GE_MOONCAKE_MASTER_EXTRA_ARGS`。
 
 默认输出会写入 `artifacts/kv_baseline/<run_id>/`：
 
@@ -241,7 +250,19 @@ scripts/kv_baseline/run_vllm_lmcache_mooncake_kv_baseline.sh -- --tensor-paralle
 - `requests/reuse.json`：vLLM 重启后使用相同提示的第二次请求。
 - `logs/lmcache_mp_server.log`：持久 LMCache MP server 证据。
 - `logs/mooncake_master.log` 和 `logs/mooncake_metadata_server.log`：Mooncake 服务证据。
+- `metrics/offload.prom` 和 `metrics/reuse.prom`：vLLM external KV transfer 计数器。
 - `summary.json`：请求差值，以及 store/retrieve/L2/Mooncake 的日志计数。
+
+原始 KV baseline run 目录会被 Git 忽略。Git 里只保留
+`artifacts/kv_baseline/manifests/` 下的精选 manifest，大的 KV seed payload 放到外部
+artifact store：
+
+```bash
+python3 scripts/kv_baseline/export_kv_seed_manifest.py \
+  artifacts/kv_baseline/<run_id> \
+  --artifact-uri s3://bucket/ge-kv-seeds/<artifact_id>.tar.zst \
+  --output artifacts/kv_baseline/manifests/<run_id>.json
+```
 
 默认在 `GE_FORCE_DISK_OFFLOAD=1` 时生成较长的确定性 disk-offload prompt。要使用
 自定义 prompt manifest，请设置 `GE_PROMPT_FILE` 和 `GE_PROMPT_ID`；如果生成 prompt 超过
@@ -264,10 +285,16 @@ scripts/kv_baseline/run_vllm_lmcache_mooncake_kv_baseline.sh -- --tensor-paralle
 1. 确认 `requests/offload.json` 包含预期答案。
 2. 确认 `summary.json` 中 `offload_has_disk_evidence=true`、
    `reuse_has_cache_evidence=true`、`disk_reuse_success=true`。
-3. 确认 `logs/lmcache_mp_server.log` 包含 L2 或 Mooncake store/retrieve 证据，例如
-   `mooncake_store`、`StoreController`、`PrefetchController`、`EXISTS`、`GET` 或 `SET`。
-4. 确认 `metadata.json` 记录 Mooncake storage root 以及服务 pid/log path。
-5. 保留完整的 `artifacts/kv_baseline/<run_id>/` 目录，作为后续跨模型 KV 复用实验的同模型基线。
+3. 确认 `metrics/reuse.prom` 中 `vllm:external_prefix_cache_hits_total > 0`，并且
+   `vllm:prompt_tokens_by_source_total{source="external_kv_transfer"} > 0`；offload 阶段应主要是
+   `source="local_compute"`。
+4. 确认 `logs/lmcache_mp_server.log` 包含 Python Mooncake Store 证据：
+   `MooncakeStore SET`、`MooncakeStore EXISTS`、`MooncakeStore GET` 和
+   `L2 prefetch load completed`。
+5. 确认 `metadata.json` 记录 `mooncake.enabled=true`、`l2_adapter_type=mooncake_store`、
+   Mooncake storage root，以及不同的 offload/reuse vLLM 服务 pid。
+6. 确认 Mooncake storage root 内有非空文件，然后保留完整的
+   `artifacts/kv_baseline/<run_id>/` 目录，作为后续跨模型 KV 复用实验的同模型基线。
 
 兼容和诊断：
 
@@ -279,6 +306,11 @@ scripts/kv_baseline/run_vllm_lmcache_mooncake_kv_baseline.sh -- --tensor-paralle
 
 需要运行结束后检查 live 服务时，可设置 `GE_KEEP_LMCACHE_MP_AFTER_RUN=1` 或
 `GE_KEEP_MOONCAKE_AFTER_RUN=1`。
+
+默认 Mooncake baseline 有意使用 Python Mooncake Store SET/GET 路径，因为本地 baseline 所用
+package 组合里的 native C++ `batchIsExist` 路径在 missing key 上出现过兼容性崩溃。如果要显式
+测试 native 路径，设置 `LMCACHE_MOONCAKE_PYTHON_ADAPTER=0` 和
+`LMCACHE_MOONCAKE_NATIVE_EXISTS=1`。
 
 ### 当前运行时限制
 
