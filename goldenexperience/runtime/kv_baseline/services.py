@@ -37,6 +37,24 @@ def _lmcache_mooncake_extension_found() -> bool:
     )
 
 
+def _python_mooncake_adapter_available() -> bool:
+    if os.environ.get("LMCACHE_MOONCAKE_PYTHON_ADAPTER", "1").lower() not in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }:
+        return False
+    mooncake_spec = importlib.util.find_spec("mooncake")
+    if mooncake_spec is None or mooncake_spec.submodule_search_locations is None:
+        return False
+    return any(
+        (Path(location) / "libmooncake_store.so").exists()
+        or (Path(location) / "store.so").exists()
+        for location in mooncake_spec.submodule_search_locations
+    )
+
+
 def _prepend_library_paths(env: dict[str, str]) -> None:
     paths: list[str] = []
 
@@ -84,12 +102,16 @@ def validate_runtime_requirements(config: BaselineConfig) -> None:
         return
     if _lmcache_mooncake_extension_found():
         return
+    if _python_mooncake_adapter_available():
+        return
     raise RuntimeError(
         "GE_LMCACHE_MP_L2_ADAPTER_TYPE=mooncake_store requires the LMCache Mooncake "
-        "C++ extension, but Python module 'lmcache.lmcache_mooncake' is missing. "
+        "C++ extension or the patched Python Mooncake adapter, but neither is available. "
         "Reinstall LMCache from source with Mooncake support, for example: "
         "MOONCAKE_INCLUDE_DIR=/path/to/mooncake-store/include BUILD_MOONCAKE=1 "
         "python3 -m pip install -e /path/to/LMCache. "
+        "For the Python adapter path, run scripts/patch_lmcache_mooncake_runtime.py "
+        "and keep LMCACHE_MOONCAKE_PYTHON_ADAPTER=1. "
         "For a non-Mooncake filesystem L2 run, set GE_LMCACHE_MP_L2_ADAPTER_TYPE=fs."
     )
 

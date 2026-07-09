@@ -25,3 +25,9 @@ models/
 !/artifacts/kv_baseline/README.md
 !/artifacts/kv_baseline/manifests/
 !/artifacts/kv_baseline/manifests/**
+
+# Cross-model runtime raw runs can also contain large Mooncake KV payloads.
+/artifacts/cross_model_runtime/*
+!/artifacts/cross_model_runtime/README.md
+!/artifacts/cross_model_runtime/manifests/
+!/artifacts/cross_model_runtime/manifests/**

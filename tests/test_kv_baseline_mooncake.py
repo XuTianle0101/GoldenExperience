@@ -112,9 +112,13 @@ def test_mooncake_store_requires_lmcache_extension(monkeypatch: pytest.MonkeyPat
         "goldenexperience.runtime.kv_baseline.services._lmcache_mooncake_extension_found",
         lambda: False,
     )
+    monkeypatch.setattr(
+        "goldenexperience.runtime.kv_baseline.services._python_mooncake_adapter_available",
+        lambda: False,
+    )
     config = BaselineConfig.from_env([])
 
-    with pytest.raises(RuntimeError, match="lmcache.lmcache_mooncake"):
+    with pytest.raises(RuntimeError, match="patched Python Mooncake adapter"):
         validate_runtime_requirements(config)
 
 

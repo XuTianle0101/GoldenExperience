@@ -326,11 +326,16 @@ in the package stack used for the local baseline. To test the native path explic
 ### Current Runtime Limitation
 
 The repository currently contains the GoldenExperience planner, metadata model, patch
-manifest, and deployment wrappers. The real LMCache hook implementation is the next step.
-Until `lmcache_cross_model_lookup` and `goldenexperience_materializer` are wired into an
-LMCache patch or fork, vLLM + LMCache MP + Mooncake Store will run normally and
-GoldenExperience can validate plans/metadata, but accepted cross-model KV reuse will not yet
-be executed inside LMCache MP.
+manifest, and deployment wrappers. The real hidden-bridge LMCache hook implementation is
+still the next step. Until `lmcache_cross_model_lookup` and the hidden-state
+`goldenexperience_materializer` are wired into an LMCache patch or fork, GoldenExperience
+does not directly inject learned hidden-bridge artifacts into LMCache MP.
+
+There is now a runtime proof path: `scripts/run_cross_model_runtime.py` runs source and
+target models against the same vLLM + LMCache MP + Mooncake Store runtime, uses
+`native_target_seed` to create target-shaped KV, then restarts target vLLM and verifies
+external KV hits. This proves the runtime plumbing and target-shaped KV retrieval path; it
+does not claim quality-gated hidden-bridge injection yet.
 
 ## GoldenScale Reuse
 
