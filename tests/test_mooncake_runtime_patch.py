@@ -211,6 +211,9 @@ def test_mooncake_runtime_patch_is_idempotent(tmp_path: Path) -> None:
     assert "LMCACHE_MOONCAKE_PYTHON_ADAPTER" in mooncake_text
     assert "MooncakeStore SET" in mooncake_text
     assert "MooncakeStore GET" in mooncake_text
+    assert "GE_MOONCAKE_EXTERNAL_INDEX" in mooncake_text
+    assert "_refresh_external_index" in mooncake_text
+    assert "external_index_hits" in mooncake_text
     assert "_use_local_lookup_index" in native_text
     assert "LMCACHE_MOONCAKE_NATIVE_EXISTS" in native_text
 

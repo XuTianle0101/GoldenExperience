@@ -1,0 +1,108 @@
+{
+  "artifact": {
+    "artifact_uri": null,
+    "bundle_bytes": null,
+    "bundle_path": null,
+    "bundle_sha256": null,
+    "raw_run_directory_is_git_ignored": true
+  },
+  "generated_at_utc": "2026-07-09T02:21:36Z",
+  "l2": {
+    "adapter_type": "mooncake_store",
+    "l2_store_policy": "skip_l1",
+    "mooncake_cluster_id": "qwen3_14b_same_model_restart_20260709T0223Z",
+    "mooncake_enabled": true,
+    "mooncake_master_server_addr": "127.0.0.1:50051",
+    "mooncake_metadata_server": "http://127.0.0.1:8080/metadata",
+    "mooncake_protocol": "tcp"
+  },
+  "notes": [
+    "Same-model Qwen3-14B offload -> vLLM restart -> LMCache/Mooncake reuse baseline for cross-parameter comparison."
+  ],
+  "proof": {
+    "disk_reuse_success": true,
+    "log_counts": {
+      "mooncake_store_get": 112,
+      "mooncake_store_set": 128,
+      "reuse_l2_prefetch_load_completed": 1,
+      "reuse_mooncake_store_get": 111
+    },
+    "metrics": {
+      "offload_external_prefix_cache_hits_total": 0.0,
+      "offload_prompt_tokens_local_compute": 1814.0,
+      "reuse_external_prefix_cache_hits_total": 1792.0,
+      "reuse_prompt_tokens_external_kv_transfer": 1792.0,
+      "reuse_prompt_tokens_local_compute": 22.0
+    },
+    "offload_has_disk_evidence": true,
+    "reuse_has_cache_evidence": true
+  },
+  "requests": {
+    "deltas": {
+      "reuse_minus_offload_e2e_ms": -151.52279939502478,
+      "reuse_minus_offload_ttft_ms": -110.28771195560694
+    },
+    "offload": {
+      "completion_tokens": 64,
+      "e2e_ms": 1503.4355260431767,
+      "prompt_id": "kv_disk_long_prefix",
+      "prompt_sha256": null,
+      "prompt_tokens": 1790,
+      "total_tokens": 1854,
+      "ttft_ms": 253.61099652945995
+    },
+    "reuse": {
+      "completion_tokens": 64,
+      "e2e_ms": 1351.9127266481519,
+      "prompt_id": "kv_disk_long_prefix",
+      "prompt_sha256": null,
+      "prompt_tokens": 1790,
+      "total_tokens": 1854,
+      "ttft_ms": 143.32328457385302
+    }
+  },
+  "restore_notes": [
+    "Restore the external seed payload outside Git, then set GE_MOONCAKE_STORAGE_ROOT to the restored cache/mooncake path.",
+    "For the current Python Mooncake adapter, keep LMCache MP alive across vLLM restarts or provide a persistent key-index sidecar before expecting reuse after an LMCache MP restart."
+  ],
+  "run": {
+    "chunk_size": 16,
+    "engine": "vllm",
+    "generated_disk_prompt": true,
+    "hash_algorithm": "builtin",
+    "kv_backend": "mp",
+    "mode": "restart",
+    "model_name": "/workspace/volume/softdata/models/Qwen3-14B",
+    "model_path": "/workspace/volume/softdata/models/Qwen3-14B",
+    "prompt_file_relative_to_run": "disk_prompt.json",
+    "prompt_file_sha256": "afbe978cf541f4bd4726de6de6d63b206d4d1cefd8e134c773298ba90c01b5f4",
+    "prompt_id": "kv_disk_long_prefix",
+    "run_id": "qwen3_14b_same_model_restart_20260709T0223Z",
+    "source_run_dir": "artifacts/kv_baseline/qwen3_14b_same_model_restart_20260709T0223Z"
+  },
+  "runtime": {
+    "goldenexperience": null,
+    "lmcache": "0.4.6",
+    "mooncake": null,
+    "vllm": "0.23.0"
+  },
+  "schema_version": "goldenexperience.kv_seed_manifest.v1",
+  "storage": {
+    "file_count": 120,
+    "kind": "mooncake",
+    "root_relative_to_run": "cache/mooncake",
+    "sample_files_relative_to_root": [
+      "qwen3_14b_same_model_restart_20260709T0223Z/a/a/_workspace_volume_softdata_models_Qwen3-14B@01000100@f96275966e2a7518",
+      "qwen3_14b_same_model_restart_20260709T0223Z/a/h/_workspace_volume_softdata_models_Qwen3-14B@01000100@e8071e242acd6d4a",
+      "qwen3_14b_same_model_restart_20260709T0223Z/a/l/_workspace_volume_softdata_models_Qwen3-14B@01000100@73b951a79135f917",
+      "qwen3_14b_same_model_restart_20260709T0223Z/a/l/_workspace_volume_softdata_models_Qwen3-14B@01000100@f18d6dc747565b8f",
+      "qwen3_14b_same_model_restart_20260709T0223Z/b/b/_workspace_volume_softdata_models_Qwen3-14B@01000100@49c16ae27ebe8116",
+      "qwen3_14b_same_model_restart_20260709T0223Z/b/b/_workspace_volume_softdata_models_Qwen3-14B@01000100@a33d6848015e4119",
+      "qwen3_14b_same_model_restart_20260709T0223Z/b/b/_workspace_volume_softdata_models_Qwen3-14B@01000100@d334c49d5488c1f3",
+      "qwen3_14b_same_model_restart_20260709T0223Z/b/g/_workspace_volume_softdata_models_Qwen3-14B@01000100@a2c254b68a7c88cd",
+      "qwen3_14b_same_model_restart_20260709T0223Z/b/i/_workspace_volume_softdata_models_Qwen3-14B@01000100@9d593ea9b7080958",
+      "qwen3_14b_same_model_restart_20260709T0223Z/b/i/_workspace_volume_softdata_models_Qwen3-14B@01000100@b8465327f20aeb1b"
+    ],
+    "total_bytes": 314572800
+  }
+}

@@ -1,0 +1,68 @@
+{
+  "calibration_prompts": 32,
+  "evaluation_prompts": 3,
+  "include_eval_in_calibration": false,
+  "large_model_path": "/workspace/volume/softdata/models/Qwen3-14B",
+  "learned_bridge_quality_gate": {
+    "decode_logit_cosine_ge_0_90": false,
+    "hidden_cosine_ge_0_90": false,
+    "kv_cosine_ge_0_85": false
+  },
+  "learned_low_rank_hidden_bridge": {
+    "decode_logit_cosine_mean": 0.8780567049980164,
+    "decode_top1_match_rate": 0.6666666666666666,
+    "hidden_cosine_mean": 0.8159530510505041,
+    "key_cosine_mean": 0.9387947743137678,
+    "name": "learned_low_rank_hidden_bridge",
+    "num_prompts": 3,
+    "prompt_results": [
+      {
+        "bridge_top1_token_id": 28285,
+        "decode_logit_cosine": 0.9100706577301025,
+        "decode_top1_match": false,
+        "hidden_cosine_mean": 0.80493174046278,
+        "key_cosine_mean": 0.93302131742239,
+        "name": "learned_low_rank_hidden_bridge",
+        "native_top1_token_id": 58023,
+        "prompt_len": 32,
+        "success": true,
+        "value_cosine_mean": 0.677514223754406
+      },
+      {
+        "bridge_top1_token_id": 323,
+        "decode_logit_cosine": 0.9039924144744873,
+        "decode_top1_match": true,
+        "hidden_cosine_mean": 0.8186701506376266,
+        "key_cosine_mean": 0.9404976770281792,
+        "name": "learned_low_rank_hidden_bridge",
+        "native_top1_token_id": 323,
+        "prompt_len": 32,
+        "success": true,
+        "value_cosine_mean": 0.6837412357330322
+      },
+      {
+        "bridge_top1_token_id": 1817,
+        "decode_logit_cosine": 0.8201070427894592,
+        "decode_top1_match": true,
+        "hidden_cosine_mean": 0.8242572620511055,
+        "key_cosine_mean": 0.9428653284907341,
+        "name": "learned_low_rank_hidden_bridge",
+        "native_top1_token_id": 1817,
+        "prompt_len": 32,
+        "success": true,
+        "value_cosine_mean": 0.7038437038660049
+      }
+    ],
+    "success_rate": 1.0,
+    "value_cosine_mean": 0.6883663877844811
+  },
+  "learned_weights_path": "artifacts/hidden_bridge/qwen3_hidden_bridge_qwen3_8b_to_14b_multisource_w5_rank512_prefix32.pt",
+  "max_length": 128,
+  "max_samples_per_layer": 4096,
+  "method": "multisource_concat_low_rank",
+  "prefix_tokens": 32,
+  "rank": 512,
+  "ridge_lambda": 0.01,
+  "small_model_path": "/workspace/volume/softdata/models/Qwen3-8B",
+  "source_window": 5
+}

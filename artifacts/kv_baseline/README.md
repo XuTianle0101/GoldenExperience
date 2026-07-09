@@ -51,8 +51,8 @@ python3 scripts/kv_baseline/export_kv_seed_manifest.py \
 
 ## Reuse Caveat
 
-The current Mooncake Python adapter avoids native `batchIsExist` by using an LMCache MP
-process-local key index. A raw Mooncake cache can be reused immediately while the same
-LMCache MP process stays alive and only vLLM restarts. Reusing a restored cache after an
-LMCache MP restart requires a persistent key-index sidecar, which should be exported with
-future seed bundles.
+The Mooncake Python adapter avoids native `batchIsExist` by using an LMCache MP key index.
+For normal same-process MP baselines this index is process-local. Cross-model materializer
+injection can also provide a persistent sidecar through `GE_MOONCAKE_EXTERNAL_INDEX`, which
+LMCache refreshes during lookup. Export that sidecar with any materialized cross-model seed
+bundle that must survive an LMCache MP restart.

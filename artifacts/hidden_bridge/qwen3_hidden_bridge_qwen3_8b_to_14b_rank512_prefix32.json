@@ -1,0 +1,117 @@
+{
+  "calibration_prompts": 32,
+  "evaluation_prompts": 3,
+  "identity_bridge_baseline": {
+    "decode_logit_cosine_mean": 0.4198635170857112,
+    "decode_top1_match_rate": 0.0,
+    "hidden_cosine_mean": 0.00013278129918035128,
+    "key_cosine_mean": -0.023396654300934946,
+    "name": "identity_bridge_baseline",
+    "num_prompts": 3,
+    "prompt_results": [
+      {
+        "bridge_top1_token_id": 11,
+        "decode_logit_cosine": 0.7557404041290283,
+        "decode_top1_match": false,
+        "hidden_cosine_mean": 0.0013488152384525166,
+        "key_cosine_mean": -0.025258421961916612,
+        "name": "identity_bridge_baseline",
+        "native_top1_token_id": 58023,
+        "prompt_len": 32,
+        "success": true,
+        "value_cosine_mean": 0.005160987545968965
+      },
+      {
+        "bridge_top1_token_id": 8,
+        "decode_logit_cosine": 0.09041635692119598,
+        "decode_top1_match": false,
+        "hidden_cosine_mean": 0.0012478266420657747,
+        "key_cosine_mean": -0.018830453231930732,
+        "name": "identity_bridge_baseline",
+        "native_top1_token_id": 323,
+        "prompt_len": 32,
+        "success": true,
+        "value_cosine_mean": 0.0011038371681934222
+      },
+      {
+        "bridge_top1_token_id": 11,
+        "decode_logit_cosine": 0.4134337902069092,
+        "decode_top1_match": false,
+        "hidden_cosine_mean": -0.0021982979829772375,
+        "key_cosine_mean": -0.026101087708957492,
+        "name": "identity_bridge_baseline",
+        "native_top1_token_id": 1817,
+        "prompt_len": 32,
+        "success": true,
+        "value_cosine_mean": -0.0007714331411989405
+      }
+    ],
+    "success_rate": 1.0,
+    "value_cosine_mean": 0.001831130524321149
+  },
+  "improves_decode_cosine": true,
+  "improves_kv_cosine": true,
+  "key_loss_weight": 0.0,
+  "large_model_path": "/workspace/volume/softdata/models/Qwen3-14B",
+  "learned_bridge_quality_gate": {
+    "decode_logit_cosine_ge_0_90": false,
+    "hidden_cosine_ge_0_90": false,
+    "kv_cosine_ge_0_85": false
+  },
+  "learned_low_rank_hidden_bridge": {
+    "decode_logit_cosine_mean": 0.8795250654220581,
+    "decode_top1_match_rate": 0.6666666666666666,
+    "hidden_cosine_mean": 0.8079484562079111,
+    "key_cosine_mean": 0.9344478542606036,
+    "name": "learned_low_rank_hidden_bridge",
+    "num_prompts": 3,
+    "prompt_results": [
+      {
+        "bridge_top1_token_id": 28285,
+        "decode_logit_cosine": 0.9052524566650391,
+        "decode_top1_match": false,
+        "hidden_cosine_mean": 0.7960091039538384,
+        "key_cosine_mean": 0.9272825136780739,
+        "name": "learned_low_rank_hidden_bridge",
+        "native_top1_token_id": 58023,
+        "prompt_len": 32,
+        "success": true,
+        "value_cosine_mean": 0.6637306481599807
+      },
+      {
+        "bridge_top1_token_id": 323,
+        "decode_logit_cosine": 0.8987731337547302,
+        "decode_top1_match": true,
+        "hidden_cosine_mean": 0.8109412923455238,
+        "key_cosine_mean": 0.9365076050162315,
+        "name": "learned_low_rank_hidden_bridge",
+        "native_top1_token_id": 323,
+        "prompt_len": 32,
+        "success": true,
+        "value_cosine_mean": 0.6724941253662109
+      },
+      {
+        "bridge_top1_token_id": 1817,
+        "decode_logit_cosine": 0.834549605846405,
+        "decode_top1_match": true,
+        "hidden_cosine_mean": 0.8168949723243714,
+        "key_cosine_mean": 0.9395534440875053,
+        "name": "learned_low_rank_hidden_bridge",
+        "native_top1_token_id": 1817,
+        "prompt_len": 32,
+        "success": true,
+        "value_cosine_mean": 0.6922300174832344
+      }
+    ],
+    "success_rate": 1.0,
+    "value_cosine_mean": 0.676151597003142
+  },
+  "learned_weights_path": "artifacts/hidden_bridge/qwen3_hidden_bridge_qwen3_8b_to_14b_rank512_prefix32.pt",
+  "max_length": 128,
+  "max_samples_per_layer": 4096,
+  "prefix_tokens": 32,
+  "rank": 512,
+  "ridge_lambda": 0.01,
+  "small_model_path": "/workspace/volume/softdata/models/Qwen3-8B",
+  "value_loss_weight": 0.0
+}

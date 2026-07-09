@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import torch
+
 from goldenexperience.lmcache_patch import CrossModelCacheKey
 from goldenexperience.reuse import CrossModelReusePlanner, KVShape, ModelRef, PlanStatus, ReuseRequest
 from goldenexperience.size_variant import (
@@ -156,6 +158,21 @@ def test_linear_layer_map_uses_fractional_interpolation() -> None:
     assert middle is not None
     assert middle.source_layer_ids == (0, 1)
     assert middle.weights == (0.5, 0.5)
+
+
+def test_hidden_bridge_materializer_blends_tensor_source_layers(tmp_path: Path) -> None:
+    source = model_ref("qwen-small", 7, layers=2, kv_heads=1, head_dim=2)
+    target = model_ref("qwen-large", 14, layers=3, kv_heads=1, head_dim=3)
+    manifest = build_calibration_manifest(source, target, calibration_id="tensor_blend_v0", artifact_root=str(tmp_path))
+    source_chunks = {
+        0: HiddenStateChunk(layer_id=0, hidden=torch.ones(1, 1, 8), token_end=1),
+        1: HiddenStateChunk(layer_id=1, hidden=torch.full((1, 1, 8), 5.0), token_end=1),
+    }
+
+    result = HiddenBridgeMaterializer(manifest).materialize(source_chunks)
+
+    assert result.success
+    assert torch.equal(result.chunks[1].hidden[..., :8], torch.full((1, 1, 8), 3.0))
 
 
 def test_planner_uses_size_variant_artifact_metadata(tmp_path: Path) -> None:

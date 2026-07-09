@@ -546,4 +546,9 @@ def _weighted_sum(values: list[Any], weights: tuple[float, ...]) -> Any:
             _weighted_sum([value[idx] for value in values], weights)
             for idx in range(len(first))
         )
+    if hasattr(first, "__mul__") and hasattr(first, "__add__"):
+        total = first * weights[0]
+        for value, weight in zip(values[1:], weights[1:], strict=True):
+            total = total + (value * weight)
+        return total
     return first

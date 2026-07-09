@@ -5,7 +5,10 @@ This script makes the Mooncake Store path reproducible for package installs that
 ship Mooncake as ``mooncake/store.so`` while LMCache expects
 ``libmooncake_store.so``. It also patches LMCache 0.4.x to use Mooncake's Python
 ``MooncakeDistributedStore`` SET/GET API by default and avoids the native
-``batchIsExist`` crash path by using an in-process key index for lookup.
+``batchIsExist`` crash path by using an in-process key index for lookup. The Python
+adapter also refreshes an optional ``GE_MOONCAKE_EXTERNAL_INDEX`` JSONL sidecar so
+materialized cross-model chunks inserted by a sidecar process can be consumed by
+vLLM through LMCache MP.
 """
 
 from __future__ import annotations
@@ -32,6 +35,9 @@ MOONCAKE_ADAPTER_REQUIRED = (
     "MooncakeDistributedStore",
     "MooncakeStore SET",
     "MooncakeStore GET",
+    "GE_MOONCAKE_EXTERNAL_INDEX",
+    "_refresh_external_index",
+    "external_index_hits",
 )
 
 NATIVE_ADAPTER_REQUIRED = (
@@ -72,6 +78,9 @@ class MooncakePythonL2Adapter(L2AdapterInterface):
         self._completed_loads: dict[L2TaskId, Bitmap] = {{}}
         self._key_sizes: dict[ObjectKey, int] = {{}}
         self._locked_keys: dict[ObjectKey, int] = {{}}
+        self._external_index_path = os.environ.get("GE_MOONCAKE_EXTERNAL_INDEX", "")
+        self._external_index_offset = 0
+        self._external_key_sizes: dict[str, int] = {{}}
         self._next_task_id: L2TaskId = 0
         self._lock = threading.Lock()
         self._closed = False
@@ -137,16 +146,36 @@ class MooncakePythonL2Adapter(L2AdapterInterface):
     def submit_lookup_and_lock_task(self, keys: list[ObjectKey]) -> L2TaskId:
         bitmap = Bitmap(len(keys))
         found = 0
+        external_index_hits = 0
+        notify_keys: list[ObjectKey] = []
+        notify_sizes: list[int] = []
         with self._lock:
             task_id = self._get_next_task_id()
+            self._refresh_external_index()
             for i, key in enumerate(keys):
+                key_string = _object_key_to_string(key)
+                external_size = self._external_key_sizes.get(key_string)
+                if key not in self._key_sizes and external_size is not None:
+                    self._key_sizes[key] = external_size
+                    notify_keys.append(key)
+                    notify_sizes.append(external_size)
+                    external_index_hits += 1
                 if key in self._key_sizes:
                     bitmap.set(i)
                     self._locked_keys[key] = self._locked_keys.get(key, 0) + 1
                     found += 1
             self._completed_lookups[task_id] = bitmap
             self._lookup_efd.notify()
-        logger.info("MooncakeStore EXISTS local_index_hits=%d total=%d", found, len(keys))
+        if notify_keys:
+            self._notify_keys_stored(notify_keys, notify_sizes)
+        logger.info(
+            "MooncakeStore EXISTS local_index_hits=%d external_index_hits=%d "
+            "external_index_path=%s total=%d",
+            found,
+            external_index_hits,
+            self._external_index_path or "",
+            len(keys),
+        )
         return task_id
 
     def query_lookup_and_lock_result(self, task_id: L2TaskId) -> Bitmap | None:
@@ -233,12 +262,53 @@ class MooncakePythonL2Adapter(L2AdapterInterface):
             "is_healthy": not self._closed,
             "type": "mooncake_store_python",
             "known_keys": len(self._key_sizes),
+            "external_index_path": self._external_index_path,
+            "external_index_keys": len(self._external_key_sizes),
         }}
 
     def _get_next_task_id(self) -> L2TaskId:
         task_id = self._next_task_id
         self._next_task_id += 1
         return task_id
+
+    def _refresh_external_index(self) -> None:
+        if not self._external_index_path:
+            return
+        try:
+            size = os.path.getsize(self._external_index_path)
+        except OSError:
+            return
+        if size < self._external_index_offset:
+            self._external_index_offset = 0
+            self._external_key_sizes.clear()
+        try:
+            with open(self._external_index_path, "r", encoding="utf-8") as handle:
+                handle.seek(self._external_index_offset)
+                for line in handle:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        record = json.loads(line)
+                    except json.JSONDecodeError:
+                        logger.warning("Skipping invalid Mooncake external index line: %s", line[:200])
+                        continue
+                    key = record.get("key")
+                    if not isinstance(key, str) or not key:
+                        continue
+                    try:
+                        value_size = int(record.get("bytes", 0))
+                    except (TypeError, ValueError):
+                        value_size = 0
+                    if value_size > 0:
+                        self._external_key_sizes[key] = value_size
+                self._external_index_offset = handle.tell()
+        except OSError as exc:
+            logger.warning(
+                "Could not refresh Mooncake external index %s: %s",
+                self._external_index_path,
+                exc,
+            )
 {PYTHON_ADAPTER_END_MARKER}
 '''
 
@@ -418,13 +488,28 @@ def patch_mooncake_store_adapter(
         return PatchResult("lmcache-mooncake-adapter", path, False, "patch verified")
 
     original = text
+    if "import json" not in text:
+        if "import ctypes\nimport os\nimport threading\n" in text:
+            text = text.replace(
+                "import ctypes\nimport os\nimport threading\n",
+                "import ctypes\nimport json\nimport os\nimport threading\n",
+                1,
+            )
+        elif "import ctypes" in text:
+            text = _insert_after_once(text, "import ctypes\n", "import json\n", path)
+
+    if PYTHON_ADAPTER_MARKER in text and "GE_MOONCAKE_EXTERNAL_INDEX" not in text:
+        start = text.index(PYTHON_ADAPTER_MARKER)
+        end = text.index(PYTHON_ADAPTER_END_MARKER, start) + len(PYTHON_ADAPTER_END_MARKER)
+        text = text[:start] + MOONCAKE_PYTHON_ADAPTER_BLOCK.rstrip("\n") + text[end:]
+
     if "class MooncakePythonL2Adapter" not in text:
         typing_anchor = "from typing import (\n    TYPE_CHECKING,\n    cast,\n)\n"
         if "import ctypes" not in text:
             text = _insert_after_once(
                 text,
                 typing_anchor,
-                "import ctypes\nimport os\nimport threading\n\n",
+                "import ctypes\nimport json\nimport os\nimport threading\n\n",
                 path,
             )
 

@@ -1,0 +1,96 @@
+{
+  "artifact": {
+    "method": "prefix_specific_low_rank",
+    "scope": "valid only for calibration prefixes represented during training",
+    "summary_path": "artifacts/hidden_bridge/qwen3_hidden_bridge_qwen3_8b_to_14b_prefix_specific_rank1024.json",
+    "weights_bytes": 1679262677,
+    "weights_path": "artifacts/hidden_bridge/qwen3_hidden_bridge_qwen3_8b_to_14b_prefix_specific_rank1024.pt"
+  },
+  "comparison": {
+    "cross_target_e2e_minus_same_model_reuse_e2e_ms": 25060.43948791921,
+    "cross_target_ttft_minus_same_model_reuse_ttft_ms": 25058.179420419037,
+    "external_kv_tokens_delta": -16.0,
+    "local_compute_tokens_delta": 16.0
+  },
+  "conclusion": "The prefix-specific 8B->14B bridge passed offline and runtime quality gates and vLLM consumed injected target-shaped KV through LMCache/Mooncake. It is slower than same-model reuse in this implementation because materialization and Mooncake injection happen synchronously before the target request, and target TTFT includes external KV transfer overhead. The artifact is prefix-specific, not a general 8B->14B bridge.",
+  "cross_model_strict": {
+    "automatic_reuse_allowed": true,
+    "materializer_elapsed_ms": 118087.54370547831,
+    "materializer_injected_bytes": 290979840,
+    "materializer_injected_count": 111,
+    "materializer_injection_elapsed_ms": 45197.94174935669,
+    "offline_quality_gate": {
+      "checks": {
+        "decode_logit_cosine": true,
+        "hidden_cosine": true,
+        "key_cosine": true,
+        "value_cosine": true
+      },
+      "thresholds": {
+        "decode_logit_cosine": 0.9,
+        "hidden_cosine": 0.9,
+        "key_cosine": 0.85,
+        "value_cosine": 0.85
+      },
+      "values": {
+        "decode_logit_cosine_mean": 0.9928693771362305,
+        "decode_top1_match_rate": 1.0,
+        "hidden_cosine_mean": 0.9989225978652637,
+        "key_cosine_mean": 0.9991410096486409,
+        "value_cosine_mean": 0.993958678841591
+      }
+    },
+    "run_dir": "/workspace/volume/h20-data/xutianle/GoldenExperience/artifacts/cross_model_runtime/qwen3_8b_to_14b_hidden_bridge_prefix_specific_strict_20260709T0253Z",
+    "run_id": "prefix_specific_strict_20260709T0253Z",
+    "runtime_quality_gate": {
+      "checks": {
+        "hidden_cosine": true,
+        "key_cosine": true,
+        "value_cosine": true
+      },
+      "thresholds": {
+        "decode_logit_cosine": 0.9,
+        "hidden_cosine": 0.9,
+        "key_cosine": 0.85,
+        "value_cosine": 0.85
+      },
+      "values": {
+        "hidden_cosine_mean": 0.9918728321790695,
+        "key_cosine_mean": 0.9924997538328171,
+        "value_cosine_mean": 0.9820345684885978
+      }
+    },
+    "source_candidate_chunks_found": 111,
+    "source_candidate_chunks_total": 111,
+    "source_model": "/workspace/volume/softdata/models/Qwen3-8B",
+    "status": "cross_model_reuse_success",
+    "success": true,
+    "target_chunks_after_materializer": 111,
+    "target_chunks_before_materializer": 0,
+    "target_e2e_ms": 26412.352214567363,
+    "target_external_prefix_cache_hits_total": 1776.0,
+    "target_model": "/workspace/volume/softdata/models/Qwen3-14B",
+    "target_mooncake_get_events": 111,
+    "target_prompt_tokens_external_kv_transfer": 1776.0,
+    "target_prompt_tokens_local_compute": 38.0,
+    "target_ttft_ms": 25201.50270499289
+  },
+  "generated_at_utc": "2026-07-09T02:55:58Z",
+  "same_model_14b_restart_baseline": {
+    "disk_reuse_success": true,
+    "model": "/workspace/volume/softdata/models/Qwen3-14B",
+    "offload_e2e_ms": 1503.4355260431767,
+    "offload_ttft_ms": 253.61099652945995,
+    "reuse_e2e_ms": 1351.9127266481519,
+    "reuse_external_prefix_cache_hits_total": 1792.0,
+    "reuse_minus_offload_e2e_ms": -151.52279939502478,
+    "reuse_minus_offload_ttft_ms": -110.28771195560694,
+    "reuse_mooncake_store_get": 111,
+    "reuse_prompt_tokens_external_kv_transfer": 1792.0,
+    "reuse_prompt_tokens_local_compute": 22.0,
+    "reuse_ttft_ms": 143.32328457385302,
+    "run_dir": "artifacts/kv_baseline/qwen3_14b_same_model_restart_20260709T0223Z",
+    "run_id": "qwen3_14b_same_model_restart_20260709T0223Z"
+  },
+  "schema_version": "goldenexperience.cross_model_comparison.v2"
+}

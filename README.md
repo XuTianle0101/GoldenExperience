@@ -323,19 +323,26 @@ because the native C++ `batchIsExist` path has shown compatibility crashes on mi
 in the package stack used for the local baseline. To test the native path explicitly, set
 `LMCACHE_MOONCAKE_PYTHON_ADAPTER=0` and `LMCACHE_MOONCAKE_NATIVE_EXISTS=1`.
 
-### Current Runtime Limitation
+### Current Runtime Status
 
-The repository currently contains the GoldenExperience planner, metadata model, patch
-manifest, and deployment wrappers. The real hidden-bridge LMCache hook implementation is
-still the next step. Until `lmcache_cross_model_lookup` and the hidden-state
-`goldenexperience_materializer` are wired into an LMCache patch or fork, GoldenExperience
-does not directly inject learned hidden-bridge artifacts into LMCache MP.
+The runtime now has two cross-size paths:
 
-There is now a runtime proof path: `scripts/run_cross_model_runtime.py` runs source and
-target models against the same vLLM + LMCache MP + Mooncake Store runtime, uses
-`native_target_seed` to create target-shaped KV, then restarts target vLLM and verifies
-external KV hits. This proves the runtime plumbing and target-shaped KV retrieval path; it
-does not claim quality-gated hidden-bridge injection yet.
+- `scripts/run_cross_model_runtime.py`: the earlier `native_target_seed` proof. It
+  creates target-shaped KV with a target-model prefill, restarts target vLLM, and
+  verifies LMCache/Mooncake external KV retrieval.
+- `scripts/run_cross_model_hidden_bridge_runtime.py`: the quality-gated hidden-bridge
+  path. It runs source offload, performs `lmcache_cross_model_lookup` against source
+  Mooncake keys after a target miss, calls `goldenexperience_materializer`, writes
+  target-shaped chunks to Mooncake plus a persistent `GE_MOONCAKE_EXTERNAL_INDEX`, and
+  lets a fresh target vLLM consume the injected keys only if quality gates pass.
+
+The general Qwen3-8B -> Qwen3-14B low-rank bridge artifact still does **not** pass the
+strict quality gate and correctly falls back. A prefix-specific calibration artifact now
+does pass strict offline and runtime gates for the recorded calibration prefix:
+`artifacts/cross_model_runtime/manifests/prefix_specific_strict_20260709T0253Z.json`.
+The comparison against a same-model Qwen3-14B offload -> restart -> reuse baseline is
+`artifacts/cross_model_runtime/manifests/prefix_specific_strict_20260709T0253Z_vs_qwen3_14b_same_model_restart_20260709T0223Z.json`.
+This is a scoped calibration proof, not a general-purpose 8B -> 14B bridge.
 
 ## GoldenScale Reuse
 
