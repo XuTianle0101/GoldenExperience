@@ -34,7 +34,7 @@ def _sample(split: str, index: int) -> CachedKVPrompt:
         answer = str(left + right)
         template = (
             "Reference notes:\n{context}\n"
-            f"Compute {left} + {right}. Explain briefly and end with `Final answer: {answer}`."
+            f"Compute {left} + {right}. Return exactly `Final answer: {answer}` and no other text."
         )
     elif category == "code":
         left = 3 + value % 11
@@ -42,19 +42,20 @@ def _sample(split: str, index: int) -> CachedKVPrompt:
         answer = str(left * right)
         template = (
             "Code review context:\n{context}\n"
-            f"What does `print({left} * {right})` output? End with `Final answer: {answer}`."
+            f"What does `print({left} * {right})` output? Return exactly "
+            f"`Final answer: {answer}` and no other text."
         )
     elif category == "prose":
         answer = f"MARKER-{value}"
         template = (
             "Background material:\n{context}\n"
-            f"Ignore incidental numbers and end your response with `Final answer: {answer}`."
+            f"Ignore incidental numbers. Return exactly `Final answer: {answer}` and no other text."
         )
     else:
         answer = f"ACK-{value}"
         template = (
             "Conversation memory:\n{context}\n"
-            f"Acknowledge the request and end with `Final answer: {answer}`."
+            f"Return exactly `Final answer: {answer}` and no other text."
         )
     return CachedKVPrompt(
         prompt_id=f"{split}-{category}-{index:03d}",

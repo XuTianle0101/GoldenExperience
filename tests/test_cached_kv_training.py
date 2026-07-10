@@ -100,6 +100,16 @@ class _WhitespaceTokenizer:
         return {"input_ids": list(range(len(text.split())))}
 
 
+class _ChatWhitespaceTokenizer(_WhitespaceTokenizer):
+    def apply_chat_template(self, messages, **kwargs):
+        assert kwargs == {
+            "tokenize": False,
+            "add_generation_prompt": True,
+            "enable_thinking": False,
+        }
+        return f"<user> {messages[0]['content']} </user> <assistant>"
+
+
 def test_prompt_rendering_reaches_declared_bucket_deterministically() -> None:
     sample = _prompt("bucket", "train", bucket=128)
 
@@ -117,6 +127,26 @@ def test_prompt_rendering_reaches_declared_bucket_deterministically() -> None:
     assert len(first_ids) >= 145
     assert first_text == second_text
     assert first_ids == second_ids
+
+
+def test_prompt_rendering_uses_non_thinking_chat_template_and_keeps_task_tail() -> None:
+    sample = _prompt(
+        "chat-bucket",
+        "validation",
+        bucket=128,
+        template="Notes: {context} Return exactly `Final answer: 42`.",
+    )
+
+    text, token_ids = render_to_token_bucket(
+        sample,
+        _ChatWhitespaceTokenizer(),
+        suffix_tokens=16,
+    )
+
+    assert text.startswith("<user>")
+    assert text.endswith("</user> <assistant>")
+    assert "Final answer: 42" in text
+    assert len(token_ids) >= 145
 
 
 def test_final_answer_assertion_requires_an_explicit_bounded_answer() -> None:

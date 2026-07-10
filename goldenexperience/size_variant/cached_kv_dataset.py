@@ -185,7 +185,7 @@ def render_to_token_bucket(
     low = 0
     high = 1
     while True:
-        text = sample.render(context_items=high)
+        text = _format_for_model(tokenizer, sample.render(context_items=high))
         token_ids = _encode(tokenizer, text)
         if len(token_ids) >= required:
             break
@@ -195,13 +195,13 @@ def render_to_token_bucket(
         high = min(high * 2, max_context_items)
     while low + 1 < high:
         middle = (low + high) // 2
-        text = sample.render(context_items=middle)
+        text = _format_for_model(tokenizer, sample.render(context_items=middle))
         token_ids = _encode(tokenizer, text)
         if len(token_ids) >= required:
             high = middle
         else:
             low = middle
-    text = sample.render(context_items=high)
+    text = _format_for_model(tokenizer, sample.render(context_items=high))
     token_ids = _encode(tokenizer, text)
     if len(token_ids) < required:
         raise ValueError(f"prompt {sample.prompt_id} is shorter than its declared bucket")
@@ -222,6 +222,21 @@ def _encode(tokenizer: Any, text: str) -> list[int]:
     encoded = tokenizer(text, add_special_tokens=True, truncation=False)
     ids = encoded["input_ids"] if isinstance(encoded, dict) else encoded.input_ids
     return [int(item) for item in ids]
+
+
+def _format_for_model(tokenizer: Any, prompt: str) -> str:
+    apply_chat_template = getattr(tokenizer, "apply_chat_template", None)
+    if not callable(apply_chat_template):
+        return prompt
+    formatted = apply_chat_template(
+        [{"role": "user", "content": prompt}],
+        tokenize=False,
+        add_generation_prompt=True,
+        enable_thinking=False,
+    )
+    if not isinstance(formatted, str) or not formatted:
+        raise ValueError("tokenizer chat template did not produce model input text")
+    return formatted
 
 
 def _normalize_text(value: str) -> str:

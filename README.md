@@ -397,8 +397,9 @@ Runtime behavior remains conservative:
 ### Cached-KV Training
 
 The checked-in dataset recipe has explicit, disjoint train/validation/sealed-test prompt
-IDs and content hashes. Regenerate it deterministically, then tune against validation
-without opening the test split:
+IDs and content hashes. Prompts use the model's Qwen3 chat template with thinking
+explicitly disabled so native and bridged task assertions share a bounded decode contract.
+Regenerate it deterministically, then tune against validation without opening the test split:
 
 ```bash
 python3 scripts/generate_qwen3_cached_kv_dataset.py

@@ -7,7 +7,7 @@
       "group_id": "train-sealed-000",
       "prompt_id": "train-math-000",
       "split": "train",
-      "template": "Reference notes:\n{context}\nCompute 21 + 19. Explain briefly and end with `Final answer: 40`.",
+      "template": "Reference notes:\n{context}\nCompute 21 + 19. Return exactly `Final answer: 40` and no other text.",
       "token_bucket": 32
     },
     {
@@ -17,7 +17,7 @@
       "group_id": "train-sealed-001",
       "prompt_id": "train-code-001",
       "split": "train",
-      "template": "Code review context:\n{context}\nWhat does `print(3 * 2)` output? End with `Final answer: 6`.",
+      "template": "Code review context:\n{context}\nWhat does `print(3 * 2)` output? Return exactly `Final answer: 6` and no other text.",
       "token_bucket": 32
     },
     {
@@ -27,7 +27,7 @@
       "group_id": "train-sealed-002",
       "prompt_id": "train-prose-002",
       "split": "train",
-      "template": "Background material:\n{context}\nIgnore incidental numbers and end your response with `Final answer: MARKER-1002`.",
+      "template": "Background material:\n{context}\nIgnore incidental numbers. Return exactly `Final answer: MARKER-1002` and no other text.",
       "token_bucket": 32
     },
     {
@@ -37,7 +37,7 @@
       "group_id": "train-sealed-003",
       "prompt_id": "train-chat-003",
       "split": "train",
-      "template": "Conversation memory:\n{context}\nAcknowledge the request and end with `Final answer: ACK-1003`.",
+      "template": "Conversation memory:\n{context}\nReturn exactly `Final answer: ACK-1003` and no other text.",
       "token_bucket": 32
     },
     {
@@ -47,7 +47,7 @@
       "group_id": "train-sealed-004",
       "prompt_id": "train-math-004",
       "split": "train",
-      "template": "Reference notes:\n{context}\nCompute 25 + 23. Explain briefly and end with `Final answer: 48`.",
+      "template": "Reference notes:\n{context}\nCompute 25 + 23. Return exactly `Final answer: 48` and no other text.",
       "token_bucket": 128
     },
     {
@@ -57,7 +57,7 @@
       "group_id": "train-sealed-005",
       "prompt_id": "train-code-005",
       "split": "train",
-      "template": "Code review context:\n{context}\nWhat does `print(7 * 6)` output? End with `Final answer: 42`.",
+      "template": "Code review context:\n{context}\nWhat does `print(7 * 6)` output? Return exactly `Final answer: 42` and no other text.",
       "token_bucket": 128
     },
     {
@@ -67,7 +67,7 @@
       "group_id": "train-sealed-006",
       "prompt_id": "train-prose-006",
       "split": "train",
-      "template": "Background material:\n{context}\nIgnore incidental numbers and end your response with `Final answer: MARKER-1006`.",
+      "template": "Background material:\n{context}\nIgnore incidental numbers. Return exactly `Final answer: MARKER-1006` and no other text.",
       "token_bucket": 128
     },
     {
@@ -77,7 +77,7 @@
       "group_id": "train-sealed-007",
       "prompt_id": "train-chat-007",
       "split": "train",
-      "template": "Conversation memory:\n{context}\nAcknowledge the request and end with `Final answer: ACK-1007`.",
+      "template": "Conversation memory:\n{context}\nReturn exactly `Final answer: ACK-1007` and no other text.",
       "token_bucket": 128
     },
     {
@@ -87,7 +87,7 @@
       "group_id": "train-sealed-008",
       "prompt_id": "train-math-008",
       "split": "train",
-      "template": "Reference notes:\n{context}\nCompute 29 + 8. Explain briefly and end with `Final answer: 37`.",
+      "template": "Reference notes:\n{context}\nCompute 29 + 8. Return exactly `Final answer: 37` and no other text.",
       "token_bucket": 512
     },
     {
@@ -97,7 +97,7 @@
       "group_id": "train-sealed-009",
       "prompt_id": "train-code-009",
       "split": "train",
-      "template": "Code review context:\n{context}\nWhat does `print(11 * 3)` output? End with `Final answer: 33`.",
+      "template": "Code review context:\n{context}\nWhat does `print(11 * 3)` output? Return exactly `Final answer: 33` and no other text.",
       "token_bucket": 512
     },
     {
@@ -107,7 +107,7 @@
       "group_id": "train-sealed-010",
       "prompt_id": "train-prose-010",
       "split": "train",
-      "template": "Background material:\n{context}\nIgnore incidental numbers and end your response with `Final answer: MARKER-1010`.",
+      "template": "Background material:\n{context}\nIgnore incidental numbers. Return exactly `Final answer: MARKER-1010` and no other text.",
       "token_bucket": 512
     },
     {
@@ -117,7 +117,7 @@
       "group_id": "train-sealed-011",
       "prompt_id": "train-chat-011",
       "split": "train",
-      "template": "Conversation memory:\n{context}\nAcknowledge the request and end with `Final answer: ACK-1011`.",
+      "template": "Conversation memory:\n{context}\nReturn exactly `Final answer: ACK-1011` and no other text.",
       "token_bucket": 512
     },
     {
@@ -127,7 +127,7 @@
       "group_id": "train-sealed-012",
       "prompt_id": "train-math-012",
       "split": "train",
-      "template": "Reference notes:\n{context}\nCompute 33 + 12. Explain briefly and end with `Final answer: 45`.",
+      "template": "Reference notes:\n{context}\nCompute 33 + 12. Return exactly `Final answer: 45` and no other text.",
       "token_bucket": 2048
     },
     {
@@ -137,7 +137,7 @@
       "group_id": "train-sealed-013",
       "prompt_id": "train-code-013",
       "split": "train",
-      "template": "Code review context:\n{context}\nWhat does `print(4 * 7)` output? End with `Final answer: 28`.",
+      "template": "Code review context:\n{context}\nWhat does `print(4 * 7)` output? Return exactly `Final answer: 28` and no other text.",
       "token_bucket": 2048
     },
     {
@@ -147,7 +147,7 @@
       "group_id": "train-sealed-014",
       "prompt_id": "train-prose-014",
       "split": "train",
-      "template": "Background material:\n{context}\nIgnore incidental numbers and end your response with `Final answer: MARKER-1014`.",
+      "template": "Background material:\n{context}\nIgnore incidental numbers. Return exactly `Final answer: MARKER-1014` and no other text.",
       "token_bucket": 2048
     },
     {
@@ -157,7 +157,7 @@
       "group_id": "train-sealed-015",
       "prompt_id": "train-chat-015",
       "split": "train",
-      "template": "Conversation memory:\n{context}\nAcknowledge the request and end with `Final answer: ACK-1015`.",
+      "template": "Conversation memory:\n{context}\nReturn exactly `Final answer: ACK-1015` and no other text.",
       "token_bucket": 2048
     },
     {
@@ -167,7 +167,7 @@
       "group_id": "validation-sealed-000",
       "prompt_id": "validation-math-000",
       "split": "validation",
-      "template": "Reference notes:\n{context}\nCompute 22 + 12. Explain briefly and end with `Final answer: 34`.",
+      "template": "Reference notes:\n{context}\nCompute 22 + 12. Return exactly `Final answer: 34` and no other text.",
       "token_bucket": 32
     },
     {
@@ -177,7 +177,7 @@
       "group_id": "validation-sealed-001",
       "prompt_id": "validation-code-001",
       "split": "validation",
-      "template": "Code review context:\n{context}\nWhat does `print(13 * 8)` output? End with `Final answer: 104`.",
+      "template": "Code review context:\n{context}\nWhat does `print(13 * 8)` output? Return exactly `Final answer: 104` and no other text.",
       "token_bucket": 32
     },
     {
@@ -187,7 +187,7 @@
       "group_id": "validation-sealed-002",
       "prompt_id": "validation-prose-002",
       "split": "validation",
-      "template": "Background material:\n{context}\nIgnore incidental numbers and end your response with `Final answer: MARKER-2002`.",
+      "template": "Background material:\n{context}\nIgnore incidental numbers. Return exactly `Final answer: MARKER-2002` and no other text.",
       "token_bucket": 32
     },
     {
@@ -197,7 +197,7 @@
       "group_id": "validation-sealed-003",
       "prompt_id": "validation-chat-003",
       "split": "validation",
-      "template": "Conversation memory:\n{context}\nAcknowledge the request and end with `Final answer: ACK-2003`.",
+      "template": "Conversation memory:\n{context}\nReturn exactly `Final answer: ACK-2003` and no other text.",
       "token_bucket": 32
     },
     {
@@ -207,7 +207,7 @@
       "group_id": "validation-sealed-004",
       "prompt_id": "validation-math-004",
       "split": "validation",
-      "template": "Reference notes:\n{context}\nCompute 26 + 16. Explain briefly and end with `Final answer: 42`.",
+      "template": "Reference notes:\n{context}\nCompute 26 + 16. Return exactly `Final answer: 42` and no other text.",
       "token_bucket": 128
     },
     {
@@ -217,7 +217,7 @@
       "group_id": "validation-sealed-005",
       "prompt_id": "validation-code-005",
       "split": "validation",
-      "template": "Code review context:\n{context}\nWhat does `print(6 * 5)` output? End with `Final answer: 30`.",
+      "template": "Code review context:\n{context}\nWhat does `print(6 * 5)` output? Return exactly `Final answer: 30` and no other text.",
       "token_bucket": 128
     },
     {
@@ -227,7 +227,7 @@
       "group_id": "validation-sealed-006",
       "prompt_id": "validation-prose-006",
       "split": "validation",
-      "template": "Background material:\n{context}\nIgnore incidental numbers and end your response with `Final answer: MARKER-2006`.",
+      "template": "Background material:\n{context}\nIgnore incidental numbers. Return exactly `Final answer: MARKER-2006` and no other text.",
       "token_bucket": 128
     },
     {
@@ -237,7 +237,7 @@
       "group_id": "validation-sealed-007",
       "prompt_id": "validation-chat-007",
       "split": "validation",
-      "template": "Conversation memory:\n{context}\nAcknowledge the request and end with `Final answer: ACK-2007`.",
+      "template": "Conversation memory:\n{context}\nReturn exactly `Final answer: ACK-2007` and no other text.",
       "token_bucket": 128
     },
     {
@@ -247,7 +247,7 @@
       "group_id": "validation-sealed-008",
       "prompt_id": "validation-math-008",
       "split": "validation",
-      "template": "Reference notes:\n{context}\nCompute 30 + 20. Explain briefly and end with `Final answer: 50`.",
+      "template": "Reference notes:\n{context}\nCompute 30 + 20. Return exactly `Final answer: 50` and no other text.",
       "token_bucket": 512
     },
     {
@@ -257,7 +257,7 @@
       "group_id": "validation-sealed-009",
       "prompt_id": "validation-code-009",
       "split": "validation",
-      "template": "Code review context:\n{context}\nWhat does `print(10 * 2)` output? End with `Final answer: 20`.",
+      "template": "Code review context:\n{context}\nWhat does `print(10 * 2)` output? Return exactly `Final answer: 20` and no other text.",
       "token_bucket": 512
     },
     {
@@ -267,7 +267,7 @@
       "group_id": "validation-sealed-010",
       "prompt_id": "validation-prose-010",
       "split": "validation",
-      "template": "Background material:\n{context}\nIgnore incidental numbers and end your response with `Final answer: MARKER-2010`.",
+      "template": "Background material:\n{context}\nIgnore incidental numbers. Return exactly `Final answer: MARKER-2010` and no other text.",
       "token_bucket": 512
     },
     {
@@ -277,7 +277,7 @@
       "group_id": "validation-sealed-011",
       "prompt_id": "validation-chat-011",
       "split": "validation",
-      "template": "Conversation memory:\n{context}\nAcknowledge the request and end with `Final answer: ACK-2011`.",
+      "template": "Conversation memory:\n{context}\nReturn exactly `Final answer: ACK-2011` and no other text.",
       "token_bucket": 512
     },
     {
@@ -287,7 +287,7 @@
       "group_id": "validation-sealed-012",
       "prompt_id": "validation-math-012",
       "split": "validation",
-      "template": "Reference notes:\n{context}\nCompute 34 + 24. Explain briefly and end with `Final answer: 58`.",
+      "template": "Reference notes:\n{context}\nCompute 34 + 24. Return exactly `Final answer: 58` and no other text.",
       "token_bucket": 2048
     },
     {
@@ -297,7 +297,7 @@
       "group_id": "validation-sealed-013",
       "prompt_id": "validation-code-013",
       "split": "validation",
-      "template": "Code review context:\n{context}\nWhat does `print(3 * 6)` output? End with `Final answer: 18`.",
+      "template": "Code review context:\n{context}\nWhat does `print(3 * 6)` output? Return exactly `Final answer: 18` and no other text.",
       "token_bucket": 2048
     },
     {
@@ -307,7 +307,7 @@
       "group_id": "validation-sealed-014",
       "prompt_id": "validation-prose-014",
       "split": "validation",
-      "template": "Background material:\n{context}\nIgnore incidental numbers and end your response with `Final answer: MARKER-2014`.",
+      "template": "Background material:\n{context}\nIgnore incidental numbers. Return exactly `Final answer: MARKER-2014` and no other text.",
       "token_bucket": 2048
     },
     {
@@ -317,7 +317,7 @@
       "group_id": "validation-sealed-015",
       "prompt_id": "validation-chat-015",
       "split": "validation",
-      "template": "Conversation memory:\n{context}\nAcknowledge the request and end with `Final answer: ACK-2015`.",
+      "template": "Conversation memory:\n{context}\nReturn exactly `Final answer: ACK-2015` and no other text.",
       "token_bucket": 2048
     },
     {
@@ -327,7 +327,7 @@
       "group_id": "test-sealed-000",
       "prompt_id": "test-math-000",
       "split": "test",
-      "template": "Reference notes:\n{context}\nCompute 23 + 24. Explain briefly and end with `Final answer: 47`.",
+      "template": "Reference notes:\n{context}\nCompute 23 + 24. Return exactly `Final answer: 47` and no other text.",
       "token_bucket": 32
     },
     {
@@ -337,7 +337,7 @@
       "group_id": "test-sealed-001",
       "prompt_id": "test-code-001",
       "split": "test",
-      "template": "Code review context:\n{context}\nWhat does `print(12 * 7)` output? End with `Final answer: 84`.",
+      "template": "Code review context:\n{context}\nWhat does `print(12 * 7)` output? Return exactly `Final answer: 84` and no other text.",
       "token_bucket": 32
     },
     {
@@ -347,7 +347,7 @@
       "group_id": "test-sealed-002",
       "prompt_id": "test-prose-002",
       "split": "test",
-      "template": "Background material:\n{context}\nIgnore incidental numbers and end your response with `Final answer: MARKER-3002`.",
+      "template": "Background material:\n{context}\nIgnore incidental numbers. Return exactly `Final answer: MARKER-3002` and no other text.",
       "token_bucket": 32
     },
     {
@@ -357,7 +357,7 @@
       "group_id": "test-sealed-003",
       "prompt_id": "test-chat-003",
       "split": "test",
-      "template": "Conversation memory:\n{context}\nAcknowledge the request and end with `Final answer: ACK-3003`.",
+      "template": "Conversation memory:\n{context}\nReturn exactly `Final answer: ACK-3003` and no other text.",
       "token_bucket": 32
     },
     {
@@ -367,7 +367,7 @@
       "group_id": "test-sealed-004",
       "prompt_id": "test-math-004",
       "split": "test",
-      "template": "Reference notes:\n{context}\nCompute 27 + 9. Explain briefly and end with `Final answer: 36`.",
+      "template": "Reference notes:\n{context}\nCompute 27 + 9. Return exactly `Final answer: 36` and no other text.",
       "token_bucket": 128
     },
     {
@@ -377,7 +377,7 @@
       "group_id": "test-sealed-005",
       "prompt_id": "test-code-005",
       "split": "test",
-      "template": "Code review context:\n{context}\nWhat does `print(5 * 4)` output? End with `Final answer: 20`.",
+      "template": "Code review context:\n{context}\nWhat does `print(5 * 4)` output? Return exactly `Final answer: 20` and no other text.",
       "token_bucket": 128
     },
     {
@@ -387,7 +387,7 @@
       "group_id": "test-sealed-006",
       "prompt_id": "test-prose-006",
       "split": "test",
-      "template": "Background material:\n{context}\nIgnore incidental numbers and end your response with `Final answer: MARKER-3006`.",
+      "template": "Background material:\n{context}\nIgnore incidental numbers. Return exactly `Final answer: MARKER-3006` and no other text.",
       "token_bucket": 128
     },
     {
@@ -397,7 +397,7 @@
       "group_id": "test-sealed-007",
       "prompt_id": "test-chat-007",
       "split": "test",
-      "template": "Conversation memory:\n{context}\nAcknowledge the request and end with `Final answer: ACK-3007`.",
+      "template": "Conversation memory:\n{context}\nReturn exactly `Final answer: ACK-3007` and no other text.",
       "token_bucket": 128
     },
     {
@@ -407,7 +407,7 @@
       "group_id": "test-sealed-008",
       "prompt_id": "test-math-008",
       "split": "test",
-      "template": "Reference notes:\n{context}\nCompute 31 + 13. Explain briefly and end with `Final answer: 44`.",
+      "template": "Reference notes:\n{context}\nCompute 31 + 13. Return exactly `Final answer: 44` and no other text.",
       "token_bucket": 512
     },
     {
@@ -417,7 +417,7 @@
       "group_id": "test-sealed-009",
       "prompt_id": "test-code-009",
       "split": "test",
-      "template": "Code review context:\n{context}\nWhat does `print(9 * 8)` output? End with `Final answer: 72`.",
+      "template": "Code review context:\n{context}\nWhat does `print(9 * 8)` output? Return exactly `Final answer: 72` and no other text.",
       "token_bucket": 512
     },
     {
@@ -427,7 +427,7 @@
       "group_id": "test-sealed-010",
       "prompt_id": "test-prose-010",
       "split": "test",
-      "template": "Background material:\n{context}\nIgnore incidental numbers and end your response with `Final answer: MARKER-3010`.",
+      "template": "Background material:\n{context}\nIgnore incidental numbers. Return exactly `Final answer: MARKER-3010` and no other text.",
       "token_bucket": 512
     },
     {
@@ -437,7 +437,7 @@
       "group_id": "test-sealed-011",
       "prompt_id": "test-chat-011",
       "split": "test",
-      "template": "Conversation memory:\n{context}\nAcknowledge the request and end with `Final answer: ACK-3011`.",
+      "template": "Conversation memory:\n{context}\nReturn exactly `Final answer: ACK-3011` and no other text.",
       "token_bucket": 512
     },
     {
@@ -447,7 +447,7 @@
       "group_id": "test-sealed-012",
       "prompt_id": "test-math-012",
       "split": "test",
-      "template": "Reference notes:\n{context}\nCompute 35 + 17. Explain briefly and end with `Final answer: 52`.",
+      "template": "Reference notes:\n{context}\nCompute 35 + 17. Return exactly `Final answer: 52` and no other text.",
       "token_bucket": 2048
     },
     {
@@ -457,7 +457,7 @@
       "group_id": "test-sealed-013",
       "prompt_id": "test-code-013",
       "split": "test",
-      "template": "Code review context:\n{context}\nWhat does `print(13 * 5)` output? End with `Final answer: 65`.",
+      "template": "Code review context:\n{context}\nWhat does `print(13 * 5)` output? Return exactly `Final answer: 65` and no other text.",
       "token_bucket": 2048
     },
     {
@@ -467,7 +467,7 @@
       "group_id": "test-sealed-014",
       "prompt_id": "test-prose-014",
       "split": "test",
-      "template": "Background material:\n{context}\nIgnore incidental numbers and end your response with `Final answer: MARKER-3014`.",
+      "template": "Background material:\n{context}\nIgnore incidental numbers. Return exactly `Final answer: MARKER-3014` and no other text.",
       "token_bucket": 2048
     },
     {
@@ -477,7 +477,7 @@
       "group_id": "test-sealed-015",
       "prompt_id": "test-chat-015",
       "split": "test",
-      "template": "Conversation memory:\n{context}\nAcknowledge the request and end with `Final answer: ACK-3015`.",
+      "template": "Conversation memory:\n{context}\nReturn exactly `Final answer: ACK-3015` and no other text.",
       "token_bucket": 2048
     },
     {
@@ -487,7 +487,7 @@
       "group_id": "test-sealed-016",
       "prompt_id": "test-math-016",
       "split": "test",
-      "template": "Reference notes:\n{context}\nCompute 39 + 21. Explain briefly and end with `Final answer: 60`.",
+      "template": "Reference notes:\n{context}\nCompute 39 + 21. Return exactly `Final answer: 60` and no other text.",
       "token_bucket": 32
     },
     {
@@ -497,7 +497,7 @@
       "group_id": "test-sealed-017",
       "prompt_id": "test-code-017",
       "split": "test",
-      "template": "Code review context:\n{context}\nWhat does `print(6 * 2)` output? End with `Final answer: 12`.",
+      "template": "Code review context:\n{context}\nWhat does `print(6 * 2)` output? Return exactly `Final answer: 12` and no other text.",
       "token_bucket": 32
     },
     {
@@ -507,7 +507,7 @@
       "group_id": "test-sealed-018",
       "prompt_id": "test-prose-018",
       "split": "test",
-      "template": "Background material:\n{context}\nIgnore incidental numbers and end your response with `Final answer: MARKER-3018`.",
+      "template": "Background material:\n{context}\nIgnore incidental numbers. Return exactly `Final answer: MARKER-3018` and no other text.",
       "token_bucket": 32
     },
     {
@@ -517,7 +517,7 @@
       "group_id": "test-sealed-019",
       "prompt_id": "test-chat-019",
       "split": "test",
-      "template": "Conversation memory:\n{context}\nAcknowledge the request and end with `Final answer: ACK-3019`.",
+      "template": "Conversation memory:\n{context}\nReturn exactly `Final answer: ACK-3019` and no other text.",
       "token_bucket": 32
     },
     {
@@ -527,7 +527,7 @@
       "group_id": "test-sealed-020",
       "prompt_id": "test-math-020",
       "split": "test",
-      "template": "Reference notes:\n{context}\nCompute 43 + 25. Explain briefly and end with `Final answer: 68`.",
+      "template": "Reference notes:\n{context}\nCompute 43 + 25. Return exactly `Final answer: 68` and no other text.",
       "token_bucket": 128
     },
     {
@@ -537,7 +537,7 @@
       "group_id": "test-sealed-021",
       "prompt_id": "test-code-021",
       "split": "test",
-      "template": "Code review context:\n{context}\nWhat does `print(10 * 6)` output? End with `Final answer: 60`.",
+      "template": "Code review context:\n{context}\nWhat does `print(10 * 6)` output? Return exactly `Final answer: 60` and no other text.",
       "token_bucket": 128
     },
     {
@@ -547,7 +547,7 @@
       "group_id": "test-sealed-022",
       "prompt_id": "test-prose-022",
       "split": "test",
-      "template": "Background material:\n{context}\nIgnore incidental numbers and end your response with `Final answer: MARKER-3022`.",
+      "template": "Background material:\n{context}\nIgnore incidental numbers. Return exactly `Final answer: MARKER-3022` and no other text.",
       "token_bucket": 128
     },
     {
@@ -557,7 +557,7 @@
       "group_id": "test-sealed-023",
       "prompt_id": "test-chat-023",
       "split": "test",
-      "template": "Conversation memory:\n{context}\nAcknowledge the request and end with `Final answer: ACK-3023`.",
+      "template": "Conversation memory:\n{context}\nReturn exactly `Final answer: ACK-3023` and no other text.",
       "token_bucket": 128
     },
     {
@@ -567,7 +567,7 @@
       "group_id": "test-sealed-024",
       "prompt_id": "test-math-024",
       "split": "test",
-      "template": "Reference notes:\n{context}\nCompute 47 + 10. Explain briefly and end with `Final answer: 57`.",
+      "template": "Reference notes:\n{context}\nCompute 47 + 10. Return exactly `Final answer: 57` and no other text.",
       "token_bucket": 512
     },
     {
@@ -577,7 +577,7 @@
       "group_id": "test-sealed-025",
       "prompt_id": "test-code-025",
       "split": "test",
-      "template": "Code review context:\n{context}\nWhat does `print(3 * 3)` output? End with `Final answer: 9`.",
+      "template": "Code review context:\n{context}\nWhat does `print(3 * 3)` output? Return exactly `Final answer: 9` and no other text.",
       "token_bucket": 512
     },
     {
@@ -587,7 +587,7 @@
       "group_id": "test-sealed-026",
       "prompt_id": "test-prose-026",
       "split": "test",
-      "template": "Background material:\n{context}\nIgnore incidental numbers and end your response with `Final answer: MARKER-3026`.",
+      "template": "Background material:\n{context}\nIgnore incidental numbers. Return exactly `Final answer: MARKER-3026` and no other text.",
       "token_bucket": 512
     },
     {
@@ -597,7 +597,7 @@
       "group_id": "test-sealed-027",
       "prompt_id": "test-chat-027",
       "split": "test",
-      "template": "Conversation memory:\n{context}\nAcknowledge the request and end with `Final answer: ACK-3027`.",
+      "template": "Conversation memory:\n{context}\nReturn exactly `Final answer: ACK-3027` and no other text.",
       "token_bucket": 512
     },
     {
@@ -607,7 +607,7 @@
       "group_id": "test-sealed-028",
       "prompt_id": "test-math-028",
       "split": "test",
-      "template": "Reference notes:\n{context}\nCompute 51 + 14. Explain briefly and end with `Final answer: 65`.",
+      "template": "Reference notes:\n{context}\nCompute 51 + 14. Return exactly `Final answer: 65` and no other text.",
       "token_bucket": 2048
     },
     {
@@ -617,7 +617,7 @@
       "group_id": "test-sealed-029",
       "prompt_id": "test-code-029",
       "split": "test",
-      "template": "Code review context:\n{context}\nWhat does `print(7 * 7)` output? End with `Final answer: 49`.",
+      "template": "Code review context:\n{context}\nWhat does `print(7 * 7)` output? Return exactly `Final answer: 49` and no other text.",
       "token_bucket": 2048
     },
     {
@@ -627,7 +627,7 @@
       "group_id": "test-sealed-030",
       "prompt_id": "test-prose-030",
       "split": "test",
-      "template": "Background material:\n{context}\nIgnore incidental numbers and end your response with `Final answer: MARKER-3030`.",
+      "template": "Background material:\n{context}\nIgnore incidental numbers. Return exactly `Final answer: MARKER-3030` and no other text.",
       "token_bucket": 2048
     },
     {
@@ -637,7 +637,7 @@
       "group_id": "test-sealed-031",
       "prompt_id": "test-chat-031",
       "split": "test",
-      "template": "Conversation memory:\n{context}\nAcknowledge the request and end with `Final answer: ACK-3031`.",
+      "template": "Conversation memory:\n{context}\nReturn exactly `Final answer: ACK-3031` and no other text.",
       "token_bucket": 2048
     }
   ],
