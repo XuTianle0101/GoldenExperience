@@ -15,6 +15,7 @@ from goldenexperience.size_variant.cached_kv_manifest import (
     CachedKVQualityThresholds,
 )
 from goldenexperience.size_variant.cached_kv_training import (
+    build_cka_source_layer_plan,
     build_source_layer_plan,
     build_training_matrices,
     fit_low_rank_state,
@@ -171,6 +172,70 @@ def test_source_layer_plan_covers_both_qwen3_directions(
     assert int(layer_ids.min()) >= 0
     assert int(layer_ids.max()) < source_layers
     torch.testing.assert_close(weights.sum(dim=-1), torch.ones(target_layers))
+
+
+@pytest.mark.parametrize(
+    "source_layers,mapping",
+    [
+        (4, (0, 1, 1, 2, 3)),
+        (5, (0, 2, 2, 4)),
+    ],
+)
+def test_cka_source_layer_plan_recovers_monotonic_rotated_layers(
+    source_layers: int,
+    mapping: tuple[int, ...],
+) -> None:
+    torch.manual_seed(23)
+    samples = 128
+    width = 8
+    positions = torch.arange(samples)
+    source_key_unrotated = torch.randn(source_layers, samples, width)
+    source_value = torch.randn(source_layers, samples, width)
+    target_keys: list[torch.Tensor] = []
+    target_values: list[torch.Tensor] = []
+    for source_layer in mapping:
+        key_rotation, _ = torch.linalg.qr(torch.randn(width, width))
+        value_rotation, _ = torch.linalg.qr(torch.randn(width, width))
+        target_keys.append(source_key_unrotated[source_layer] @ key_rotation)
+        target_values.append(source_value[source_layer] @ value_rotation)
+    target_key_unrotated = torch.stack(target_keys)
+    target_value = torch.stack(target_values)
+    source_key = _apply_rope_flat(
+        source_key_unrotated,
+        positions,
+        num_heads=1,
+        head_dim=width,
+        theta=1_000_000,
+        inverse=False,
+    )
+    target_key = _apply_rope_flat(
+        target_key_unrotated,
+        positions,
+        num_heads=1,
+        head_dim=width,
+        theta=1_000_000,
+        inverse=False,
+    )
+
+    layer_ids, layer_weights, evidence = build_cka_source_layer_plan(
+        torch.stack((source_key, source_value)),
+        torch.stack((target_key, target_value)),
+        positions,
+        3,
+        source_heads=1,
+        source_head_dim=width,
+        source_rope_theta=1_000_000,
+        target_heads=1,
+        target_head_dim=width,
+        target_rope_theta=1_000_000,
+        device="cpu",
+    )
+
+    selected = (layer_ids * layer_weights.long()).sum(dim=1)
+    assert selected.tolist() == list(mapping)
+    assert evidence["matched_source_layers"] == list(mapping)
+    assert evidence["combined_score"] > 0.99
+    torch.testing.assert_close(layer_weights.sum(dim=1), torch.ones(len(mapping)))
 
 
 def test_supervised_low_rank_fit_reconstructs_synthetic_cached_kv() -> None:

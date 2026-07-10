@@ -35,6 +35,7 @@ from goldenexperience.size_variant.cached_kv_manifest import (
     sha256_file,
 )
 from goldenexperience.size_variant.cached_kv_training import (
+    build_cka_source_layer_plan,
     build_source_layer_plan,
     build_training_matrices,
     cache_to_object,
@@ -188,6 +189,59 @@ def collect_training_data(
         torch.cat(key_parts, dim=1),
         torch.cat(value_parts, dim=1),
         {"sample_count": collected, "prompts": prompt_records},
+    )
+
+
+def collect_layer_alignment_data(
+    samples: tuple[CachedKVPrompt, ...],
+    *,
+    tokenizer: Any,
+    source_model: Any,
+    target_model: Any,
+    source_device: str,
+    target_device: str,
+    max_prompts: int,
+    samples_per_prompt: int,
+    suffix_tokens: int,
+) -> tuple[Any, Any, Any, dict[str, Any]]:
+    import torch
+
+    source_parts: list[Any] = []
+    target_parts: list[Any] = []
+    position_parts: list[Any] = []
+    prompt_ids: list[str] = []
+    for sample in samples[:max_prompts]:
+        _, token_ids = render_to_token_bucket(sample, tokenizer, suffix_tokens=suffix_tokens)
+        input_ids = torch.tensor([token_ids], dtype=torch.long)
+        source_out, _ = _run_prefill(source_model, input_ids, source_device)
+        target_out, _ = _run_prefill(target_model, input_ids, target_device)
+        positions = _sample_positions(len(token_ids), samples_per_prompt)
+        source_object = cache_to_object(source_out.past_key_values)
+        target_object = cache_to_object(target_out.past_key_values)
+        source_parts.append(
+            source_object[:, :, positions.to(source_object.device), :].to("cpu")
+        )
+        target_parts.append(
+            target_object[:, :, positions.to(target_object.device), :].to("cpu")
+        )
+        position_parts.append(positions)
+        prompt_ids.append(sample.prompt_id)
+        del source_out, target_out, source_object, target_object
+        gc.collect()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+    if not source_parts:
+        raise ValueError("no layer alignment samples were collected")
+    positions = torch.cat(position_parts)
+    return (
+        torch.cat(source_parts, dim=2),
+        torch.cat(target_parts, dim=2),
+        positions,
+        {
+            "prompt_ids": prompt_ids,
+            "prompt_count": len(prompt_ids),
+            "sample_count": int(positions.numel()),
+        },
     )
 
 
@@ -520,6 +574,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--fit-device", default="cuda:1")
     parser.add_argument("--rank", type=int, default=512)
     parser.add_argument("--source-window", type=int, default=3)
+    parser.add_argument("--layer-plan", choices=("depth", "cka"), default="depth")
+    parser.add_argument("--layer-alignment-prompts", type=int, default=32)
+    parser.add_argument("--layer-alignment-samples-per-prompt", type=int, default=8)
     parser.add_argument("--ridge-lambda", type=float, default=1000.0)
     parser.add_argument("--nonlinear-ridge-lambda", type=float, default=1000.0)
     parser.add_argument("--samples-per-prompt", type=int, default=32)
@@ -555,6 +612,8 @@ def main() -> int:
     args = build_parser().parse_args()
     if args.output.suffix != ".json":
         raise ValueError("--output must be a JSON manifest path")
+    if args.layer_alignment_prompts <= 0 or args.layer_alignment_samples_per_prompt <= 0:
+        raise ValueError("layer alignment prompt and sample counts must be positive")
     dataset = CachedKVPromptDataset.load(args.dataset)
     if args.finalize and args.emit_validation_candidate:
         raise ValueError("--finalize and --emit-validation-candidate are mutually exclusive")
@@ -592,11 +651,44 @@ def main() -> int:
         trust_remote_code=True,
         device_map={"": args.target_device},
     ).eval()
-    source_layer_ids, source_layer_weights = build_source_layer_plan(
-        source_spec.num_layers,
-        target_spec.num_layers,
-        args.source_window,
-    )
+    if args.layer_plan == "cka":
+        source_alignment, target_alignment, alignment_positions, alignment_collection = (
+            collect_layer_alignment_data(
+                dataset.split("train"),
+                tokenizer=tokenizer,
+                source_model=source_model,
+                target_model=target_model,
+                source_device=args.source_device,
+                target_device=args.target_device,
+                max_prompts=args.layer_alignment_prompts,
+                samples_per_prompt=args.layer_alignment_samples_per_prompt,
+                suffix_tokens=args.suffix_tokens,
+            )
+        )
+        source_layer_ids, source_layer_weights, layer_alignment = build_cka_source_layer_plan(
+            source_alignment,
+            target_alignment,
+            alignment_positions,
+            args.source_window,
+            source_heads=source_spec.num_key_value_heads,
+            source_head_dim=source_spec.head_dim,
+            source_rope_theta=source_spec.rope_theta,
+            target_heads=target_spec.num_key_value_heads,
+            target_head_dim=target_spec.head_dim,
+            target_rope_theta=target_spec.rope_theta,
+            device=args.fit_device,
+        )
+        layer_alignment.update(alignment_collection)
+        del source_alignment, target_alignment, alignment_positions
+        gc.collect()
+        torch.cuda.empty_cache()
+    else:
+        source_layer_ids, source_layer_weights = build_source_layer_plan(
+            source_spec.num_layers,
+            target_spec.num_layers,
+            args.source_window,
+        )
+        layer_alignment = {"method": "normalized_depth"}
     features, key_residual, value_residual, collection = collect_training_data(
         dataset.split("train"),
         tokenizer=tokenizer,
@@ -654,6 +746,7 @@ def main() -> int:
         "target_model": asdict(target_spec),
         "rank": effective_rank,
         "source_window": args.source_window,
+        "layer_alignment": layer_alignment,
         "ridge_lambda": args.ridge_lambda,
         "nonlinear_ridge_lambda": args.nonlinear_ridge_lambda,
         "training_collection": collection,

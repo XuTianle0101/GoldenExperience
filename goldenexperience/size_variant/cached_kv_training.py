@@ -45,6 +45,97 @@ def build_source_layer_plan(
     return layer_ids, layer_weights
 
 
+def build_cka_source_layer_plan(
+    source_kv: Any,
+    target_kv: Any,
+    position_ids: Any,
+    source_window: int,
+    *,
+    source_heads: int,
+    source_head_dim: int,
+    source_rope_theta: float,
+    target_heads: int,
+    target_head_dim: int,
+    target_rope_theta: float,
+    device: str,
+) -> tuple[Any, Any, dict[str, Any]]:
+    """Learn a monotonic source-layer plan using train-only linear CKA."""
+
+    import torch
+
+    if source_kv.ndim != 4 or target_kv.ndim != 4:
+        raise ValueError("layer alignment KV objects must be rank four")
+    if source_kv.shape[0] != 2 or target_kv.shape[0] != 2:
+        raise ValueError("layer alignment KV objects must start with a K/V axis")
+    if source_kv.shape[2] != target_kv.shape[2] or source_kv.shape[2] != position_ids.numel():
+        raise ValueError("layer alignment sample counts differ")
+    if source_kv.shape[2] < 2:
+        raise ValueError("layer alignment requires at least two samples")
+    source_layers = int(source_kv.shape[1])
+    target_layers = int(target_kv.shape[1])
+    if source_window <= 0 or source_window > source_layers:
+        raise ValueError("source_window is outside source depth")
+
+    source = source_kv.to(device=device, dtype=torch.float32)
+    target = target_kv.to(device=device, dtype=torch.float32)
+    positions = position_ids.to(device=device, dtype=torch.long)
+    source_key = _apply_rope_flat(
+        source[0],
+        positions,
+        num_heads=source_heads,
+        head_dim=source_head_dim,
+        theta=source_rope_theta,
+        inverse=True,
+    )
+    target_key = _apply_rope_flat(
+        target[0],
+        positions,
+        num_heads=target_heads,
+        head_dim=target_head_dim,
+        theta=target_rope_theta,
+        inverse=True,
+    )
+    key_scores = _linear_cka_scores(source_key, target_key)
+    value_scores = _linear_cka_scores(source[1], target[1])
+    combined_scores = (key_scores + value_scores) / 2
+    matched = _monotonic_alignment_path(combined_scores)
+
+    layer_ids = torch.empty(target_layers, source_window, dtype=torch.int64)
+    layer_weights = torch.zeros(target_layers, source_window, dtype=torch.float32)
+    for target_layer, source_layer in enumerate(matched.tolist()):
+        start = max(
+            0,
+            min(source_layers - source_window, source_layer - source_window // 2),
+        )
+        ids = torch.arange(start, start + source_window, dtype=torch.int64)
+        layer_ids[target_layer] = ids
+        layer_weights[target_layer, int((ids == source_layer).nonzero().item())] = 1.0
+
+    score_device = combined_scores.device
+    target_indices = torch.arange(target_layers, device=score_device)
+    matched_device = matched.to(score_device)
+    depth_ids, depth_weights = build_source_layer_plan(
+        source_layers,
+        target_layers,
+        source_window,
+    )
+    depth_ids = depth_ids.to(score_device)
+    depth_weights = depth_weights.to(score_device)
+    depth_score = (
+        combined_scores.gather(1, depth_ids) * depth_weights
+    ).sum(dim=1).mean()
+    evidence = {
+        "method": "monotonic_linear_cka",
+        "sample_count": int(source_kv.shape[2]),
+        "matched_source_layers": matched.tolist(),
+        "combined_score": float(combined_scores[target_indices, matched_device].mean().item()),
+        "key_score": float(key_scores[target_indices, matched_device].mean().item()),
+        "value_score": float(value_scores[target_indices, matched_device].mean().item()),
+        "depth_baseline_score": float(depth_score.item()),
+    }
+    return layer_ids, layer_weights, evidence
+
+
 def cache_to_object(past_key_values: Any) -> Any:
     """Convert a Transformers DynamicCache to `[2, layer, token, width]`."""
 
@@ -430,6 +521,46 @@ def _fit_supervised_projection(
     source_factor = source_basis * singular_values.unsqueeze(0)
     target_factor = target_basis.T
     return mean_y, source_factor, target_factor
+
+
+def _linear_cka_scores(source: Any, target: Any) -> Any:
+    import torch
+
+    source_centered = source - source.mean(dim=1, keepdim=True)
+    target_centered = target - target.mean(dim=1, keepdim=True)
+    source_grams = torch.bmm(source_centered, source_centered.transpose(1, 2))
+    target_grams = torch.bmm(target_centered, target_centered.transpose(1, 2))
+    source_norms = source_grams.flatten(1).norm(dim=1)
+    target_norms = target_grams.flatten(1).norm(dim=1)
+    if bool((source_norms <= 0).any()) or bool((target_norms <= 0).any()):
+        raise ValueError("layer alignment tensors must contain per-layer variation")
+    source_grams = source_grams / source_norms[:, None, None]
+    target_grams = target_grams / target_norms[:, None, None]
+    return torch.einsum("sij,tij->ts", source_grams, target_grams)
+
+
+def _monotonic_alignment_path(scores: Any) -> Any:
+    import torch
+
+    if scores.ndim != 2 or scores.shape[0] <= 0 or scores.shape[1] <= 0:
+        raise ValueError("layer alignment scores must be a non-empty matrix")
+    target_layers, source_layers = scores.shape
+    cumulative = scores[0].clone()
+    parents = torch.zeros(
+        (target_layers, source_layers),
+        dtype=torch.long,
+        device=scores.device,
+    )
+    for target_layer in range(1, target_layers):
+        prefix_scores, prefix_indices = torch.cummax(cumulative, dim=0)
+        cumulative = prefix_scores + scores[target_layer]
+        parents[target_layer] = prefix_indices
+    source_layer = int(cumulative.argmax().item())
+    path = [source_layer]
+    for target_layer in range(target_layers - 1, 0, -1):
+        source_layer = int(parents[target_layer, source_layer].item())
+        path.append(source_layer)
+    return torch.tensor(list(reversed(path)), dtype=torch.long, device=scores.device)
 
 
 def _fit_diagonal_baseline(base: Any, target: Any, *, ridge_lambda: float) -> Any:
