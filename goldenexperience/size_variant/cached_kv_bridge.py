@@ -3,13 +3,16 @@
 from __future__ import annotations
 
 import os
+import threading
 from collections.abc import Mapping
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 from goldenexperience.size_variant.cached_kv_manifest import (
     CACHED_KV_SCHEMA_VERSION,
     CachedKVBridgeManifest,
+    model_identity_paths,
     sha256_file,
     verify_model_path,
 )
@@ -33,6 +36,13 @@ REQUIRED_WEIGHT_TENSORS = frozenset(
 
 class CachedKVBridgeError(RuntimeError):
     """Raised when a cached-KV artifact or source object is unsafe to use."""
+
+
+@dataclass(frozen=True)
+class _ResidentBridgeEntry:
+    bridge: Qwen3CachedKVBridge
+    dependency_paths: tuple[Path, ...]
+    dependency_snapshot: tuple[tuple[str, int, int, int, int, int], ...]
 
 
 class Qwen3CachedKVBridge:
@@ -332,6 +342,72 @@ class Qwen3CachedKVBridge:
             raise CachedKVBridgeError("source_layer_weights must sum to one per target layer")
 
 
+class ResidentQwen3CachedKVBridgeCache:
+    """Reuse verified in-memory bridges while all on-disk identities stay unchanged."""
+
+    def __init__(self) -> None:
+        self._entries: dict[tuple[str, str, str, str, str], _ResidentBridgeEntry] = {}
+        self._lock = threading.RLock()
+
+    def load(
+        self,
+        manifest_path: str | Path,
+        *,
+        source_model_path: str | Path,
+        target_model_path: str | Path,
+        device: str = "cpu",
+        compute_dtype: Any | None = None,
+    ) -> tuple[Qwen3CachedKVBridge, bool]:
+        key = (
+            str(Path(manifest_path).resolve()),
+            str(Path(source_model_path).resolve()),
+            str(Path(target_model_path).resolve()),
+            str(device),
+            repr(compute_dtype),
+        )
+        with self._lock:
+            entry = self._entries.get(key)
+            if entry is not None:
+                try:
+                    current = _dependency_snapshot(entry.dependency_paths)
+                except OSError:
+                    current = ()
+                if current == entry.dependency_snapshot:
+                    return entry.bridge, True
+                self._entries.pop(key, None)
+
+            bridge = Qwen3CachedKVBridge.from_artifact(
+                manifest_path,
+                source_model_path=source_model_path,
+                target_model_path=target_model_path,
+                device=device,
+                compute_dtype=compute_dtype,
+            )
+            resolved_manifest = Path(manifest_path).resolve()
+            dependency_paths = (
+                resolved_manifest,
+                bridge.manifest.resolve_weights_path(resolved_manifest).resolve(),
+                *model_identity_paths(source_model_path),
+                *model_identity_paths(target_model_path),
+            )
+            try:
+                snapshot = _dependency_snapshot(dependency_paths)
+            except OSError as exc:
+                raise CachedKVBridgeError(
+                    "cached KV dependencies changed after artifact verification"
+                ) from exc
+            self._entries[key] = _ResidentBridgeEntry(
+                bridge=bridge,
+                dependency_paths=dependency_paths,
+                dependency_snapshot=snapshot,
+            )
+            return bridge, False
+
+    def clear(self) -> None:
+        with self._lock:
+            self._entries.clear()
+
+
 def safetensors_metadata(manifest: CachedKVBridgeManifest) -> dict[str, str]:
     """Metadata that training must embed in the safetensors file."""
 
@@ -364,6 +440,25 @@ def _torch_dtype(name: str) -> Any:
         return mapping[name]
     except KeyError as exc:
         raise CachedKVBridgeError(f"unsupported cached KV dtype: {name}") from exc
+
+
+def _dependency_snapshot(
+    paths: tuple[Path, ...],
+) -> tuple[tuple[str, int, int, int, int, int], ...]:
+    snapshot: list[tuple[str, int, int, int, int, int]] = []
+    for path in paths:
+        stat = path.stat()
+        snapshot.append(
+            (
+                str(path),
+                stat.st_dev,
+                stat.st_ino,
+                stat.st_size,
+                stat.st_mtime_ns,
+                stat.st_ctime_ns,
+            )
+        )
+    return tuple(snapshot)
 
 
 def _rotate_half(value: Any) -> Any:

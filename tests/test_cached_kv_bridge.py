@@ -10,6 +10,7 @@ from safetensors import torch as safetensors_torch
 from goldenexperience.size_variant.cached_kv_bridge import (
     CachedKVBridgeError,
     Qwen3CachedKVBridge,
+    ResidentQwen3CachedKVBridgeCache,
     _apply_rope_flat,
     safetensors_metadata,
 )
@@ -215,6 +216,39 @@ def test_cached_kv_bridge_chunk_positions_match_full_transform(tmp_path: Path) -
     )
 
     torch.testing.assert_close(chunked, full, atol=0, rtol=0)
+
+
+def test_resident_bridge_cache_reuses_and_invalidates_verified_artifacts(
+    tmp_path: Path,
+) -> None:
+    manifest_path, source_dir, target_dir, _ = _artifact(tmp_path)
+    cache = ResidentQwen3CachedKVBridgeCache()
+
+    first, first_hit = cache.load(
+        manifest_path,
+        source_model_path=source_dir,
+        target_model_path=target_dir,
+    )
+    second, second_hit = cache.load(
+        manifest_path,
+        source_model_path=source_dir,
+        target_model_path=target_dir,
+    )
+
+    assert first_hit is False
+    assert second_hit is True
+    assert second is first
+
+    config_path = source_dir / "config.json"
+    config = json.loads(config_path.read_text(encoding="utf-8"))
+    config["hidden_size"] += 1
+    config_path.write_text(json.dumps(config), encoding="utf-8")
+    with pytest.raises(CachedKVBridgeError, match="source model: config_sha256"):
+        cache.load(
+            manifest_path,
+            source_model_path=source_dir,
+            target_model_path=target_dir,
+        )
 
 
 def test_qwen_rope_inverse_round_trip_uses_absolute_positions() -> None:

@@ -3,6 +3,7 @@
 from goldenexperience.size_variant.cached_kv_bridge import (
     CachedKVBridgeError,
     Qwen3CachedKVBridge,
+    ResidentQwen3CachedKVBridgeCache,
     safetensors_metadata,
 )
 from goldenexperience.size_variant.cached_kv_dataset import (
@@ -93,6 +94,7 @@ __all__ = [
     "QWEN3_14B",
     "QWEN3_8B",
     "Qwen3CachedKVBridge",
+    "ResidentQwen3CachedKVBridgeCache",
     "QualityGateResult",
     "SizeVariantDirection",
     "SizeVariantMaterializer",

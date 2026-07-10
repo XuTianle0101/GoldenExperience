@@ -392,6 +392,9 @@ Runtime behavior remains conservative:
   prefilling either model.
 - Measured artifact load, exact source read, transform, and target write time must be <=
   70% of the isolated native target prefill cost before target keys are published.
+- Long-lived materializer workers keep verified bridge tensors resident. Every cache hit
+  rechecks manifest, bridge, model-directory, config, tokenizer, and shard stat identities;
+  any change forces complete content verification before reuse.
 - Any tokenizer, RoPE, model/config/weight identity, artifact, prompt binding, object
   layout, exact-I/O, quality, or cost mismatch falls back to the original target prefill.
 

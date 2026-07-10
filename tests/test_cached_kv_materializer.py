@@ -251,6 +251,7 @@ def test_cached_materializer_uses_source_objects_and_publishes_target_index(
 
     assert result["success"] is True
     assert result["injected"] is True
+    assert result["artifact_cache"] == {"hit": False, "resident_loader": False}
     assert result["injection"]["injected_count"] == 2
     assert bridge.positions == [0, 2]
     assert "target@0xaa" in fake.objects

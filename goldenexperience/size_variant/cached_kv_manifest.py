@@ -21,10 +21,14 @@ _TOKENIZER_FILES = (
 
 
 def sha256_file(path: str | Path) -> str:
+    file_path = Path(path)
+    before = _stat_signature(file_path)
     digest = hashlib.sha256()
-    with Path(path).open("rb") as handle:
+    with file_path.open("rb") as handle:
         for chunk in iter(lambda: handle.read(8 * 1024 * 1024), b""):
             digest.update(chunk)
+    if _stat_signature(file_path) != before:
+        raise OSError(f"file changed while hashing: {file_path}")
     return digest.hexdigest()
 
 
@@ -413,12 +417,7 @@ def model_spec_from_path(
     root = Path(model_path).resolve()
     config_path = root / "config.json"
     config = json.loads(config_path.read_text(encoding="utf-8"))
-    tokenizer_paths = [root / name for name in _TOKENIZER_FILES if (root / name).is_file()]
-    if not tokenizer_paths:
-        raise ValueError(f"tokenizer files are missing under {root}")
-    weight_paths = sorted(root.glob("*.safetensors"))
-    if not weight_paths:
-        raise ValueError(f"safetensors model weights are missing under {root}")
+    tokenizer_paths, weight_paths = _model_identity_files(root)
     architecture = str(config.get("model_type", ""))
     dtype = str(config.get("torch_dtype", ""))
     return CachedKVModelSpec(
@@ -454,6 +453,17 @@ def verify_model_path(expected: CachedKVModelSpec, model_path: str | Path) -> li
     return errors
 
 
+def model_identity_paths(model_path: str | Path) -> tuple[Path, ...]:
+    """Return every path whose metadata guards a resident model identity."""
+
+    root = Path(model_path).resolve()
+    config_path = root / "config.json"
+    if not config_path.is_file():
+        raise ValueError(f"config.json is missing under {root}")
+    tokenizer_paths, weight_paths = _model_identity_files(root)
+    return (root, config_path, *tokenizer_paths, *weight_paths)
+
+
 def artifact_id_for(manifest: CachedKVBridgeManifest) -> str:
     """Derive a stable ID from the manifest contract and weight content digest."""
 
@@ -471,3 +481,18 @@ def _is_sha256(value: str | None) -> bool:
     except ValueError:
         return False
     return True
+
+
+def _model_identity_files(root: Path) -> tuple[list[Path], list[Path]]:
+    tokenizer_paths = [root / name for name in _TOKENIZER_FILES if (root / name).is_file()]
+    if not tokenizer_paths:
+        raise ValueError(f"tokenizer files are missing under {root}")
+    weight_paths = sorted(root.glob("*.safetensors"))
+    if not weight_paths:
+        raise ValueError(f"safetensors model weights are missing under {root}")
+    return tokenizer_paths, weight_paths
+
+
+def _stat_signature(path: Path) -> tuple[int, int, int, int, int]:
+    stat = path.stat()
+    return (stat.st_dev, stat.st_ino, stat.st_size, stat.st_mtime_ns, stat.st_ctime_ns)

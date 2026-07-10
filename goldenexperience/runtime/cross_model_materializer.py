@@ -17,8 +17,10 @@ from goldenexperience.runtime.mooncake_objects import (
 )
 from goldenexperience.size_variant.cached_kv_bridge import (
     CachedKVBridgeError,
-    Qwen3CachedKVBridge,
+    ResidentQwen3CachedKVBridgeCache,
 )
+
+_RESIDENT_BRIDGE_CACHE = ResidentQwen3CachedKVBridgeCache()
 
 
 def _write_json(path: Path, payload: dict[str, Any]) -> None:
@@ -205,13 +207,22 @@ def materialize_cached_qwen3(
             raise ValueError("prompt_binding is required")
 
         load_started = time.perf_counter()
-        loader = bridge_loader or Qwen3CachedKVBridge.from_artifact
-        bridge = loader(
-            request["bridge_manifest_path"],
-            source_model_path=request["source_model_path"],
-            target_model_path=request["target_model_path"],
-            device=request.get("device", "cuda:0" if torch.cuda.is_available() else "cpu"),
-        )
+        bridge_cache_hit = False
+        bridge_device = request.get("device", "cuda:0" if torch.cuda.is_available() else "cpu")
+        if bridge_loader is None:
+            bridge, bridge_cache_hit = _RESIDENT_BRIDGE_CACHE.load(
+                request["bridge_manifest_path"],
+                source_model_path=request["source_model_path"],
+                target_model_path=request["target_model_path"],
+                device=bridge_device,
+            )
+        else:
+            bridge = bridge_loader(
+                request["bridge_manifest_path"],
+                source_model_path=request["source_model_path"],
+                target_model_path=request["target_model_path"],
+                device=bridge_device,
+            )
         load_ms = (time.perf_counter() - load_started) * 1000
         if request.get("direction") not in {None, bridge.manifest.direction}:
             raise ValueError("requested direction does not match bridge artifact")
@@ -383,6 +394,10 @@ def materialize_cached_qwen3(
             "allow_unsafe": False,
             "bridge_id": bridge.manifest.bridge_id,
             "direction": bridge.manifest.direction,
+            "artifact_cache": {
+                "hit": bridge_cache_hit,
+                "resident_loader": bridge_loader is None,
+            },
             "offline_quality_gate": {
                 "checks": {
                     "artifact_approved": bridge.manifest.approved,
