@@ -133,6 +133,10 @@ source .venv/bin/activate
 ./scripts/install_runtime.sh --mode package
 ```
 
+package 模式会 fail closed 到已验证的 CUDA 13 组合（`vllm==0.24.0`、
+`lmcache==0.4.6`），且不会绕过依赖解析器替换 CuPy。CUDA 12 或其他运行时组合需使用
+source 模式，直到对应 adapter 兼容性测试落地。
+
 需要补丁 LMCache 或调试 vLLM/LMCache/Mooncake 内部逻辑时使用 source 模式：
 
 ```bash

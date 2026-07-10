@@ -137,6 +137,10 @@ source .venv/bin/activate
 ./scripts/install_runtime.sh --mode package
 ```
 
+Package mode is fail-closed to the verified CUDA 13 stack (`vllm==0.24.0`,
+`lmcache==0.4.6`). It never replaces CuPy behind the resolver. Use source mode for CUDA
+12 or another runtime matrix until that stack has its own adapter compatibility tests.
+
 Use source mode when you need to patch LMCache or debug vLLM/LMCache/Mooncake internals:
 
 ```bash

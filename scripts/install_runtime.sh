@@ -38,6 +38,9 @@ Environment:
   GE_PATCH_MOONCAKE_RUNTIME  1 to apply the LMCache/Mooncake compatibility patch after
                              installing packages; 0 to skip. Default: 1.
   GE_RUNTIME_CHECK       Same as --runtime-check.
+  GE_CUDA_MAJOR          Override detected CUDA major for package mode.
+  GE_VLLM_VERSION        Verified package-mode vLLM version. Default: 0.24.0.
+  GE_LMCACHE_VERSION     Verified package-mode LMCache version. Default: 0.4.6.
 USAGE
 }
 
@@ -56,6 +59,8 @@ use_uv="${GE_USE_UV:-1}"
 lmcache_build_mooncake="${GE_LMCACHE_BUILD_MOONCAKE:-1}"
 runtime_check="${GE_RUNTIME_CHECK:-}"
 patch_mooncake_runtime="${GE_PATCH_MOONCAKE_RUNTIME:-1}"
+vllm_version="${GE_VLLM_VERSION:-0.24.0}"
+lmcache_version="${GE_LMCACHE_VERSION:-0.4.6}"
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
@@ -133,12 +138,40 @@ if sys.version_info < (3, 10):
     raise SystemExit("Python 3.10+ is required for GoldenExperience runtime experiments.")
 PY
 
+detect_cuda_major() {
+  if [ -n "${GE_CUDA_MAJOR:-}" ]; then
+    printf '%s\n' "$GE_CUDA_MAJOR"
+    return
+  fi
+  if command -v nvidia-smi >/dev/null 2>&1; then
+    nvidia-smi | sed -n 's/.*CUDA Version: \([0-9][0-9]*\)\..*/\1/p' | head -n 1
+  fi
+}
+
+if [ "$mode" = "package" ]; then
+  cuda_major="$(detect_cuda_major)"
+  if [ "$cuda_major" != "13" ]; then
+    cat >&2 <<MSG
+Package mode is verified only for CUDA 13 (detected: ${cuda_major:-unknown}).
+No packages were changed. Use --mode source with a compatible upstream stack, or set
+GE_CUDA_MAJOR=13 only when the active Python and driver stack are actually CUDA 13.
+MSG
+    exit 1
+  fi
+fi
+
 if [ "$use_uv" = "1" ] && command -v uv >/dev/null 2>&1; then
   install_cmd=(uv pip install)
-  package_runtime_cmd=(uv pip install --upgrade --prerelease=allow vllm "lmcache>=0.4.6")
+  package_runtime_cmd=(
+    uv pip install --upgrade --prerelease=allow
+    "vllm==${vllm_version}" "lmcache==${lmcache_version}"
+  )
 else
   install_cmd=("$python_bin" -m pip install)
-  package_runtime_cmd=("$python_bin" -m pip install --upgrade --pre vllm "lmcache>=0.4.6")
+  package_runtime_cmd=(
+    "$python_bin" -m pip install --upgrade --pre
+    "vllm==${vllm_version}" "lmcache==${lmcache_version}"
+  )
 fi
 
 install_goldenexperience() {
@@ -175,8 +208,6 @@ MSG
 case "$mode" in
   package)
     "${package_runtime_cmd[@]}"
-    "$python_bin" -m pip uninstall -y cupy-cuda12x >/dev/null 2>&1 || true
-    "$python_bin" -m pip install --force-reinstall --no-deps cupy-cuda13x
     install_goldenexperience
     ;;
   source)

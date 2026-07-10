@@ -29,7 +29,7 @@ dependencies = []
 [project.optional-dependencies]
 torch = ["torch>=2.1"]
 hf = ["transformers>=4.40", "torch>=2.1"]
-runtime = ["vllm>=0.5", "lmcache>=0.4.6"]
+runtime = ["vllm==0.24.0", "lmcache==0.4.6"]
 dev = ["pytest>=8", "ruff>=0.5", "mypy>=1.10"]
 
 [project.scripts]
