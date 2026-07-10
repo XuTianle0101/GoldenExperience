@@ -323,6 +323,113 @@ def test_supervised_fit_learns_full_width_diagonal_baseline() -> None:
     torch.testing.assert_close(reconstructed, target, atol=2e-3, rtol=2e-3)
 
 
+def test_supervised_fit_uses_silu_correction_for_nonlinear_cached_kv() -> None:
+    import torch.nn.functional as functional
+
+    torch.manual_seed(19)
+    source = torch.randn(2, 2, 256, 4)
+    positions = torch.arange(256)
+    layer_ids, layer_weights = build_source_layer_plan(2, 2, 1)
+    source_key = _apply_rope_flat(
+        source[0],
+        positions,
+        num_heads=1,
+        head_dim=4,
+        theta=1_000_000,
+        inverse=True,
+    )
+    selected_key = source_key[layer_ids].squeeze(1)
+    selected_value = source[1][layer_ids].squeeze(1)
+    features = torch.cat((selected_key, selected_value), dim=-1)
+    key_down = torch.randn(2, 8, 2) * 0.3
+    value_down = torch.randn(2, 8, 2) * 0.3
+    key_latent = torch.bmm(features, key_down)
+    value_latent = torch.bmm(features, value_down)
+    key_scale = key_latent.square().mean(dim=1).sqrt()
+    value_scale = value_latent.square().mean(dim=1).sqrt()
+    target_key_unrotated = selected_key + torch.bmm(
+        key_latent,
+        torch.randn(2, 2, 4) * 0.05,
+    )
+    target_key_unrotated += torch.bmm(
+        functional.silu(key_latent / key_scale.unsqueeze(1)),
+        torch.randn(2, 2, 4) * 0.4,
+    )
+    target_value = selected_value + torch.bmm(
+        value_latent,
+        torch.randn(2, 2, 4) * 0.05,
+    )
+    target_value += torch.bmm(
+        functional.silu(value_latent / value_scale.unsqueeze(1)),
+        torch.randn(2, 2, 4) * 0.4,
+    )
+    target_key = _apply_rope_flat(
+        target_key_unrotated,
+        positions,
+        num_heads=1,
+        head_dim=4,
+        theta=1_000_000,
+        inverse=False,
+    )
+    target = torch.stack((target_key, target_value))
+    train_x, key_residual, value_residual = build_training_matrices(
+        source,
+        target,
+        positions,
+        layer_ids,
+        layer_weights,
+        source_heads=1,
+        source_head_dim=4,
+        source_rope_theta=1_000_000,
+        target_heads=1,
+        target_head_dim=4,
+        target_rope_theta=1_000_000,
+    )
+    state = fit_low_rank_state(
+        train_x,
+        key_residual,
+        value_residual,
+        layer_ids,
+        layer_weights,
+        rank=2,
+        ridge_lambda=1e-3,
+        nonlinear_ridge_lambda=1e-2,
+        device="cpu",
+    )
+    without_nonlinear = dict(state)
+    without_nonlinear["key_nonlinear_up"] = torch.zeros_like(state["key_nonlinear_up"])
+    without_nonlinear["value_nonlinear_up"] = torch.zeros_like(state["value_nonlinear_up"])
+
+    reconstructed = transform_with_state(
+        source,
+        positions,
+        state,
+        source_heads=1,
+        source_head_dim=4,
+        source_rope_theta=1_000_000,
+        target_heads=1,
+        target_head_dim=4,
+        target_rope_theta=1_000_000,
+        device="cpu",
+    )
+    linear_only = transform_with_state(
+        source,
+        positions,
+        without_nonlinear,
+        source_heads=1,
+        source_head_dim=4,
+        source_rope_theta=1_000_000,
+        target_heads=1,
+        target_head_dim=4,
+        target_rope_theta=1_000_000,
+        device="cpu",
+    )
+
+    nonlinear_mse = torch.mean((reconstructed - target).square())
+    linear_mse = torch.mean((linear_only - target).square())
+    assert nonlinear_mse < linear_mse * 0.9
+
+
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA is required for BF16 regression")
 def test_training_transform_uses_one_compute_dtype_on_cuda() -> None:
     source = torch.randn(2, 2, 8, 4, dtype=torch.bfloat16)
@@ -334,10 +441,16 @@ def test_training_transform_uses_one_compute_dtype_on_cuda() -> None:
         "feature_mean": torch.zeros(2, 8),
         "key_base_scale": torch.ones(2, 4),
         "key_down": torch.zeros(2, 8, 1, dtype=torch.bfloat16),
+        "key_nonlinear_mean": torch.zeros(2, 1),
+        "key_nonlinear_scale": torch.ones(2, 1),
+        "key_nonlinear_up": torch.zeros(2, 1, 4, dtype=torch.bfloat16),
         "key_up": torch.zeros(2, 1, 4, dtype=torch.bfloat16),
         "key_bias": torch.zeros(2, 4),
         "value_base_scale": torch.ones(2, 4),
         "value_down": torch.zeros(2, 8, 1, dtype=torch.bfloat16),
+        "value_nonlinear_mean": torch.zeros(2, 1),
+        "value_nonlinear_scale": torch.ones(2, 1),
+        "value_nonlinear_up": torch.zeros(2, 1, 4, dtype=torch.bfloat16),
         "value_up": torch.zeros(2, 1, 4, dtype=torch.bfloat16),
         "value_bias": torch.zeros(2, 4),
     }

@@ -24,10 +24,16 @@ REQUIRED_WEIGHT_TENSORS = frozenset(
         "feature_mean",
         "key_base_scale",
         "key_down",
+        "key_nonlinear_mean",
+        "key_nonlinear_scale",
+        "key_nonlinear_up",
         "key_up",
         "key_bias",
         "value_base_scale",
         "value_down",
+        "value_nonlinear_mean",
+        "value_nonlinear_scale",
+        "value_nonlinear_up",
         "value_up",
         "value_bias",
     }
@@ -206,6 +212,7 @@ class Qwen3CachedKVBridge:
         """Translate `[2, source_layers, tokens, width]` to the target layout."""
 
         import torch
+        import torch.nn.functional as functional
 
         self._validate_source(source_kv)
         token_count = int(source_kv.shape[2])
@@ -247,13 +254,33 @@ class Qwen3CachedKVBridge:
         base_value = base_value * self._tensors["value_base_scale"].to(
             self.compute_dtype
         ).unsqueeze(1)
-        key_delta = torch.bmm(
-            torch.bmm(centered, self._tensors["key_down"].to(self.compute_dtype)),
-            self._tensors["key_up"].to(self.compute_dtype),
+        key_latent = torch.bmm(
+            centered,
+            self._tensors["key_down"].to(self.compute_dtype),
         )
+        value_latent = torch.bmm(
+            centered,
+            self._tensors["value_down"].to(self.compute_dtype),
+        )
+        key_delta = torch.bmm(key_latent, self._tensors["key_up"].to(self.compute_dtype))
         value_delta = torch.bmm(
-            torch.bmm(centered, self._tensors["value_down"].to(self.compute_dtype)),
+            value_latent,
             self._tensors["value_up"].to(self.compute_dtype),
+        )
+        key_nonlinear = functional.silu(
+            key_latent / self._tensors["key_nonlinear_scale"].to(self.compute_dtype).unsqueeze(1)
+        ) - self._tensors["key_nonlinear_mean"].to(self.compute_dtype).unsqueeze(1)
+        value_nonlinear = functional.silu(
+            value_latent
+            / self._tensors["value_nonlinear_scale"].to(self.compute_dtype).unsqueeze(1)
+        ) - self._tensors["value_nonlinear_mean"].to(self.compute_dtype).unsqueeze(1)
+        key_delta = key_delta + torch.bmm(
+            key_nonlinear,
+            self._tensors["key_nonlinear_up"].to(self.compute_dtype),
+        )
+        value_delta = value_delta + torch.bmm(
+            value_nonlinear,
+            self._tensors["value_nonlinear_up"].to(self.compute_dtype),
         )
         target_key_unrotated = (
             base_key + key_delta + self._tensors["key_bias"].to(self.compute_dtype).unsqueeze(1)
@@ -359,10 +386,16 @@ class Qwen3CachedKVBridge:
             "feature_mean": (target_layers, feature_width),
             "key_base_scale": (target_layers, width),
             "key_down": (target_layers, feature_width, rank),
+            "key_nonlinear_mean": (target_layers, rank),
+            "key_nonlinear_scale": (target_layers, rank),
+            "key_nonlinear_up": (target_layers, rank, width),
             "key_up": (target_layers, rank, width),
             "key_bias": (target_layers, width),
             "value_base_scale": (target_layers, width),
             "value_down": (target_layers, feature_width, rank),
+            "value_nonlinear_mean": (target_layers, rank),
+            "value_nonlinear_scale": (target_layers, rank),
+            "value_nonlinear_up": (target_layers, rank, width),
             "value_up": (target_layers, rank, width),
             "value_bias": (target_layers, width),
         }
@@ -394,6 +427,9 @@ class Qwen3CachedKVBridge:
             rtol=0,
         ):
             raise CachedKVBridgeError("source_layer_weights must sum to one per target layer")
+        for name in ("key_nonlinear_scale", "value_nonlinear_scale"):
+            if bool((self._tensors[name] <= 0).any()):
+                raise CachedKVBridgeError(f"{name} must be positive")
 
 
 class ResidentQwen3CachedKVBridgeCache:

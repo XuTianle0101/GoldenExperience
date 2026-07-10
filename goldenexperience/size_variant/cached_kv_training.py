@@ -159,6 +159,7 @@ def fit_low_rank_state(
     *,
     rank: int,
     ridge_lambda: float,
+    nonlinear_ridge_lambda: float | None = None,
     device: str,
 ) -> dict[str, Any]:
     """Fit supervised low-rank residual maps for every target layer."""
@@ -171,13 +172,22 @@ def fit_low_rank_state(
         raise ValueError("training tensor layer/sample dimensions differ")
     if rank <= 0 or ridge_lambda <= 0 or not math.isfinite(ridge_lambda):
         raise ValueError("rank and ridge_lambda must be valid")
+    nonlinear_ridge = ridge_lambda if nonlinear_ridge_lambda is None else nonlinear_ridge_lambda
+    if nonlinear_ridge <= 0 or not math.isfinite(nonlinear_ridge):
+        raise ValueError("nonlinear_ridge_lambda must be finite and positive")
     target_layers = int(features.shape[0])
     feature_means: list[Any] = []
     key_down: list[Any] = []
+    key_nonlinear_mean: list[Any] = []
+    key_nonlinear_scale: list[Any] = []
+    key_nonlinear_up: list[Any] = []
     key_up: list[Any] = []
     key_bias: list[Any] = []
     key_base_scale: list[Any] = []
     value_down: list[Any] = []
+    value_nonlinear_mean: list[Any] = []
+    value_nonlinear_scale: list[Any] = []
+    value_nonlinear_up: list[Any] = []
     value_up: list[Any] = []
     value_bias: list[Any] = []
     value_base_scale: list[Any] = []
@@ -215,13 +225,41 @@ def fit_low_rank_state(
             rank=rank,
             ridge_lambda=ridge_lambda,
         )
+        key_activation_scale, key_activation_mean, key_activation_up = _fit_nonlinear_correction(
+            x_centered,
+            key_base,
+            key_delta,
+            key_scale,
+            key_mean,
+            key_basis,
+            key_projection,
+            ridge_lambda=nonlinear_ridge,
+        )
+        value_activation_scale, value_activation_mean, value_activation_up = (
+            _fit_nonlinear_correction(
+                x_centered,
+                value_base,
+                value_delta,
+                value_scale,
+                value_mean,
+                value_basis,
+                value_projection,
+                ridge_lambda=nonlinear_ridge,
+            )
+        )
         feature_means.append(mean_x.cpu())
         key_base_scale.append(key_scale.cpu())
         key_down.append(key_basis.cpu())
+        key_nonlinear_mean.append(key_activation_mean.cpu())
+        key_nonlinear_scale.append(key_activation_scale.cpu())
+        key_nonlinear_up.append(key_activation_up.cpu())
         key_up.append(key_projection.cpu())
         key_bias.append(key_mean.cpu())
         value_base_scale.append(value_scale.cpu())
         value_down.append(value_basis.cpu())
+        value_nonlinear_mean.append(value_activation_mean.cpu())
+        value_nonlinear_scale.append(value_activation_scale.cpu())
+        value_nonlinear_up.append(value_activation_up.cpu())
         value_up.append(value_projection.cpu())
         value_bias.append(value_mean.cpu())
         del x, key_delta, value_delta, x_centered
@@ -233,10 +271,16 @@ def fit_low_rank_state(
         "feature_mean": torch.stack(feature_means),
         "key_base_scale": torch.stack(key_base_scale),
         "key_down": torch.stack(key_down),
+        "key_nonlinear_mean": torch.stack(key_nonlinear_mean),
+        "key_nonlinear_scale": torch.stack(key_nonlinear_scale),
+        "key_nonlinear_up": torch.stack(key_nonlinear_up),
         "key_up": torch.stack(key_up),
         "key_bias": torch.stack(key_bias),
         "value_base_scale": torch.stack(value_base_scale),
         "value_down": torch.stack(value_down),
+        "value_nonlinear_mean": torch.stack(value_nonlinear_mean),
+        "value_nonlinear_scale": torch.stack(value_nonlinear_scale),
+        "value_nonlinear_up": torch.stack(value_nonlinear_up),
         "value_up": torch.stack(value_up),
         "value_bias": torch.stack(value_bias),
     }
@@ -258,6 +302,7 @@ def transform_with_state(
     """Apply an in-memory training state before an artifact can be approved."""
 
     import torch
+    import torch.nn.functional as functional
 
     parsed_device = torch.device(device)
     compute_dtype = torch.bfloat16 if parsed_device.type == "cuda" else torch.float32
@@ -290,25 +335,42 @@ def transform_with_state(
     base_value = base_value * state["value_base_scale"].to(
         device=device, dtype=source.dtype
     ).unsqueeze(1)
+    key_latent = torch.bmm(
+        centered,
+        state["key_down"].to(device=device, dtype=source.dtype),
+    )
+    value_latent = torch.bmm(
+        centered,
+        state["value_down"].to(device=device, dtype=source.dtype),
+    )
+    key_nonlinear = functional.silu(
+        key_latent / state["key_nonlinear_scale"].to(device=device, dtype=source.dtype).unsqueeze(1)
+    ) - state["key_nonlinear_mean"].to(device=device, dtype=source.dtype).unsqueeze(1)
+    value_nonlinear = functional.silu(
+        value_latent
+        / state["value_nonlinear_scale"].to(device=device, dtype=source.dtype).unsqueeze(1)
+    ) - state["value_nonlinear_mean"].to(device=device, dtype=source.dtype).unsqueeze(1)
+    key = base_key + torch.bmm(
+        key_latent,
+        state["key_up"].to(device=device, dtype=source.dtype),
+    )
     key = (
-        base_key
+        key
         + torch.bmm(
-            torch.bmm(
-                centered,
-                state["key_down"].to(device=device, dtype=source.dtype),
-            ),
-            state["key_up"].to(device=device, dtype=source.dtype),
+            key_nonlinear,
+            state["key_nonlinear_up"].to(device=device, dtype=source.dtype),
         )
         + state["key_bias"].to(device=device, dtype=source.dtype).unsqueeze(1)
     )
+    value = base_value + torch.bmm(
+        value_latent,
+        state["value_up"].to(device=device, dtype=source.dtype),
+    )
     value = (
-        base_value
+        value
         + torch.bmm(
-            torch.bmm(
-                centered,
-                state["value_down"].to(device=device, dtype=source.dtype),
-            ),
-            state["value_up"].to(device=device, dtype=source.dtype),
+            value_nonlinear,
+            state["value_nonlinear_up"].to(device=device, dtype=source.dtype),
         )
         + state["value_bias"].to(device=device, dtype=source.dtype).unsqueeze(1)
     )
@@ -410,6 +472,33 @@ def _fit_scaled_projection(
         ridge_lambda=ridge_lambda,
     )
     return scale, mean, basis, projection
+
+
+def _fit_nonlinear_correction(
+    x_centered: Any,
+    base: Any,
+    delta: Any,
+    base_scale: Any,
+    mean: Any,
+    basis: Any,
+    projection: Any,
+    *,
+    ridge_lambda: float,
+) -> tuple[Any, Any, Any]:
+    import torch
+    import torch.nn.functional as functional
+
+    latent = x_centered @ basis
+    latent_scale = latent.square().mean(dim=0).sqrt().clamp_min(1e-6)
+    activation = functional.silu(latent / latent_scale)
+    activation_mean = activation.mean(dim=0)
+    activation_centered = activation - activation_mean
+    target = delta - base * (base_scale - 1)
+    residual = target - ((latent @ projection) + mean)
+    gram = activation_centered.T @ activation_centered
+    gram.diagonal().add_(ridge_lambda)
+    nonlinear_up = torch.linalg.solve(gram, activation_centered.T @ residual)
+    return latent_scale, activation_mean, nonlinear_up
 
 
 def _validate_object_pair(

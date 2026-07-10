@@ -196,7 +196,14 @@ def _quantize_state(state: dict[str, Any]) -> dict[str, Any]:
 
     quantized: dict[str, Any] = {}
     for name, tensor in state.items():
-        if name in {"key_down", "key_up", "value_down", "value_up"}:
+        if name in {
+            "key_down",
+            "key_nonlinear_up",
+            "key_up",
+            "value_down",
+            "value_nonlinear_up",
+            "value_up",
+        }:
             quantized[name] = tensor.to(torch.bfloat16).contiguous()
         else:
             quantized[name] = tensor.contiguous()
@@ -514,6 +521,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--rank", type=int, default=512)
     parser.add_argument("--source-window", type=int, default=3)
     parser.add_argument("--ridge-lambda", type=float, default=1000.0)
+    parser.add_argument("--nonlinear-ridge-lambda", type=float, default=1000.0)
     parser.add_argument("--samples-per-prompt", type=int, default=32)
     parser.add_argument("--max-training-samples", type=int, default=2048)
     parser.add_argument("--suffix-tokens", type=int, default=16)
@@ -611,6 +619,7 @@ def main() -> int:
         source_layer_weights,
         rank=effective_rank,
         ridge_lambda=args.ridge_lambda,
+        nonlinear_ridge_lambda=args.nonlinear_ridge_lambda,
         device=args.fit_device,
     )
     state = _quantize_state(state)
@@ -646,6 +655,7 @@ def main() -> int:
         "rank": effective_rank,
         "source_window": args.source_window,
         "ridge_lambda": args.ridge_lambda,
+        "nonlinear_ridge_lambda": args.nonlinear_ridge_lambda,
         "training_collection": collection,
         "validation": validation,
     }
