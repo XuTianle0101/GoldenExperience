@@ -214,6 +214,8 @@ def test_mooncake_runtime_patch_is_idempotent(tmp_path: Path) -> None:
     assert "GE_MOONCAKE_EXTERNAL_INDEX" in mooncake_text
     assert "_refresh_external_index" in mooncake_text
     assert "external_index_hits" in mooncake_text
+    assert "GOLDENEXPERIENCE_MOONCAKE_ADAPTER_VERSION = 2" in mooncake_text
+    assert "bytes_read == requested_size == indexed_size" in mooncake_text
     assert "_use_local_lookup_index" in native_text
     assert "LMCACHE_MOONCAKE_NATIVE_EXISTS" in native_text
 
@@ -228,6 +230,47 @@ def test_mooncake_runtime_patch_is_idempotent(tmp_path: Path) -> None:
 
     checked = patch_module.patch_runtime(site_packages=[site_packages], check=True)
     assert checked
+
+
+def test_mooncake_read_requires_exact_indexed_size() -> None:
+    patch_module = _load_patch_module()
+
+    assert patch_module.is_complete_mooncake_read(8, 8, 8)
+    assert not patch_module.is_complete_mooncake_read(7, 8, 8)
+    assert not patch_module.is_complete_mooncake_read(8, 8, 7)
+    assert not patch_module.is_complete_mooncake_read(9, 8, 8)
+    assert not patch_module.is_complete_mooncake_read(0, 8, 8)
+
+
+def test_mooncake_runtime_patch_upgrades_previous_adapter_block(tmp_path: Path) -> None:
+    patch_module = _load_patch_module()
+    site_packages = _write_fake_site_packages(tmp_path)
+    patch_module.patch_runtime(site_packages=[site_packages])
+    adapter = (
+        site_packages
+        / "lmcache"
+        / "v1"
+        / "distributed"
+        / "l2_adapters"
+        / "mooncake_store_l2_adapter.py"
+    )
+    text = adapter.read_text(encoding="utf-8").replace(
+        "GOLDENEXPERIENCE_MOONCAKE_ADAPTER_VERSION = 2\n\n\n",
+        "",
+        1,
+    ).replace(
+        "if bytes_read == requested_size == indexed_size:",
+        "if bytes_read > 0:",
+        1,
+    )
+    adapter.write_text(text, encoding="utf-8")
+
+    results = patch_module.patch_runtime(site_packages=[site_packages])
+
+    assert any(result.changed for result in results)
+    upgraded = adapter.read_text(encoding="utf-8")
+    assert "GOLDENEXPERIENCE_MOONCAKE_ADAPTER_VERSION = 2" in upgraded
+    assert "bytes_read == requested_size == indexed_size" in upgraded
 
 
 def test_mooncake_runtime_patch_cli_check(tmp_path: Path) -> None:

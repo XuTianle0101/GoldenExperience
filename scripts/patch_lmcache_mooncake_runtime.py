@@ -25,6 +25,7 @@ from pathlib import Path
 
 PYTHON_ADAPTER_MARKER = "# --- GoldenExperience Mooncake Python adapter begin ---"
 PYTHON_ADAPTER_END_MARKER = "# --- GoldenExperience Mooncake Python adapter end ---"
+PYTHON_ADAPTER_VERSION_MARKER = "GOLDENEXPERIENCE_MOONCAKE_ADAPTER_VERSION = 2"
 NATIVE_LOOKUP_MARKER = "# --- GoldenExperience Mooncake native lookup patch begin ---"
 NATIVE_LOOKUP_END_MARKER = "# --- GoldenExperience Mooncake native lookup patch end ---"
 
@@ -38,6 +39,8 @@ MOONCAKE_ADAPTER_REQUIRED = (
     "GE_MOONCAKE_EXTERNAL_INDEX",
     "_refresh_external_index",
     "external_index_hits",
+    PYTHON_ADAPTER_VERSION_MARKER,
+    "bytes_read == requested_size == indexed_size",
 )
 
 NATIVE_ADAPTER_REQUIRED = (
@@ -46,7 +49,18 @@ NATIVE_ADAPTER_REQUIRED = (
     "LMCACHE_MOONCAKE_NATIVE_EXISTS",
 )
 
+
+def is_complete_mooncake_read(
+    bytes_read: int,
+    requested_size: int,
+    indexed_size: int,
+) -> bool:
+    return bytes_read == requested_size == indexed_size
+
 MOONCAKE_PYTHON_ADAPTER_BLOCK = f'''{PYTHON_ADAPTER_MARKER}
+{PYTHON_ADAPTER_VERSION_MARKER}
+
+
 def _env_enabled(name: str, default: str) -> bool:
     return os.environ.get(name, default).lower() in {{"1", "true", "yes", "on"}}
 
@@ -203,21 +217,31 @@ class MooncakePythonL2Adapter(L2AdapterInterface):
         loaded_keys: list[ObjectKey] = []
         for i, (key, obj) in enumerate(zip(keys, objects, strict=True)):
             with self._lock:
-                known = key in self._key_sizes
-            if not known:
+                indexed_size = self._key_sizes.get(key)
+            if indexed_size is None:
                 continue
             key_string = _object_key_to_string(key)
-            ptr, size = _memoryview_ptr_and_size(obj)
-            bytes_read = self._store.get_into(key_string, ptr, size)
+            ptr, requested_size = _memoryview_ptr_and_size(obj)
+            bytes_read = self._store.get_into(key_string, ptr, requested_size)
             logger.info(
-                "MooncakeStore GET key=%s requested_bytes=%d read_bytes=%d",
+                "MooncakeStore GET key=%s requested_bytes=%d indexed_bytes=%d read_bytes=%d",
                 key_string,
-                size,
+                requested_size,
+                indexed_size,
                 bytes_read,
             )
-            if bytes_read > 0:
+            if bytes_read == requested_size == indexed_size:
                 bitmap.set(i)
                 loaded_keys.append(key)
+            else:
+                logger.warning(
+                    "MooncakeStore GET rejected incomplete read key=%s "
+                    "requested_bytes=%d indexed_bytes=%d read_bytes=%d",
+                    key_string,
+                    requested_size,
+                    indexed_size,
+                    bytes_read,
+                )
 
         with self._lock:
             self._completed_loads[task_id] = bitmap
@@ -498,7 +522,7 @@ def patch_mooncake_store_adapter(
         elif "import ctypes" in text:
             text = _insert_after_once(text, "import ctypes\n", "import json\n", path)
 
-    if PYTHON_ADAPTER_MARKER in text and "GE_MOONCAKE_EXTERNAL_INDEX" not in text:
+    if PYTHON_ADAPTER_MARKER in text and PYTHON_ADAPTER_VERSION_MARKER not in text:
         start = text.index(PYTHON_ADAPTER_MARKER)
         end = text.index(PYTHON_ADAPTER_END_MARKER, start) + len(PYTHON_ADAPTER_END_MARKER)
         text = text[:start] + MOONCAKE_PYTHON_ADAPTER_BLOCK.rstrip("\n") + text[end:]
