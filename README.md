@@ -394,6 +394,26 @@ Runtime behavior remains conservative:
 - Any tokenizer, RoPE, model/config/weight identity, artifact, prompt binding, object
   layout, exact-I/O, quality, or cost mismatch falls back to the original target prefill.
 
+### Cached-KV Training
+
+The checked-in dataset recipe has explicit, disjoint train/validation/sealed-test prompt
+IDs and content hashes. Regenerate it deterministically, then tune against validation
+without opening the test split:
+
+```bash
+python3 scripts/generate_qwen3_cached_kv_dataset.py
+python3 scripts/train_qwen3_cached_kv_bridge.py \
+  --direction 8b_to_14b \
+  --dataset configs/qwen3_cached_kv_prompts.json \
+  --output artifacts/cached_kv/qwen3_8b_to_14b.json
+```
+
+Run the same command with `--direction 14b_to_8b` for the reverse artifact. Add
+`--finalize` only for the selected hyperparameters; this evaluates the sealed 32-prompt
+test split and writes safetensors plus a content-addressed manifest. A separate runtime
+cost report with measured Mooncake P95 read-transform-write and native-prefill latency is
+required for approval. Without it, even perfect offline metrics remain fail closed.
+
 ## Minimal Planner Example
 
 ```python

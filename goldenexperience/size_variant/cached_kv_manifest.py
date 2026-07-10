@@ -112,10 +112,13 @@ class CachedKVQualityThresholds:
     min_value_cosine: float = 0.95
     min_next_token_top1_agreement: float = 0.98
     max_perplexity_drift_pct: float = 2.0
+    min_native_task_score: float = 0.95
+    min_bridge_task_score: float = 0.95
     max_task_score_drop_pct: float = 1.0
     min_greedy_continuation_match_rate: float = 0.98
     max_materialization_to_prefill_ratio: float = 0.70
     min_held_out_prompts: int = 32
+    min_task_prompts: int = 32
     required_token_buckets: tuple[int, ...] = (32, 128, 512, 2048)
 
     def validate(self) -> list[str]:
@@ -124,6 +127,8 @@ class CachedKVQualityThresholds:
             ("min_key_cosine", self.min_key_cosine),
             ("min_value_cosine", self.min_value_cosine),
             ("min_next_token_top1_agreement", self.min_next_token_top1_agreement),
+            ("min_native_task_score", self.min_native_task_score),
+            ("min_bridge_task_score", self.min_bridge_task_score),
             ("min_greedy_continuation_match_rate", self.min_greedy_continuation_match_rate),
         )
         for name, value in bounded:
@@ -138,6 +143,8 @@ class CachedKVQualityThresholds:
                 errors.append(f"{name} must be finite and non-negative")
         if self.min_held_out_prompts <= 0:
             errors.append("min_held_out_prompts must be positive")
+        if self.min_task_prompts <= 0:
+            errors.append("min_task_prompts must be positive")
         if not self.required_token_buckets or any(
             item <= 0 for item in self.required_token_buckets
         ):
@@ -157,10 +164,13 @@ class CachedKVQualityEvidence:
     value_cosine: float
     next_token_top1_agreement: float
     perplexity_drift_pct: float
+    task_prompts: int
+    native_task_score: float
+    bridge_task_score: float
     task_score_drop_pct: float
     greedy_continuation_match_rate: float
-    p95_source_read_transform_put_ms: float
-    p95_target_prefill_ms: float
+    p95_source_read_transform_put_ms: float | None
+    p95_target_prefill_ms: float | None
 
     def validate(self) -> list[str]:
         errors: list[str] = []
@@ -170,12 +180,16 @@ class CachedKVQualityEvidence:
             errors.append("held_out_prompts must be positive")
         if self.evaluated_tokens <= 0:
             errors.append("evaluated_tokens must be positive")
+        if self.task_prompts <= 0:
+            errors.append("task_prompts must be positive")
         if not self.token_buckets or any(item <= 0 for item in self.token_buckets):
             errors.append("token_buckets must contain positive lengths")
         bounded = (
             ("key_cosine", self.key_cosine),
             ("value_cosine", self.value_cosine),
             ("next_token_top1_agreement", self.next_token_top1_agreement),
+            ("native_task_score", self.native_task_score),
+            ("bridge_task_score", self.bridge_task_score),
             ("greedy_continuation_match_rate", self.greedy_continuation_match_rate),
         )
         for name, value in bounded:
@@ -184,13 +198,20 @@ class CachedKVQualityEvidence:
         for name, value in (
             ("perplexity_drift_pct", self.perplexity_drift_pct),
             ("task_score_drop_pct", self.task_score_drop_pct),
-            ("p95_source_read_transform_put_ms", self.p95_source_read_transform_put_ms),
-            ("p95_target_prefill_ms", self.p95_target_prefill_ms),
         ):
             if not math.isfinite(value) or value < 0:
                 errors.append(f"{name} must be finite and non-negative")
-        if self.p95_target_prefill_ms <= 0:
-            errors.append("p95_target_prefill_ms must be positive")
+        if self.p95_source_read_transform_put_ms is None:
+            errors.append("p95_source_read_transform_put_ms is required")
+        elif (
+            not math.isfinite(self.p95_source_read_transform_put_ms)
+            or self.p95_source_read_transform_put_ms < 0
+        ):
+            errors.append("p95_source_read_transform_put_ms must be finite and non-negative")
+        if self.p95_target_prefill_ms is None:
+            errors.append("p95_target_prefill_ms is required")
+        elif not math.isfinite(self.p95_target_prefill_ms) or self.p95_target_prefill_ms <= 0:
+            errors.append("p95_target_prefill_ms must be finite and positive")
         return errors
 
     def gate_errors(self, thresholds: CachedKVQualityThresholds) -> list[str]:
@@ -199,6 +220,8 @@ class CachedKVQualityEvidence:
             return errors
         if self.held_out_prompts < thresholds.min_held_out_prompts:
             errors.append("held-out prompt count is below threshold")
+        if self.task_prompts < thresholds.min_task_prompts:
+            errors.append("task prompt count is below threshold")
         if not set(thresholds.required_token_buckets) <= set(self.token_buckets):
             errors.append("held-out evaluation is missing required token buckets")
         if self.key_cosine < thresholds.min_key_cosine:
@@ -209,10 +232,16 @@ class CachedKVQualityEvidence:
             errors.append("next-token top1 agreement is below threshold")
         if self.perplexity_drift_pct > thresholds.max_perplexity_drift_pct:
             errors.append("perplexity drift is above threshold")
+        if self.native_task_score < thresholds.min_native_task_score:
+            errors.append("native task score is below threshold")
+        if self.bridge_task_score < thresholds.min_bridge_task_score:
+            errors.append("bridge task score is below threshold")
         if self.task_score_drop_pct > thresholds.max_task_score_drop_pct:
             errors.append("task score drop is above threshold")
         if self.greedy_continuation_match_rate < thresholds.min_greedy_continuation_match_rate:
             errors.append("greedy continuation match rate is below threshold")
+        assert self.p95_source_read_transform_put_ms is not None
+        assert self.p95_target_prefill_ms is not None
         ratio = self.p95_source_read_transform_put_ms / self.p95_target_prefill_ms
         if ratio > thresholds.max_materialization_to_prefill_ratio:
             errors.append("materialization cost ratio is above threshold")

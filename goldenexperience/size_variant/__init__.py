@@ -5,6 +5,13 @@ from goldenexperience.size_variant.cached_kv_bridge import (
     Qwen3CachedKVBridge,
     safetensors_metadata,
 )
+from goldenexperience.size_variant.cached_kv_dataset import (
+    CACHED_KV_DATASET_SCHEMA_VERSION,
+    CachedKVPrompt,
+    CachedKVPromptDataset,
+    contains_expected_final_answer,
+    render_to_token_bucket,
+)
 from goldenexperience.size_variant.cached_kv_manifest import (
     CACHED_KV_SCHEMA_VERSION,
     CachedKVBridgeManifest,
@@ -13,6 +20,14 @@ from goldenexperience.size_variant.cached_kv_manifest import (
     CachedKVQualityThresholds,
     artifact_id_for,
     model_spec_from_path,
+)
+from goldenexperience.size_variant.cached_kv_training import (
+    build_source_layer_plan,
+    build_training_matrices,
+    cache_to_object,
+    fit_low_rank_state,
+    object_to_dynamic_cache,
+    transform_with_state,
 )
 from goldenexperience.size_variant.calibration import (
     QWEN3_8B,
@@ -54,10 +69,13 @@ from goldenexperience.size_variant.projection import (
 
 __all__ = [
     "CACHED_KV_SCHEMA_VERSION",
+    "CACHED_KV_DATASET_SCHEMA_VERSION",
     "CalibrationManifest",
     "CachedKVBridgeError",
     "CachedKVBridgeManifest",
     "CachedKVModelSpec",
+    "CachedKVPrompt",
+    "CachedKVPromptDataset",
     "CachedKVQualityEvidence",
     "CachedKVQualityThresholds",
     "FallbackReason",
@@ -84,14 +102,22 @@ __all__ = [
     "build_kv_restore_spec",
     "build_linear_layer_map",
     "build_projection_spec",
+    "build_source_layer_plan",
+    "build_training_matrices",
+    "cache_to_object",
+    "contains_expected_final_answer",
     "artifact_id_for",
     "infer_direction",
+    "fit_low_rank_state",
     "kv_width",
     "load_prompt_count",
     "pair_id_for",
     "qwen3_model_pair",
     "model_spec_from_path",
+    "object_to_dynamic_cache",
+    "render_to_token_bucket",
     "safetensors_metadata",
     "save_prompt_manifest",
     "validate_projection_cost",
+    "transform_with_state",
 ]
