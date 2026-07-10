@@ -542,6 +542,11 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Evaluate sealed test and emit manifest.",
     )
+    parser.add_argument(
+        "--emit-validation-candidate",
+        action="store_true",
+        help="Write unapproved weights for non-publishing runtime cost benchmarks.",
+    )
     parser.add_argument("--require-approved", action="store_true")
     return parser
 
@@ -555,6 +560,12 @@ def main() -> int:
     if args.output.suffix != ".json":
         raise ValueError("--output must be a JSON manifest path")
     dataset = CachedKVPromptDataset.load(args.dataset)
+    if args.finalize and args.emit_validation_candidate:
+        raise ValueError("--finalize and --emit-validation-candidate are mutually exclusive")
+    if args.require_approved and not args.finalize:
+        raise ValueError("--require-approved requires --finalize")
+    if args.cost_report is not None and not args.finalize:
+        raise ValueError("--cost-report is only consumed by --finalize")
     approval_errors = dataset.approval_errors()
     if args.finalize and approval_errors:
         raise ValueError("; ".join(approval_errors))
@@ -650,7 +661,44 @@ def main() -> int:
         "training_collection": collection,
         "validation": validation,
     }
-    if not args.finalize:
+    if not args.finalize and not args.emit_validation_candidate:
+        _write_json(result_path, candidate_summary)
+        print(json.dumps(candidate_summary, indent=2, sort_keys=True))
+        return 0
+
+    if args.emit_validation_candidate:
+        quality = _quality_evidence(
+            validation,
+            test_hash=dataset.split_sha256("validation"),
+            cost_report=None,
+            direction=args.direction,
+        )
+        weights_path = args.output.with_suffix(".safetensors")
+        provisional = _provisional_manifest(
+            direction=args.direction,
+            source_spec=source_spec,
+            target_spec=target_spec,
+            weights_name=weights_path.name,
+            rank=effective_rank,
+            source_window=args.source_window,
+            dataset=dataset,
+            quality=quality,
+        )
+        weights_path.parent.mkdir(parents=True, exist_ok=True)
+        save_file(state, weights_path, metadata=safetensors_metadata(provisional))
+        manifest = replace(provisional, weights_sha256=sha256_file(weights_path))
+        manifest = replace(manifest, bridge_id=artifact_id_for(manifest))
+        manifest.save(args.output)
+        candidate_summary.update(
+            {
+                "validation_candidate": True,
+                "manifest_path": str(args.output),
+                "weights_path": str(weights_path),
+                "bridge_id": manifest.bridge_id,
+                "automatic_reuse_approved": manifest.approved,
+                "approval_errors": manifest.validate(),
+            }
+        )
         _write_json(result_path, candidate_summary)
         print(json.dumps(candidate_summary, indent=2, sort_keys=True))
         return 0

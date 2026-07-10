@@ -56,11 +56,21 @@ class Qwen3CachedKVBridge:
         device: str = "cpu",
         compute_dtype: Any | None = None,
     ) -> None:
-        import torch
-
         manifest_errors = manifest.validate()
         if manifest_errors:
             raise CachedKVBridgeError("; ".join(manifest_errors))
+        self._initialize(manifest, tensors, device=device, compute_dtype=compute_dtype)
+
+    def _initialize(
+        self,
+        manifest: CachedKVBridgeManifest,
+        tensors: Mapping[str, Any],
+        *,
+        device: str,
+        compute_dtype: Any | None,
+    ) -> None:
+        import torch
+
         self.manifest = manifest
         self.device = torch.device(device)
         self.compute_dtype = compute_dtype or (
@@ -83,11 +93,53 @@ class Qwen3CachedKVBridge:
     ) -> Qwen3CachedKVBridge:
         """Load an approved artifact after model and weight content verification."""
 
+        return cls._from_artifact_path(
+            manifest_path,
+            source_model_path=source_model_path,
+            target_model_path=target_model_path,
+            device=device,
+            compute_dtype=compute_dtype,
+            benchmark_candidate=False,
+        )
+
+    @classmethod
+    def from_validation_candidate_for_benchmark(
+        cls,
+        manifest_path: str | Path,
+        *,
+        source_model_path: str | Path,
+        target_model_path: str | Path,
+        device: str = "cpu",
+        compute_dtype: Any | None = None,
+    ) -> Qwen3CachedKVBridge:
+        """Load an unapproved validation artifact for non-publishing cost benchmarks."""
+
+        return cls._from_artifact_path(
+            manifest_path,
+            source_model_path=source_model_path,
+            target_model_path=target_model_path,
+            device=device,
+            compute_dtype=compute_dtype,
+            benchmark_candidate=True,
+        )
+
+    @classmethod
+    def _from_artifact_path(
+        cls,
+        manifest_path: str | Path,
+        *,
+        source_model_path: str | Path,
+        target_model_path: str | Path,
+        device: str,
+        compute_dtype: Any | None,
+        benchmark_candidate: bool,
+    ) -> Qwen3CachedKVBridge:
+
         from safetensors import safe_open
 
         path = Path(manifest_path).resolve()
         manifest = CachedKVBridgeManifest.load(path)
-        errors = manifest.validate()
+        errors = manifest.artifact_errors() if benchmark_candidate else manifest.validate()
         if errors:
             raise CachedKVBridgeError("; ".join(errors))
         source_errors = verify_model_path(manifest.source, source_model_path)
@@ -125,12 +177,14 @@ class Qwen3CachedKVBridge:
             final.st_ino,
         ):
             raise CachedKVBridgeError("cached KV weights changed while loading")
-        return cls(
+        instance = cls.__new__(cls)
+        instance._initialize(
             manifest,
             tensors,
             device=device,
             compute_dtype=compute_dtype,
         )
+        return instance
 
     @property
     def source_object_shape(self) -> tuple[int, int, int]:

@@ -419,6 +419,10 @@ test split and writes safetensors plus a content-addressed manifest. A separate 
 cost report with measured Mooncake P95 read-transform-write and native-prefill latency is
 required for approval. Without it, even perfect offline metrics remain fail closed.
 
+Use `--emit-validation-candidate` to write unapproved safetensors for a non-publishing
+runtime cost benchmark. Production loading still rejects this artifact; only the explicit
+benchmark loader accepts its fully content-addressed structure without granting approval.
+
 Run a resident materializer worker with one JSON request and compact JSON response per
 line. Send `mode=preload_cached_kv_bridge` first to load an already approved artifact
 without touching Mooncake, then send normal `mode=cached_kv` requests:

@@ -251,6 +251,38 @@ def test_resident_bridge_cache_reuses_and_invalidates_verified_artifacts(
         )
 
 
+def test_validation_candidate_loader_cannot_bypass_production_approval(tmp_path: Path) -> None:
+    manifest_path, source_dir, target_dir, _ = _artifact(tmp_path)
+    manifest = CachedKVBridgeManifest.load(manifest_path)
+    candidate = replace(
+        manifest,
+        quality=replace(
+            manifest.quality,
+            evaluation_dataset_sha256=manifest.validation_dataset_sha256,
+            p95_source_read_transform_put_ms=None,
+            p95_target_prefill_ms=None,
+        ),
+    )
+    candidate = replace(candidate, bridge_id=artifact_id_for(candidate))
+    candidate.save(manifest_path)
+
+    with pytest.raises(CachedKVBridgeError, match="quality evidence must refer"):
+        Qwen3CachedKVBridge.from_artifact(
+            manifest_path,
+            source_model_path=source_dir,
+            target_model_path=target_dir,
+        )
+
+    bridge = Qwen3CachedKVBridge.from_validation_candidate_for_benchmark(
+        manifest_path,
+        source_model_path=source_dir,
+        target_model_path=target_dir,
+    )
+
+    assert bridge.manifest.approved is False
+    assert bridge.manifest.artifact_errors() == []
+
+
 def test_qwen_rope_inverse_round_trip_uses_absolute_positions() -> None:
     value = torch.randn(2, 7, 4, dtype=torch.float32)
     positions = torch.tensor([0, 1, 15, 16, 511, 4095, 40959])

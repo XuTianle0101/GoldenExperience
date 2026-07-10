@@ -279,7 +279,9 @@ class CachedKVBridgeManifest:
     def approved(self) -> bool:
         return not self.validate()
 
-    def validate(self) -> list[str]:
+    def artifact_errors(self) -> list[str]:
+        """Validate identities and executable layout without granting reuse approval."""
+
         errors: list[str] = []
         if self.schema_version != CACHED_KV_SCHEMA_VERSION:
             errors.append("unsupported cached KV bridge schema_version")
@@ -340,15 +342,19 @@ class CachedKVBridgeManifest:
             errors.append("train/validation/test dataset SHA-256 digests are required")
         if len(set(dataset_hashes)) != len(dataset_hashes):
             errors.append("train/validation/test dataset identities must be disjoint")
-        if self.quality.evaluation_dataset_sha256 != self.test_dataset_sha256:
-            errors.append("quality evidence must refer to the held-out test dataset")
-        errors.extend(self.quality.gate_errors(self.thresholds))
         if (
             self.bridge_id
             and _is_sha256(self.weights_sha256)
             and self.bridge_id != artifact_id_for(self)
         ):
             errors.append("bridge_id does not match the content-addressed manifest")
+        return errors
+
+    def validate(self) -> list[str]:
+        errors = self.artifact_errors()
+        if self.quality.evaluation_dataset_sha256 != self.test_dataset_sha256:
+            errors.append("quality evidence must refer to the held-out test dataset")
+        errors.extend(self.quality.gate_errors(self.thresholds))
         return errors
 
     def to_dict(self) -> dict[str, Any]:
