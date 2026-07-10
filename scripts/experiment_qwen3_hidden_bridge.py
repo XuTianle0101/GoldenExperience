@@ -511,6 +511,8 @@ def evaluate_bridge(
         hidden_result = HiddenBridgeMaterializer(
             manifest,
             layer_projectors=layer_projectors,
+            enforce_quality_gate=False,
+            allow_identity_fallback=layer_projectors is None,
         ).materialize(source_chunks)
         if not hidden_result.success:
             results.append(

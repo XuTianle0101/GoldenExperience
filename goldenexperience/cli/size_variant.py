@@ -8,7 +8,6 @@ from pathlib import Path
 
 from goldenexperience.size_variant import (
     CalibrationManifest,
-    QualityGateResult,
     build_calibration_manifest,
     load_prompt_count,
     qwen3_model_pair,
@@ -47,7 +46,9 @@ def main_collect() -> None:
 
 
 def main_fit() -> None:
-    parser = argparse.ArgumentParser(description="Fit deterministic MVP GoldenScale artifacts.")
+    parser = argparse.ArgumentParser(
+        description="Create fail-closed GoldenScale calibration scaffolds."
+    )
     parser.add_argument(
         "--direction",
         choices=["8b_to_14b", "14b_to_8b", "bidirectional"],
@@ -69,27 +70,18 @@ def main_fit() -> None:
         if calibration_id is None:
             suffix = "hidden_bridge_v0" if args.method == "hidden_bridge" else "projection_v0"
             calibration_id = f"qwen3_{direction}_{suffix}"
-        quality = QualityGateResult.from_metrics(
-            hidden_cosine=0.99 if args.method == "hidden_bridge" else 0.0,
-            min_hidden_cosine=0.97 if args.method == "hidden_bridge" else None,
-            kv_cosine=0.99,
-            attention_proxy_cosine=0.99,
-            perplexity_drift_pct=0.0,
-            task_score_drop_pct=0.0,
-        )
         manifest = build_calibration_manifest(
             source=source,
             target=target,
             calibration_id=calibration_id,
             prompts_count=prompt_count,
-            quality=quality,
             artifact_root=str(args.output_dir),
             method=args.method,
             bridge_rank=args.bridge_rank,
         )
         output = args.output_dir / f"{calibration_id}.json"
         manifest.save(output)
-        outputs.append(str(output))
+        outputs.append({"path": str(output), "passed": manifest.passed})
     index_path = args.output_dir / "index.json"
     index_path.parent.mkdir(parents=True, exist_ok=True)
     index_path.write_text(json.dumps({"manifests": outputs}, indent=2, sort_keys=True), encoding="utf-8")

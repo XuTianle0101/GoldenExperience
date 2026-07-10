@@ -1,3 +1,4 @@
+import hashlib
 from pathlib import Path
 
 import torch
@@ -8,6 +9,7 @@ from goldenexperience.size_variant import (
     HiddenBridgeMaterializer,
     HiddenStateChunk,
     KVChunk,
+    QualityGateResult,
     SizeVariantDirection,
     SizeVariantMaterializer,
     TargetKVRestorer,
@@ -38,10 +40,75 @@ def model_ref(model_id: str, size_b: float, layers: int, kv_heads: int, head_dim
     )
 
 
+def calibrated_manifest(*args, **kwargs):
+    kwargs.setdefault("prompts_count", 3)
+    kwargs.setdefault("bridge_method", "identity_pad_truncate")
+    kwargs.setdefault(
+        "quality",
+        QualityGateResult.from_metrics(
+            hidden_cosine=0.99,
+            min_hidden_cosine=0.97,
+            kv_cosine=0.99,
+            attention_proxy_cosine=0.99,
+            perplexity_drift_pct=0.0,
+            task_score_drop_pct=0.0,
+        ),
+    )
+    return build_calibration_manifest(*args, **kwargs)
+
+
+def test_calibration_manifest_fails_closed_without_measured_quality() -> None:
+    source = model_ref("qwen-small", 7, layers=2, kv_heads=1, head_dim=2)
+    target = model_ref("qwen-large", 14, layers=3, kv_heads=1, head_dim=3)
+
+    manifest = build_calibration_manifest(source, target, prompts_count=3)
+
+    assert not manifest.quality.passed
+    assert not manifest.passed
+    assert "quality gate failed" in manifest.validate()
+    assert manifest.validate(include_quality=False) == []
+
+
+def test_low_rank_manifest_requires_weight_file_and_checksum() -> None:
+    source = model_ref("qwen-small", 7, layers=2, kv_heads=1, head_dim=2)
+    target = model_ref("qwen-large", 14, layers=3, kv_heads=1, head_dim=3)
+
+    manifest = build_calibration_manifest(
+        source,
+        target,
+        prompts_count=3,
+        quality=calibrated_manifest(source, target).quality,
+    )
+
+    assert "low-rank hidden bridge weight_uri is required" in manifest.validate()
+    assert "low-rank hidden bridge weight_sha256 is required" in manifest.validate()
+
+
+def test_low_rank_manifest_verifies_weight_checksum(tmp_path: Path) -> None:
+    source = model_ref("qwen-small", 7, layers=2, kv_heads=1, head_dim=2)
+    target = model_ref("qwen-large", 14, layers=3, kv_heads=1, head_dim=3)
+    weights = tmp_path / "bridge.pt"
+    weights.write_bytes(b"measured bridge weights")
+    digest = hashlib.sha256(weights.read_bytes()).hexdigest()
+    manifest = build_calibration_manifest(
+        source,
+        target,
+        prompts_count=3,
+        quality=calibrated_manifest(source, target).quality,
+        artifact_root=str(tmp_path),
+        bridge_weight_uri=weights.name,
+        bridge_weight_sha256=digest,
+    )
+
+    assert manifest.validate() == []
+    weights.write_bytes(b"tampered")
+    assert "hidden bridge weight checksum mismatch" in manifest.validate()
+
+
 def test_calibration_manifest_round_trip_and_materializer(tmp_path: Path) -> None:
     source = model_ref("qwen-small", 7, layers=2, kv_heads=1, head_dim=2)
     target = model_ref("qwen-large", 14, layers=3, kv_heads=1, head_dim=3)
-    manifest = build_calibration_manifest(
+    manifest = calibrated_manifest(
         source=source,
         target=target,
         calibration_id="small_to_large_v0",
@@ -76,7 +143,7 @@ def test_calibration_manifest_round_trip_and_materializer(tmp_path: Path) -> Non
 def test_hidden_bridge_materializer_and_target_kv_restore(tmp_path: Path) -> None:
     source = model_ref("qwen-small", 7, layers=2, kv_heads=1, head_dim=2)
     target = model_ref("qwen-large", 14, layers=3, kv_heads=1, head_dim=3)
-    manifest = build_calibration_manifest(source, target, calibration_id="hidden_bridge_v0", artifact_root=str(tmp_path))
+    manifest = calibrated_manifest(source, target, calibration_id="hidden_bridge_v0", artifact_root=str(tmp_path))
 
     source_chunks = {
         0: HiddenStateChunk(layer_id=0, hidden=[[[1.0, 2.0, 3.0, 4.0]]], token_end=1),
@@ -131,7 +198,7 @@ def test_hidden_bridge_materializer_and_target_kv_restore(tmp_path: Path) -> Non
     assert restored_per_layer.chunks[0].key == [[[9.0, 8.0, 7.0]]]
     assert restored_per_layer.chunks[0].value == [[[6.0, 5.0, 4.0]]]
 
-    target_layout_manifest = build_calibration_manifest(
+    target_layout_manifest = calibrated_manifest(
         source=model_ref("qwen-small", 7, layers=2, kv_heads=1, head_dim=2),
         target=model_ref("qwen-layout", 14, layers=3, kv_heads=2, head_dim=3),
         calibration_id="hidden_bridge_layout_v0",
@@ -163,7 +230,7 @@ def test_linear_layer_map_uses_fractional_interpolation() -> None:
 def test_hidden_bridge_materializer_blends_tensor_source_layers(tmp_path: Path) -> None:
     source = model_ref("qwen-small", 7, layers=2, kv_heads=1, head_dim=2)
     target = model_ref("qwen-large", 14, layers=3, kv_heads=1, head_dim=3)
-    manifest = build_calibration_manifest(source, target, calibration_id="tensor_blend_v0", artifact_root=str(tmp_path))
+    manifest = calibrated_manifest(source, target, calibration_id="tensor_blend_v0", artifact_root=str(tmp_path))
     source_chunks = {
         0: HiddenStateChunk(layer_id=0, hidden=torch.ones(1, 1, 8), token_end=1),
         1: HiddenStateChunk(layer_id=1, hidden=torch.full((1, 1, 8), 5.0), token_end=1),
@@ -178,7 +245,7 @@ def test_hidden_bridge_materializer_blends_tensor_source_layers(tmp_path: Path) 
 def test_planner_uses_size_variant_artifact_metadata(tmp_path: Path) -> None:
     source = model_ref("qwen-small", 7, layers=2, kv_heads=1, head_dim=2)
     target = model_ref("qwen-large", 14, layers=3, kv_heads=1, head_dim=3)
-    manifest = build_calibration_manifest(source, target, calibration_id="small_to_large_v0")
+    manifest = calibrated_manifest(source, target, calibration_id="small_to_large_v0")
     path = tmp_path / "small_to_large_v0.json"
     manifest.save(path)
 
@@ -214,7 +281,7 @@ def test_planner_uses_size_variant_artifact_metadata(tmp_path: Path) -> None:
 def test_planner_blocks_artifact_hash_mismatch(tmp_path: Path) -> None:
     source = model_ref("qwen-small", 7, layers=2, kv_heads=1, head_dim=2)
     target = model_ref("qwen-large", 14, layers=3, kv_heads=1, head_dim=3)
-    manifest = build_calibration_manifest(source, target, calibration_id="small_to_large_v0")
+    manifest = calibrated_manifest(source, target, calibration_id="small_to_large_v0")
     path = tmp_path / "small_to_large_v0.json"
     manifest.save(path)
     changed_source = ModelRef(
@@ -253,7 +320,7 @@ def test_planner_blocks_artifact_hash_mismatch(tmp_path: Path) -> None:
 def test_qwen3_bidirectional_presets_are_valid() -> None:
     for direction in ("8b_to_14b", "14b_to_8b"):
         source, target = qwen3_model_pair(direction)
-        manifest = build_calibration_manifest(source, target, calibration_id=f"qwen3_{direction}_hidden_bridge_v0")
+        manifest = calibrated_manifest(source, target, calibration_id=f"qwen3_{direction}_hidden_bridge_v0")
         assert manifest.validate() == []
         assert manifest.state_kind == "hidden"
         assert manifest.hidden_bridge is not None

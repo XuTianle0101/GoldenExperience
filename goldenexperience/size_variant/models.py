@@ -6,6 +6,7 @@ import hashlib
 import json
 from dataclasses import asdict, dataclass, field
 from enum import Enum
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
@@ -137,9 +138,10 @@ class HiddenBridgeSpec:
     method: str = "low_rank_linear"
     capture_point: str = "pre_kv_hidden"
     weight_uri: str | None = None
+    weight_sha256: str | None = None
     rank: int | None = 256
 
-    def validate(self) -> list[str]:
+    def validate(self, *, require_weights: bool = False) -> list[str]:
         errors = []
         if self.source_hidden_size <= 0 or self.target_hidden_size <= 0:
             errors.append("hidden bridge widths must be positive")
@@ -151,6 +153,11 @@ class HiddenBridgeSpec:
             errors.append("unsupported hidden bridge method")
         if self.rank is not None and self.rank <= 0:
             errors.append("hidden bridge rank must be positive")
+        if require_weights and self.method == "low_rank_linear":
+            if not self.weight_uri:
+                errors.append("low-rank hidden bridge weight_uri is required")
+            if not self.weight_sha256 or len(self.weight_sha256) != 64:
+                errors.append("low-rank hidden bridge weight_sha256 is required")
         return errors
 
 
@@ -197,6 +204,12 @@ class QualityGateResult:
     perplexity_drift_pct: float = 0.0
     task_score_drop_pct: float = 0.0
     reasons: tuple[str, ...] = ()
+
+    @classmethod
+    def uncalibrated(cls, reason: str = "calibration_metrics_missing") -> QualityGateResult:
+        """Return a fail-closed result for manifests without measured quality evidence."""
+
+        return cls(passed=False, reasons=(reason,))
 
     @classmethod
     def from_metrics(
@@ -278,7 +291,7 @@ class CalibrationManifest:
     def passed(self) -> bool:
         return self.quality.passed and not self.validate()
 
-    def validate(self) -> list[str]:
+    def validate(self, *, include_quality: bool = True) -> list[str]:
         errors: list[str] = []
         if not self.source.same_family_architecture(self.target):
             errors.append("source and target must share family and architecture")
@@ -297,7 +310,7 @@ class CalibrationManifest:
         if self.layer_map.direction != self.direction or self.projection.direction != self.direction:
             errors.append("layer map/projection direction must match manifest direction")
         if self.hidden_bridge is not None:
-            errors.extend(self.hidden_bridge.validate())
+            errors.extend(self.hidden_bridge.validate(require_weights=include_quality))
             if self.hidden_bridge.pair_id != self.pair_id:
                 errors.append("hidden bridge pair_id must match manifest pair_id")
             if self.hidden_bridge.direction != self.direction:
@@ -326,9 +339,30 @@ class CalibrationManifest:
             errors.append("hidden bridge and KV restore specs must be provided together")
         errors.extend(self.layer_map.validate())
         errors.extend(self.projection.validate())
-        if not self.quality.passed:
+        if include_quality and self.prompts_count <= 0:
+            errors.append("calibration prompt count must be positive")
+        if include_quality and self.hidden_bridge is not None:
+            errors.extend(self._validate_bridge_weight())
+        if include_quality and not self.quality.passed:
             errors.append("quality gate failed")
         return errors
+
+    def _validate_bridge_weight(self) -> list[str]:
+        bridge = self.hidden_bridge
+        if bridge is None or bridge.method != "low_rank_linear" or not bridge.weight_uri:
+            return []
+        path = Path(bridge.weight_uri)
+        if not path.is_absolute():
+            path = Path(self.artifact_root) / path
+        if not path.is_file():
+            return [f"hidden bridge weight file does not exist: {path}"]
+        if bridge.weight_sha256 is None:
+            return []
+        stat = path.stat()
+        digest = _file_sha256(str(path.resolve()), stat.st_size, stat.st_mtime_ns)
+        if digest != bridge.weight_sha256:
+            return ["hidden bridge weight checksum mismatch"]
+        return []
 
     def to_dict(self) -> dict[str, Any]:
         payload = asdict(self)
@@ -393,6 +427,7 @@ class CalibrationManifest:
                 method=hidden_bridge_payload.get("method", "low_rank_linear"),
                 capture_point=hidden_bridge_payload.get("capture_point", "pre_kv_hidden"),
                 weight_uri=hidden_bridge_payload.get("weight_uri"),
+                weight_sha256=hidden_bridge_payload.get("weight_sha256"),
                 rank=hidden_bridge_payload.get("rank"),
             )
         kv_restore = None
@@ -473,6 +508,16 @@ def pair_id_for(source: ModelRef, target: ModelRef) -> str:
 def stable_artifact_id(prefix: str, *parts: object) -> str:
     raw = "|".join(str(part) for part in parts)
     return f"{prefix}-" + hashlib.sha256(raw.encode("utf-8")).hexdigest()[:16]
+
+
+@lru_cache(maxsize=32)
+def _file_sha256(path: str, size: int, mtime_ns: int) -> str:
+    del size, mtime_ns
+    hasher = hashlib.sha256()
+    with Path(path).open("rb") as handle:
+        for chunk in iter(lambda: handle.read(4 * 1024 * 1024), b""):
+            hasher.update(chunk)
+    return hasher.hexdigest()
 
 
 def model_ref_to_dict(model: ModelRef) -> dict[str, Any]:

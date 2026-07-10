@@ -78,6 +78,9 @@ def build_calibration_manifest(
     artifact_root: str = "artifacts/golden_scale",
     method: str = "hidden_bridge",
     bridge_rank: int | None = 256,
+    bridge_method: str = "low_rank_linear",
+    bridge_weight_uri: str | None = None,
+    bridge_weight_sha256: str | None = None,
 ) -> CalibrationManifest:
     direction = infer_direction(source, target)
     pair_id = pair_id_for(source, target)
@@ -108,7 +111,10 @@ def build_calibration_manifest(
             target_hidden_size=target.kv_shape.hidden_size,
             source_num_layers=source.kv_shape.num_layers,
             target_num_layers=target.kv_shape.num_layers,
+            method=bridge_method,
             rank=bridge_rank,
+            weight_uri=bridge_weight_uri,
+            weight_sha256=bridge_weight_sha256,
         )
         kv_restore = build_kv_restore_spec(
             pair_id=pair_id,
@@ -120,14 +126,7 @@ def build_calibration_manifest(
         )
     elif method != "kv_projection":
         raise ValueError(f"Unknown calibration method: {method}")
-    quality = quality or QualityGateResult.from_metrics(
-        hidden_cosine=0.99 if hidden_bridge is not None else 0.0,
-        min_hidden_cosine=0.97 if hidden_bridge is not None else None,
-        kv_cosine=0.99,
-        attention_proxy_cosine=0.99,
-        perplexity_drift_pct=0.0,
-        task_score_drop_pct=0.0,
-    )
+    quality = quality or QualityGateResult.uncalibrated()
     return CalibrationManifest(
         calibration_id=calibration_id,
         pair_id=pair_id,

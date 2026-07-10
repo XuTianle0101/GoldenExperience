@@ -8,7 +8,7 @@ from goldenexperience.reuse import (
     ReuseScenario,
     ReuseStrategy,
 )
-from goldenexperience.size_variant import build_calibration_manifest
+from goldenexperience.size_variant import QualityGateResult, build_calibration_manifest
 
 
 def make_model(
@@ -37,6 +37,17 @@ def make_model(
             model_config_hash=f"{model_id}-hash",
             tokenizer_hash="qwen3-tokenizer-hash",
         ),
+    )
+
+
+def passing_quality() -> QualityGateResult:
+    return QualityGateResult.from_metrics(
+        hidden_cosine=0.99,
+        min_hidden_cosine=0.97,
+        kv_cosine=0.99,
+        attention_proxy_cosine=0.99,
+        perplexity_drift_pct=0.0,
+        task_score_drop_pct=0.0,
     )
 
 
@@ -100,7 +111,14 @@ def test_size_variant_with_calibration_id_still_needs_artifact() -> None:
 def test_size_variant_with_hidden_bridge_artifact_is_executable(tmp_path) -> None:
     small = make_model("qwen3-8b", 8, layers=36)
     large = make_model("qwen3-14b", 14, layers=40)
-    manifest = build_calibration_manifest(small, large, calibration_id="qwen3_8b_to_14b_hidden_bridge_v0")
+    manifest = build_calibration_manifest(
+        small,
+        large,
+        calibration_id="qwen3_8b_to_14b_hidden_bridge_v0",
+        prompts_count=3,
+        quality=passing_quality(),
+        bridge_method="identity_pad_truncate",
+    )
     path = tmp_path / "qwen3_8b_to_14b_hidden_bridge_v0.json"
     manifest.save(path)
 

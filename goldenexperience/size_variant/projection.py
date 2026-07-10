@@ -97,6 +97,7 @@ def build_hidden_bridge_spec(
     capture_point: str = "pre_kv_hidden",
     rank: int | None = 256,
     weight_uri: str | None = None,
+    weight_sha256: str | None = None,
 ) -> HiddenBridgeSpec:
     bridge_id = stable_artifact_id(
         "hidden-bridge",
@@ -121,6 +122,7 @@ def build_hidden_bridge_spec(
         method=method,
         capture_point=capture_point,
         weight_uri=weight_uri,
+        weight_sha256=weight_sha256,
         rank=rank,
     )
 
@@ -203,6 +205,8 @@ class HiddenBridgeMaterializer:
         layer_projectors: Mapping[int, Any] | None = None,
         layer_weights: Mapping[int, Any] | None = None,
         layer_biases: Mapping[int, Any] | None = None,
+        enforce_quality_gate: bool = True,
+        allow_identity_fallback: bool = False,
     ) -> None:
         if manifest.hidden_bridge is None:
             raise ValueError("HiddenBridgeMaterializer requires a hidden_bridge manifest.")
@@ -211,6 +215,8 @@ class HiddenBridgeMaterializer:
         self.layer_projectors = dict(layer_projectors or {})
         self.layer_weights = dict(layer_weights or {})
         self.layer_biases = dict(layer_biases or {})
+        self.enforce_quality_gate = enforce_quality_gate
+        self.allow_identity_fallback = allow_identity_fallback
         self._weight = identity_projection(
             manifest.hidden_bridge.source_hidden_size,
             manifest.hidden_bridge.target_hidden_size,
@@ -218,7 +224,7 @@ class HiddenBridgeMaterializer:
 
     def materialize(self, source_chunks: Mapping[int, HiddenStateChunk]) -> MaterializationResult:
         start = time.perf_counter()
-        errors = self.manifest.validate()
+        errors = self.manifest.validate(include_quality=self.enforce_quality_gate)
         if errors:
             return MaterializationResult(
                 success=False,
@@ -229,6 +235,18 @@ class HiddenBridgeMaterializer:
             )
 
         assert self.manifest.hidden_bridge is not None
+        if (
+            self.manifest.hidden_bridge.method == "low_rank_linear"
+            and not self.allow_identity_fallback
+            and not self._has_all_layer_projectors()
+        ):
+            return MaterializationResult(
+                success=False,
+                chunks=(),
+                elapsed_ms=0.0,
+                fallback_reason=FallbackReason.MISSING_CALIBRATION,
+                error="low-rank hidden bridge weights are not loaded for every target layer",
+            )
         output: list[MaterializedHiddenChunk] = []
         for entry in self.manifest.layer_map.entries:
             if self.timeout_ms is not None and (time.perf_counter() - start) * 1000.0 > self.timeout_ms:
@@ -309,6 +327,11 @@ class HiddenBridgeMaterializer:
         weight = self.layer_weights.get(target_layer_id, self._weight)
         bias = self.layer_biases.get(target_layer_id)
         return project_last_dim(hidden, weight, bias)
+
+    def _has_all_layer_projectors(self) -> bool:
+        target_layers = {entry.target_layer_id for entry in self.manifest.layer_map.entries}
+        loaded_layers = set(self.layer_projectors) | set(self.layer_weights)
+        return target_layers <= loaded_layers
 
 
 class TargetKVRestorer:
