@@ -1,8 +1,22 @@
 """Same-model different-parameter-size KV reuse support."""
 
+from goldenexperience.size_variant.cached_kv_bridge import (
+    CachedKVBridgeError,
+    Qwen3CachedKVBridge,
+    safetensors_metadata,
+)
+from goldenexperience.size_variant.cached_kv_manifest import (
+    CACHED_KV_SCHEMA_VERSION,
+    CachedKVBridgeManifest,
+    CachedKVModelSpec,
+    CachedKVQualityEvidence,
+    CachedKVQualityThresholds,
+    artifact_id_for,
+    model_spec_from_path,
+)
 from goldenexperience.size_variant.calibration import (
-    QWEN3_14B,
     QWEN3_8B,
+    QWEN3_14B,
     build_calibration_manifest,
     load_prompt_count,
     qwen3_model_pair,
@@ -39,7 +53,13 @@ from goldenexperience.size_variant.projection import (
 )
 
 __all__ = [
+    "CACHED_KV_SCHEMA_VERSION",
     "CalibrationManifest",
+    "CachedKVBridgeError",
+    "CachedKVBridgeManifest",
+    "CachedKVModelSpec",
+    "CachedKVQualityEvidence",
+    "CachedKVQualityThresholds",
     "FallbackReason",
     "HiddenBridgeMaterializer",
     "HiddenBridgeSpec",
@@ -54,6 +74,7 @@ __all__ = [
     "ProjectionSpec",
     "QWEN3_14B",
     "QWEN3_8B",
+    "Qwen3CachedKVBridge",
     "QualityGateResult",
     "SizeVariantDirection",
     "SizeVariantMaterializer",
@@ -63,11 +84,14 @@ __all__ = [
     "build_kv_restore_spec",
     "build_linear_layer_map",
     "build_projection_spec",
+    "artifact_id_for",
     "infer_direction",
     "kv_width",
     "load_prompt_count",
     "pair_id_for",
     "qwen3_model_pair",
+    "model_spec_from_path",
+    "safetensors_metadata",
     "save_prompt_manifest",
     "validate_projection_cost",
 ]
