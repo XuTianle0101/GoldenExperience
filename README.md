@@ -400,10 +400,12 @@ Runtime behavior remains conservative:
 
 ### Cached-KV Training
 
-The checked-in dataset recipe has explicit, disjoint train/validation/sealed-test prompt
-IDs and content hashes. Prompts use the model's Qwen3 chat template with thinking
-explicitly disabled so native and bridged task assertions share a bounded decode contract.
-Regenerate it deterministically, then tune against validation without opening the test split:
+The checked-in dataset recipe has 256 train, 64 validation, and 64 sealed-test prompts
+with explicit, disjoint IDs, groups, and content hashes. Every split covers four task
+categories and 32/128/512/2048-token buckets. Prompts use the model's Qwen3 chat template
+with thinking explicitly disabled so native and bridged task assertions share a bounded
+decode contract. Regenerate it deterministically, then tune against validation without
+opening the test split:
 
 ```bash
 python3 scripts/generate_qwen3_cached_kv_dataset.py
@@ -414,7 +416,7 @@ python3 scripts/train_qwen3_cached_kv_bridge.py \
 ```
 
 Run the same command with `--direction 14b_to_8b` for the reverse artifact. Add
-`--finalize` only for the selected hyperparameters; this evaluates the sealed 32-prompt
+`--finalize` only for the selected hyperparameters; this evaluates the sealed 64-prompt
 test split and writes safetensors plus a content-addressed manifest. A separate runtime
 cost report with measured Mooncake P95 read-transform-write and native-prefill latency is
 required for approval. Without it, even perfect offline metrics remain fail closed.

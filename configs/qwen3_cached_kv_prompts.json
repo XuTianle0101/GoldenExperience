@@ -162,6 +162,2406 @@
     },
     {
       "category": "math",
+      "context_seed": "train-math-seed-1016",
+      "expected_answer": "53",
+      "group_id": "train-sealed-016",
+      "prompt_id": "train-math-016",
+      "split": "train",
+      "template": "Reference notes:\n{context}\nCompute 37 + 16. Return exactly `Final answer: 53` and no other text.",
+      "token_bucket": 32
+    },
+    {
+      "category": "code",
+      "context_seed": "train-code-seed-1017",
+      "expected_answer": "32",
+      "group_id": "train-sealed-017",
+      "prompt_id": "train-code-017",
+      "split": "train",
+      "template": "Code review context:\n{context}\nWhat does `print(8 * 4)` output? Return exactly `Final answer: 32` and no other text.",
+      "token_bucket": 32
+    },
+    {
+      "category": "prose",
+      "context_seed": "train-prose-seed-1018",
+      "expected_answer": "MARKER-1018",
+      "group_id": "train-sealed-018",
+      "prompt_id": "train-prose-018",
+      "split": "train",
+      "template": "Background material:\n{context}\nIgnore incidental numbers. Return exactly `Final answer: MARKER-1018` and no other text.",
+      "token_bucket": 32
+    },
+    {
+      "category": "chat",
+      "context_seed": "train-chat-seed-1019",
+      "expected_answer": "ACK-1019",
+      "group_id": "train-sealed-019",
+      "prompt_id": "train-chat-019",
+      "split": "train",
+      "template": "Conversation memory:\n{context}\nReturn exactly `Final answer: ACK-1019` and no other text.",
+      "token_bucket": 32
+    },
+    {
+      "category": "math",
+      "context_seed": "train-math-seed-1020",
+      "expected_answer": "61",
+      "group_id": "train-sealed-020",
+      "prompt_id": "train-math-020",
+      "split": "train",
+      "template": "Reference notes:\n{context}\nCompute 41 + 20. Return exactly `Final answer: 61` and no other text.",
+      "token_bucket": 128
+    },
+    {
+      "category": "code",
+      "context_seed": "train-code-seed-1021",
+      "expected_answer": "96",
+      "group_id": "train-sealed-021",
+      "prompt_id": "train-code-021",
+      "split": "train",
+      "template": "Code review context:\n{context}\nWhat does `print(12 * 8)` output? Return exactly `Final answer: 96` and no other text.",
+      "token_bucket": 128
+    },
+    {
+      "category": "prose",
+      "context_seed": "train-prose-seed-1022",
+      "expected_answer": "MARKER-1022",
+      "group_id": "train-sealed-022",
+      "prompt_id": "train-prose-022",
+      "split": "train",
+      "template": "Background material:\n{context}\nIgnore incidental numbers. Return exactly `Final answer: MARKER-1022` and no other text.",
+      "token_bucket": 128
+    },
+    {
+      "category": "chat",
+      "context_seed": "train-chat-seed-1023",
+      "expected_answer": "ACK-1023",
+      "group_id": "train-sealed-023",
+      "prompt_id": "train-chat-023",
+      "split": "train",
+      "template": "Conversation memory:\n{context}\nReturn exactly `Final answer: ACK-1023` and no other text.",
+      "token_bucket": 128
+    },
+    {
+      "category": "math",
+      "context_seed": "train-math-seed-1024",
+      "expected_answer": "69",
+      "group_id": "train-sealed-024",
+      "prompt_id": "train-math-024",
+      "split": "train",
+      "template": "Reference notes:\n{context}\nCompute 45 + 24. Return exactly `Final answer: 69` and no other text.",
+      "token_bucket": 512
+    },
+    {
+      "category": "code",
+      "context_seed": "train-code-seed-1025",
+      "expected_answer": "25",
+      "group_id": "train-sealed-025",
+      "prompt_id": "train-code-025",
+      "split": "train",
+      "template": "Code review context:\n{context}\nWhat does `print(5 * 5)` output? Return exactly `Final answer: 25` and no other text.",
+      "token_bucket": 512
+    },
+    {
+      "category": "prose",
+      "context_seed": "train-prose-seed-1026",
+      "expected_answer": "MARKER-1026",
+      "group_id": "train-sealed-026",
+      "prompt_id": "train-prose-026",
+      "split": "train",
+      "template": "Background material:\n{context}\nIgnore incidental numbers. Return exactly `Final answer: MARKER-1026` and no other text.",
+      "token_bucket": 512
+    },
+    {
+      "category": "chat",
+      "context_seed": "train-chat-seed-1027",
+      "expected_answer": "ACK-1027",
+      "group_id": "train-sealed-027",
+      "prompt_id": "train-chat-027",
+      "split": "train",
+      "template": "Conversation memory:\n{context}\nReturn exactly `Final answer: ACK-1027` and no other text.",
+      "token_bucket": 512
+    },
+    {
+      "category": "math",
+      "context_seed": "train-math-seed-1028",
+      "expected_answer": "58",
+      "group_id": "train-sealed-028",
+      "prompt_id": "train-math-028",
+      "split": "train",
+      "template": "Reference notes:\n{context}\nCompute 49 + 9. Return exactly `Final answer: 58` and no other text.",
+      "token_bucket": 2048
+    },
+    {
+      "category": "code",
+      "context_seed": "train-code-seed-1029",
+      "expected_answer": "18",
+      "group_id": "train-sealed-029",
+      "prompt_id": "train-code-029",
+      "split": "train",
+      "template": "Code review context:\n{context}\nWhat does `print(9 * 2)` output? Return exactly `Final answer: 18` and no other text.",
+      "token_bucket": 2048
+    },
+    {
+      "category": "prose",
+      "context_seed": "train-prose-seed-1030",
+      "expected_answer": "MARKER-1030",
+      "group_id": "train-sealed-030",
+      "prompt_id": "train-prose-030",
+      "split": "train",
+      "template": "Background material:\n{context}\nIgnore incidental numbers. Return exactly `Final answer: MARKER-1030` and no other text.",
+      "token_bucket": 2048
+    },
+    {
+      "category": "chat",
+      "context_seed": "train-chat-seed-1031",
+      "expected_answer": "ACK-1031",
+      "group_id": "train-sealed-031",
+      "prompt_id": "train-chat-031",
+      "split": "train",
+      "template": "Conversation memory:\n{context}\nReturn exactly `Final answer: ACK-1031` and no other text.",
+      "token_bucket": 2048
+    },
+    {
+      "category": "math",
+      "context_seed": "train-math-seed-1032",
+      "expected_answer": "66",
+      "group_id": "train-sealed-032",
+      "prompt_id": "train-math-032",
+      "split": "train",
+      "template": "Reference notes:\n{context}\nCompute 53 + 13. Return exactly `Final answer: 66` and no other text.",
+      "token_bucket": 32
+    },
+    {
+      "category": "code",
+      "context_seed": "train-code-seed-1033",
+      "expected_answer": "78",
+      "group_id": "train-sealed-033",
+      "prompt_id": "train-code-033",
+      "split": "train",
+      "template": "Code review context:\n{context}\nWhat does `print(13 * 6)` output? Return exactly `Final answer: 78` and no other text.",
+      "token_bucket": 32
+    },
+    {
+      "category": "prose",
+      "context_seed": "train-prose-seed-1034",
+      "expected_answer": "MARKER-1034",
+      "group_id": "train-sealed-034",
+      "prompt_id": "train-prose-034",
+      "split": "train",
+      "template": "Background material:\n{context}\nIgnore incidental numbers. Return exactly `Final answer: MARKER-1034` and no other text.",
+      "token_bucket": 32
+    },
+    {
+      "category": "chat",
+      "context_seed": "train-chat-seed-1035",
+      "expected_answer": "ACK-1035",
+      "group_id": "train-sealed-035",
+      "prompt_id": "train-chat-035",
+      "split": "train",
+      "template": "Conversation memory:\n{context}\nReturn exactly `Final answer: ACK-1035` and no other text.",
+      "token_bucket": 32
+    },
+    {
+      "category": "math",
+      "context_seed": "train-math-seed-1036",
+      "expected_answer": "37",
+      "group_id": "train-sealed-036",
+      "prompt_id": "train-math-036",
+      "split": "train",
+      "template": "Reference notes:\n{context}\nCompute 20 + 17. Return exactly `Final answer: 37` and no other text.",
+      "token_bucket": 128
+    },
+    {
+      "category": "code",
+      "context_seed": "train-code-seed-1037",
+      "expected_answer": "18",
+      "group_id": "train-sealed-037",
+      "prompt_id": "train-code-037",
+      "split": "train",
+      "template": "Code review context:\n{context}\nWhat does `print(6 * 3)` output? Return exactly `Final answer: 18` and no other text.",
+      "token_bucket": 128
+    },
+    {
+      "category": "prose",
+      "context_seed": "train-prose-seed-1038",
+      "expected_answer": "MARKER-1038",
+      "group_id": "train-sealed-038",
+      "prompt_id": "train-prose-038",
+      "split": "train",
+      "template": "Background material:\n{context}\nIgnore incidental numbers. Return exactly `Final answer: MARKER-1038` and no other text.",
+      "token_bucket": 128
+    },
+    {
+      "category": "chat",
+      "context_seed": "train-chat-seed-1039",
+      "expected_answer": "ACK-1039",
+      "group_id": "train-sealed-039",
+      "prompt_id": "train-chat-039",
+      "split": "train",
+      "template": "Conversation memory:\n{context}\nReturn exactly `Final answer: ACK-1039` and no other text.",
+      "token_bucket": 128
+    },
+    {
+      "category": "math",
+      "context_seed": "train-math-seed-1040",
+      "expected_answer": "45",
+      "group_id": "train-sealed-040",
+      "prompt_id": "train-math-040",
+      "split": "train",
+      "template": "Reference notes:\n{context}\nCompute 24 + 21. Return exactly `Final answer: 45` and no other text.",
+      "token_bucket": 512
+    },
+    {
+      "category": "code",
+      "context_seed": "train-code-seed-1041",
+      "expected_answer": "70",
+      "group_id": "train-sealed-041",
+      "prompt_id": "train-code-041",
+      "split": "train",
+      "template": "Code review context:\n{context}\nWhat does `print(10 * 7)` output? Return exactly `Final answer: 70` and no other text.",
+      "token_bucket": 512
+    },
+    {
+      "category": "prose",
+      "context_seed": "train-prose-seed-1042",
+      "expected_answer": "MARKER-1042",
+      "group_id": "train-sealed-042",
+      "prompt_id": "train-prose-042",
+      "split": "train",
+      "template": "Background material:\n{context}\nIgnore incidental numbers. Return exactly `Final answer: MARKER-1042` and no other text.",
+      "token_bucket": 512
+    },
+    {
+      "category": "chat",
+      "context_seed": "train-chat-seed-1043",
+      "expected_answer": "ACK-1043",
+      "group_id": "train-sealed-043",
+      "prompt_id": "train-chat-043",
+      "split": "train",
+      "template": "Conversation memory:\n{context}\nReturn exactly `Final answer: ACK-1043` and no other text.",
+      "token_bucket": 512
+    },
+    {
+      "category": "math",
+      "context_seed": "train-math-seed-1044",
+      "expected_answer": "53",
+      "group_id": "train-sealed-044",
+      "prompt_id": "train-math-044",
+      "split": "train",
+      "template": "Reference notes:\n{context}\nCompute 28 + 25. Return exactly `Final answer: 53` and no other text.",
+      "token_bucket": 2048
+    },
+    {
+      "category": "code",
+      "context_seed": "train-code-seed-1045",
+      "expected_answer": "12",
+      "group_id": "train-sealed-045",
+      "prompt_id": "train-code-045",
+      "split": "train",
+      "template": "Code review context:\n{context}\nWhat does `print(3 * 4)` output? Return exactly `Final answer: 12` and no other text.",
+      "token_bucket": 2048
+    },
+    {
+      "category": "prose",
+      "context_seed": "train-prose-seed-1046",
+      "expected_answer": "MARKER-1046",
+      "group_id": "train-sealed-046",
+      "prompt_id": "train-prose-046",
+      "split": "train",
+      "template": "Background material:\n{context}\nIgnore incidental numbers. Return exactly `Final answer: MARKER-1046` and no other text.",
+      "token_bucket": 2048
+    },
+    {
+      "category": "chat",
+      "context_seed": "train-chat-seed-1047",
+      "expected_answer": "ACK-1047",
+      "group_id": "train-sealed-047",
+      "prompt_id": "train-chat-047",
+      "split": "train",
+      "template": "Conversation memory:\n{context}\nReturn exactly `Final answer: ACK-1047` and no other text.",
+      "token_bucket": 2048
+    },
+    {
+      "category": "math",
+      "context_seed": "train-math-seed-1048",
+      "expected_answer": "42",
+      "group_id": "train-sealed-048",
+      "prompt_id": "train-math-048",
+      "split": "train",
+      "template": "Reference notes:\n{context}\nCompute 32 + 10. Return exactly `Final answer: 42` and no other text.",
+      "token_bucket": 32
+    },
+    {
+      "category": "code",
+      "context_seed": "train-code-seed-1049",
+      "expected_answer": "56",
+      "group_id": "train-sealed-049",
+      "prompt_id": "train-code-049",
+      "split": "train",
+      "template": "Code review context:\n{context}\nWhat does `print(7 * 8)` output? Return exactly `Final answer: 56` and no other text.",
+      "token_bucket": 32
+    },
+    {
+      "category": "prose",
+      "context_seed": "train-prose-seed-1050",
+      "expected_answer": "MARKER-1050",
+      "group_id": "train-sealed-050",
+      "prompt_id": "train-prose-050",
+      "split": "train",
+      "template": "Background material:\n{context}\nIgnore incidental numbers. Return exactly `Final answer: MARKER-1050` and no other text.",
+      "token_bucket": 32
+    },
+    {
+      "category": "chat",
+      "context_seed": "train-chat-seed-1051",
+      "expected_answer": "ACK-1051",
+      "group_id": "train-sealed-051",
+      "prompt_id": "train-chat-051",
+      "split": "train",
+      "template": "Conversation memory:\n{context}\nReturn exactly `Final answer: ACK-1051` and no other text.",
+      "token_bucket": 32
+    },
+    {
+      "category": "math",
+      "context_seed": "train-math-seed-1052",
+      "expected_answer": "50",
+      "group_id": "train-sealed-052",
+      "prompt_id": "train-math-052",
+      "split": "train",
+      "template": "Reference notes:\n{context}\nCompute 36 + 14. Return exactly `Final answer: 50` and no other text.",
+      "token_bucket": 128
+    },
+    {
+      "category": "code",
+      "context_seed": "train-code-seed-1053",
+      "expected_answer": "55",
+      "group_id": "train-sealed-053",
+      "prompt_id": "train-code-053",
+      "split": "train",
+      "template": "Code review context:\n{context}\nWhat does `print(11 * 5)` output? Return exactly `Final answer: 55` and no other text.",
+      "token_bucket": 128
+    },
+    {
+      "category": "prose",
+      "context_seed": "train-prose-seed-1054",
+      "expected_answer": "MARKER-1054",
+      "group_id": "train-sealed-054",
+      "prompt_id": "train-prose-054",
+      "split": "train",
+      "template": "Background material:\n{context}\nIgnore incidental numbers. Return exactly `Final answer: MARKER-1054` and no other text.",
+      "token_bucket": 128
+    },
+    {
+      "category": "chat",
+      "context_seed": "train-chat-seed-1055",
+      "expected_answer": "ACK-1055",
+      "group_id": "train-sealed-055",
+      "prompt_id": "train-chat-055",
+      "split": "train",
+      "template": "Conversation memory:\n{context}\nReturn exactly `Final answer: ACK-1055` and no other text.",
+      "token_bucket": 128
+    },
+    {
+      "category": "math",
+      "context_seed": "train-math-seed-1056",
+      "expected_answer": "58",
+      "group_id": "train-sealed-056",
+      "prompt_id": "train-math-056",
+      "split": "train",
+      "template": "Reference notes:\n{context}\nCompute 40 + 18. Return exactly `Final answer: 58` and no other text.",
+      "token_bucket": 512
+    },
+    {
+      "category": "code",
+      "context_seed": "train-code-seed-1057",
+      "expected_answer": "8",
+      "group_id": "train-sealed-057",
+      "prompt_id": "train-code-057",
+      "split": "train",
+      "template": "Code review context:\n{context}\nWhat does `print(4 * 2)` output? Return exactly `Final answer: 8` and no other text.",
+      "token_bucket": 512
+    },
+    {
+      "category": "prose",
+      "context_seed": "train-prose-seed-1058",
+      "expected_answer": "MARKER-1058",
+      "group_id": "train-sealed-058",
+      "prompt_id": "train-prose-058",
+      "split": "train",
+      "template": "Background material:\n{context}\nIgnore incidental numbers. Return exactly `Final answer: MARKER-1058` and no other text.",
+      "token_bucket": 512
+    },
+    {
+      "category": "chat",
+      "context_seed": "train-chat-seed-1059",
+      "expected_answer": "ACK-1059",
+      "group_id": "train-sealed-059",
+      "prompt_id": "train-chat-059",
+      "split": "train",
+      "template": "Conversation memory:\n{context}\nReturn exactly `Final answer: ACK-1059` and no other text.",
+      "token_bucket": 512
+    },
+    {
+      "category": "math",
+      "context_seed": "train-math-seed-1060",
+      "expected_answer": "66",
+      "group_id": "train-sealed-060",
+      "prompt_id": "train-math-060",
+      "split": "train",
+      "template": "Reference notes:\n{context}\nCompute 44 + 22. Return exactly `Final answer: 66` and no other text.",
+      "token_bucket": 2048
+    },
+    {
+      "category": "code",
+      "context_seed": "train-code-seed-1061",
+      "expected_answer": "48",
+      "group_id": "train-sealed-061",
+      "prompt_id": "train-code-061",
+      "split": "train",
+      "template": "Code review context:\n{context}\nWhat does `print(8 * 6)` output? Return exactly `Final answer: 48` and no other text.",
+      "token_bucket": 2048
+    },
+    {
+      "category": "prose",
+      "context_seed": "train-prose-seed-1062",
+      "expected_answer": "MARKER-1062",
+      "group_id": "train-sealed-062",
+      "prompt_id": "train-prose-062",
+      "split": "train",
+      "template": "Background material:\n{context}\nIgnore incidental numbers. Return exactly `Final answer: MARKER-1062` and no other text.",
+      "token_bucket": 2048
+    },
+    {
+      "category": "chat",
+      "context_seed": "train-chat-seed-1063",
+      "expected_answer": "ACK-1063",
+      "group_id": "train-sealed-063",
+      "prompt_id": "train-chat-063",
+      "split": "train",
+      "template": "Conversation memory:\n{context}\nReturn exactly `Final answer: ACK-1063` and no other text.",
+      "token_bucket": 2048
+    },
+    {
+      "category": "math",
+      "context_seed": "train-math-seed-1064",
+      "expected_answer": "55",
+      "group_id": "train-sealed-064",
+      "prompt_id": "train-math-064",
+      "split": "train",
+      "template": "Reference notes:\n{context}\nCompute 48 + 7. Return exactly `Final answer: 55` and no other text.",
+      "token_bucket": 32
+    },
+    {
+      "category": "code",
+      "context_seed": "train-code-seed-1065",
+      "expected_answer": "36",
+      "group_id": "train-sealed-065",
+      "prompt_id": "train-code-065",
+      "split": "train",
+      "template": "Code review context:\n{context}\nWhat does `print(12 * 3)` output? Return exactly `Final answer: 36` and no other text.",
+      "token_bucket": 32
+    },
+    {
+      "category": "prose",
+      "context_seed": "train-prose-seed-1066",
+      "expected_answer": "MARKER-1066",
+      "group_id": "train-sealed-066",
+      "prompt_id": "train-prose-066",
+      "split": "train",
+      "template": "Background material:\n{context}\nIgnore incidental numbers. Return exactly `Final answer: MARKER-1066` and no other text.",
+      "token_bucket": 32
+    },
+    {
+      "category": "chat",
+      "context_seed": "train-chat-seed-1067",
+      "expected_answer": "ACK-1067",
+      "group_id": "train-sealed-067",
+      "prompt_id": "train-chat-067",
+      "split": "train",
+      "template": "Conversation memory:\n{context}\nReturn exactly `Final answer: ACK-1067` and no other text.",
+      "token_bucket": 32
+    },
+    {
+      "category": "math",
+      "context_seed": "train-math-seed-1068",
+      "expected_answer": "63",
+      "group_id": "train-sealed-068",
+      "prompt_id": "train-math-068",
+      "split": "train",
+      "template": "Reference notes:\n{context}\nCompute 52 + 11. Return exactly `Final answer: 63` and no other text.",
+      "token_bucket": 128
+    },
+    {
+      "category": "code",
+      "context_seed": "train-code-seed-1069",
+      "expected_answer": "35",
+      "group_id": "train-sealed-069",
+      "prompt_id": "train-code-069",
+      "split": "train",
+      "template": "Code review context:\n{context}\nWhat does `print(5 * 7)` output? Return exactly `Final answer: 35` and no other text.",
+      "token_bucket": 128
+    },
+    {
+      "category": "prose",
+      "context_seed": "train-prose-seed-1070",
+      "expected_answer": "MARKER-1070",
+      "group_id": "train-sealed-070",
+      "prompt_id": "train-prose-070",
+      "split": "train",
+      "template": "Background material:\n{context}\nIgnore incidental numbers. Return exactly `Final answer: MARKER-1070` and no other text.",
+      "token_bucket": 128
+    },
+    {
+      "category": "chat",
+      "context_seed": "train-chat-seed-1071",
+      "expected_answer": "ACK-1071",
+      "group_id": "train-sealed-071",
+      "prompt_id": "train-chat-071",
+      "split": "train",
+      "template": "Conversation memory:\n{context}\nReturn exactly `Final answer: ACK-1071` and no other text.",
+      "token_bucket": 128
+    },
+    {
+      "category": "math",
+      "context_seed": "train-math-seed-1072",
+      "expected_answer": "71",
+      "group_id": "train-sealed-072",
+      "prompt_id": "train-math-072",
+      "split": "train",
+      "template": "Reference notes:\n{context}\nCompute 56 + 15. Return exactly `Final answer: 71` and no other text.",
+      "token_bucket": 512
+    },
+    {
+      "category": "code",
+      "context_seed": "train-code-seed-1073",
+      "expected_answer": "36",
+      "group_id": "train-sealed-073",
+      "prompt_id": "train-code-073",
+      "split": "train",
+      "template": "Code review context:\n{context}\nWhat does `print(9 * 4)` output? Return exactly `Final answer: 36` and no other text.",
+      "token_bucket": 512
+    },
+    {
+      "category": "prose",
+      "context_seed": "train-prose-seed-1074",
+      "expected_answer": "MARKER-1074",
+      "group_id": "train-sealed-074",
+      "prompt_id": "train-prose-074",
+      "split": "train",
+      "template": "Background material:\n{context}\nIgnore incidental numbers. Return exactly `Final answer: MARKER-1074` and no other text.",
+      "token_bucket": 512
+    },
+    {
+      "category": "chat",
+      "context_seed": "train-chat-seed-1075",
+      "expected_answer": "ACK-1075",
+      "group_id": "train-sealed-075",
+      "prompt_id": "train-chat-075",
+      "split": "train",
+      "template": "Conversation memory:\n{context}\nReturn exactly `Final answer: ACK-1075` and no other text.",
+      "token_bucket": 512
+    },
+    {
+      "category": "math",
+      "context_seed": "train-math-seed-1076",
+      "expected_answer": "42",
+      "group_id": "train-sealed-076",
+      "prompt_id": "train-math-076",
+      "split": "train",
+      "template": "Reference notes:\n{context}\nCompute 23 + 19. Return exactly `Final answer: 42` and no other text.",
+      "token_bucket": 2048
+    },
+    {
+      "category": "code",
+      "context_seed": "train-code-seed-1077",
+      "expected_answer": "104",
+      "group_id": "train-sealed-077",
+      "prompt_id": "train-code-077",
+      "split": "train",
+      "template": "Code review context:\n{context}\nWhat does `print(13 * 8)` output? Return exactly `Final answer: 104` and no other text.",
+      "token_bucket": 2048
+    },
+    {
+      "category": "prose",
+      "context_seed": "train-prose-seed-1078",
+      "expected_answer": "MARKER-1078",
+      "group_id": "train-sealed-078",
+      "prompt_id": "train-prose-078",
+      "split": "train",
+      "template": "Background material:\n{context}\nIgnore incidental numbers. Return exactly `Final answer: MARKER-1078` and no other text.",
+      "token_bucket": 2048
+    },
+    {
+      "category": "chat",
+      "context_seed": "train-chat-seed-1079",
+      "expected_answer": "ACK-1079",
+      "group_id": "train-sealed-079",
+      "prompt_id": "train-chat-079",
+      "split": "train",
+      "template": "Conversation memory:\n{context}\nReturn exactly `Final answer: ACK-1079` and no other text.",
+      "token_bucket": 2048
+    },
+    {
+      "category": "math",
+      "context_seed": "train-math-seed-1080",
+      "expected_answer": "50",
+      "group_id": "train-sealed-080",
+      "prompt_id": "train-math-080",
+      "split": "train",
+      "template": "Reference notes:\n{context}\nCompute 27 + 23. Return exactly `Final answer: 50` and no other text.",
+      "token_bucket": 32
+    },
+    {
+      "category": "code",
+      "context_seed": "train-code-seed-1081",
+      "expected_answer": "30",
+      "group_id": "train-sealed-081",
+      "prompt_id": "train-code-081",
+      "split": "train",
+      "template": "Code review context:\n{context}\nWhat does `print(6 * 5)` output? Return exactly `Final answer: 30` and no other text.",
+      "token_bucket": 32
+    },
+    {
+      "category": "prose",
+      "context_seed": "train-prose-seed-1082",
+      "expected_answer": "MARKER-1082",
+      "group_id": "train-sealed-082",
+      "prompt_id": "train-prose-082",
+      "split": "train",
+      "template": "Background material:\n{context}\nIgnore incidental numbers. Return exactly `Final answer: MARKER-1082` and no other text.",
+      "token_bucket": 32
+    },
+    {
+      "category": "chat",
+      "context_seed": "train-chat-seed-1083",
+      "expected_answer": "ACK-1083",
+      "group_id": "train-sealed-083",
+      "prompt_id": "train-chat-083",
+      "split": "train",
+      "template": "Conversation memory:\n{context}\nReturn exactly `Final answer: ACK-1083` and no other text.",
+      "token_bucket": 32
+    },
+    {
+      "category": "math",
+      "context_seed": "train-math-seed-1084",
+      "expected_answer": "39",
+      "group_id": "train-sealed-084",
+      "prompt_id": "train-math-084",
+      "split": "train",
+      "template": "Reference notes:\n{context}\nCompute 31 + 8. Return exactly `Final answer: 39` and no other text.",
+      "token_bucket": 128
+    },
+    {
+      "category": "code",
+      "context_seed": "train-code-seed-1085",
+      "expected_answer": "20",
+      "group_id": "train-sealed-085",
+      "prompt_id": "train-code-085",
+      "split": "train",
+      "template": "Code review context:\n{context}\nWhat does `print(10 * 2)` output? Return exactly `Final answer: 20` and no other text.",
+      "token_bucket": 128
+    },
+    {
+      "category": "prose",
+      "context_seed": "train-prose-seed-1086",
+      "expected_answer": "MARKER-1086",
+      "group_id": "train-sealed-086",
+      "prompt_id": "train-prose-086",
+      "split": "train",
+      "template": "Background material:\n{context}\nIgnore incidental numbers. Return exactly `Final answer: MARKER-1086` and no other text.",
+      "token_bucket": 128
+    },
+    {
+      "category": "chat",
+      "context_seed": "train-chat-seed-1087",
+      "expected_answer": "ACK-1087",
+      "group_id": "train-sealed-087",
+      "prompt_id": "train-chat-087",
+      "split": "train",
+      "template": "Conversation memory:\n{context}\nReturn exactly `Final answer: ACK-1087` and no other text.",
+      "token_bucket": 128
+    },
+    {
+      "category": "math",
+      "context_seed": "train-math-seed-1088",
+      "expected_answer": "47",
+      "group_id": "train-sealed-088",
+      "prompt_id": "train-math-088",
+      "split": "train",
+      "template": "Reference notes:\n{context}\nCompute 35 + 12. Return exactly `Final answer: 47` and no other text.",
+      "token_bucket": 512
+    },
+    {
+      "category": "code",
+      "context_seed": "train-code-seed-1089",
+      "expected_answer": "18",
+      "group_id": "train-sealed-089",
+      "prompt_id": "train-code-089",
+      "split": "train",
+      "template": "Code review context:\n{context}\nWhat does `print(3 * 6)` output? Return exactly `Final answer: 18` and no other text.",
+      "token_bucket": 512
+    },
+    {
+      "category": "prose",
+      "context_seed": "train-prose-seed-1090",
+      "expected_answer": "MARKER-1090",
+      "group_id": "train-sealed-090",
+      "prompt_id": "train-prose-090",
+      "split": "train",
+      "template": "Background material:\n{context}\nIgnore incidental numbers. Return exactly `Final answer: MARKER-1090` and no other text.",
+      "token_bucket": 512
+    },
+    {
+      "category": "chat",
+      "context_seed": "train-chat-seed-1091",
+      "expected_answer": "ACK-1091",
+      "group_id": "train-sealed-091",
+      "prompt_id": "train-chat-091",
+      "split": "train",
+      "template": "Conversation memory:\n{context}\nReturn exactly `Final answer: ACK-1091` and no other text.",
+      "token_bucket": 512
+    },
+    {
+      "category": "math",
+      "context_seed": "train-math-seed-1092",
+      "expected_answer": "55",
+      "group_id": "train-sealed-092",
+      "prompt_id": "train-math-092",
+      "split": "train",
+      "template": "Reference notes:\n{context}\nCompute 39 + 16. Return exactly `Final answer: 55` and no other text.",
+      "token_bucket": 2048
+    },
+    {
+      "category": "code",
+      "context_seed": "train-code-seed-1093",
+      "expected_answer": "21",
+      "group_id": "train-sealed-093",
+      "prompt_id": "train-code-093",
+      "split": "train",
+      "template": "Code review context:\n{context}\nWhat does `print(7 * 3)` output? Return exactly `Final answer: 21` and no other text.",
+      "token_bucket": 2048
+    },
+    {
+      "category": "prose",
+      "context_seed": "train-prose-seed-1094",
+      "expected_answer": "MARKER-1094",
+      "group_id": "train-sealed-094",
+      "prompt_id": "train-prose-094",
+      "split": "train",
+      "template": "Background material:\n{context}\nIgnore incidental numbers. Return exactly `Final answer: MARKER-1094` and no other text.",
+      "token_bucket": 2048
+    },
+    {
+      "category": "chat",
+      "context_seed": "train-chat-seed-1095",
+      "expected_answer": "ACK-1095",
+      "group_id": "train-sealed-095",
+      "prompt_id": "train-chat-095",
+      "split": "train",
+      "template": "Conversation memory:\n{context}\nReturn exactly `Final answer: ACK-1095` and no other text.",
+      "token_bucket": 2048
+    },
+    {
+      "category": "math",
+      "context_seed": "train-math-seed-1096",
+      "expected_answer": "63",
+      "group_id": "train-sealed-096",
+      "prompt_id": "train-math-096",
+      "split": "train",
+      "template": "Reference notes:\n{context}\nCompute 43 + 20. Return exactly `Final answer: 63` and no other text.",
+      "token_bucket": 32
+    },
+    {
+      "category": "code",
+      "context_seed": "train-code-seed-1097",
+      "expected_answer": "77",
+      "group_id": "train-sealed-097",
+      "prompt_id": "train-code-097",
+      "split": "train",
+      "template": "Code review context:\n{context}\nWhat does `print(11 * 7)` output? Return exactly `Final answer: 77` and no other text.",
+      "token_bucket": 32
+    },
+    {
+      "category": "prose",
+      "context_seed": "train-prose-seed-1098",
+      "expected_answer": "MARKER-1098",
+      "group_id": "train-sealed-098",
+      "prompt_id": "train-prose-098",
+      "split": "train",
+      "template": "Background material:\n{context}\nIgnore incidental numbers. Return exactly `Final answer: MARKER-1098` and no other text.",
+      "token_bucket": 32
+    },
+    {
+      "category": "chat",
+      "context_seed": "train-chat-seed-1099",
+      "expected_answer": "ACK-1099",
+      "group_id": "train-sealed-099",
+      "prompt_id": "train-chat-099",
+      "split": "train",
+      "template": "Conversation memory:\n{context}\nReturn exactly `Final answer: ACK-1099` and no other text.",
+      "token_bucket": 32
+    },
+    {
+      "category": "math",
+      "context_seed": "train-math-seed-1100",
+      "expected_answer": "71",
+      "group_id": "train-sealed-100",
+      "prompt_id": "train-math-100",
+      "split": "train",
+      "template": "Reference notes:\n{context}\nCompute 47 + 24. Return exactly `Final answer: 71` and no other text.",
+      "token_bucket": 128
+    },
+    {
+      "category": "code",
+      "context_seed": "train-code-seed-1101",
+      "expected_answer": "16",
+      "group_id": "train-sealed-101",
+      "prompt_id": "train-code-101",
+      "split": "train",
+      "template": "Code review context:\n{context}\nWhat does `print(4 * 4)` output? Return exactly `Final answer: 16` and no other text.",
+      "token_bucket": 128
+    },
+    {
+      "category": "prose",
+      "context_seed": "train-prose-seed-1102",
+      "expected_answer": "MARKER-1102",
+      "group_id": "train-sealed-102",
+      "prompt_id": "train-prose-102",
+      "split": "train",
+      "template": "Background material:\n{context}\nIgnore incidental numbers. Return exactly `Final answer: MARKER-1102` and no other text.",
+      "token_bucket": 128
+    },
+    {
+      "category": "chat",
+      "context_seed": "train-chat-seed-1103",
+      "expected_answer": "ACK-1103",
+      "group_id": "train-sealed-103",
+      "prompt_id": "train-chat-103",
+      "split": "train",
+      "template": "Conversation memory:\n{context}\nReturn exactly `Final answer: ACK-1103` and no other text.",
+      "token_bucket": 128
+    },
+    {
+      "category": "math",
+      "context_seed": "train-math-seed-1104",
+      "expected_answer": "60",
+      "group_id": "train-sealed-104",
+      "prompt_id": "train-math-104",
+      "split": "train",
+      "template": "Reference notes:\n{context}\nCompute 51 + 9. Return exactly `Final answer: 60` and no other text.",
+      "token_bucket": 512
+    },
+    {
+      "category": "code",
+      "context_seed": "train-code-seed-1105",
+      "expected_answer": "64",
+      "group_id": "train-sealed-105",
+      "prompt_id": "train-code-105",
+      "split": "train",
+      "template": "Code review context:\n{context}\nWhat does `print(8 * 8)` output? Return exactly `Final answer: 64` and no other text.",
+      "token_bucket": 512
+    },
+    {
+      "category": "prose",
+      "context_seed": "train-prose-seed-1106",
+      "expected_answer": "MARKER-1106",
+      "group_id": "train-sealed-106",
+      "prompt_id": "train-prose-106",
+      "split": "train",
+      "template": "Background material:\n{context}\nIgnore incidental numbers. Return exactly `Final answer: MARKER-1106` and no other text.",
+      "token_bucket": 512
+    },
+    {
+      "category": "chat",
+      "context_seed": "train-chat-seed-1107",
+      "expected_answer": "ACK-1107",
+      "group_id": "train-sealed-107",
+      "prompt_id": "train-chat-107",
+      "split": "train",
+      "template": "Conversation memory:\n{context}\nReturn exactly `Final answer: ACK-1107` and no other text.",
+      "token_bucket": 512
+    },
+    {
+      "category": "math",
+      "context_seed": "train-math-seed-1108",
+      "expected_answer": "68",
+      "group_id": "train-sealed-108",
+      "prompt_id": "train-math-108",
+      "split": "train",
+      "template": "Reference notes:\n{context}\nCompute 55 + 13. Return exactly `Final answer: 68` and no other text.",
+      "token_bucket": 2048
+    },
+    {
+      "category": "code",
+      "context_seed": "train-code-seed-1109",
+      "expected_answer": "60",
+      "group_id": "train-sealed-109",
+      "prompt_id": "train-code-109",
+      "split": "train",
+      "template": "Code review context:\n{context}\nWhat does `print(12 * 5)` output? Return exactly `Final answer: 60` and no other text.",
+      "token_bucket": 2048
+    },
+    {
+      "category": "prose",
+      "context_seed": "train-prose-seed-1110",
+      "expected_answer": "MARKER-1110",
+      "group_id": "train-sealed-110",
+      "prompt_id": "train-prose-110",
+      "split": "train",
+      "template": "Background material:\n{context}\nIgnore incidental numbers. Return exactly `Final answer: MARKER-1110` and no other text.",
+      "token_bucket": 2048
+    },
+    {
+      "category": "chat",
+      "context_seed": "train-chat-seed-1111",
+      "expected_answer": "ACK-1111",
+      "group_id": "train-sealed-111",
+      "prompt_id": "train-chat-111",
+      "split": "train",
+      "template": "Conversation memory:\n{context}\nReturn exactly `Final answer: ACK-1111` and no other text.",
+      "token_bucket": 2048
+    },
+    {
+      "category": "math",
+      "context_seed": "train-math-seed-1112",
+      "expected_answer": "39",
+      "group_id": "train-sealed-112",
+      "prompt_id": "train-math-112",
+      "split": "train",
+      "template": "Reference notes:\n{context}\nCompute 22 + 17. Return exactly `Final answer: 39` and no other text.",
+      "token_bucket": 32
+    },
+    {
+      "category": "code",
+      "context_seed": "train-code-seed-1113",
+      "expected_answer": "10",
+      "group_id": "train-sealed-113",
+      "prompt_id": "train-code-113",
+      "split": "train",
+      "template": "Code review context:\n{context}\nWhat does `print(5 * 2)` output? Return exactly `Final answer: 10` and no other text.",
+      "token_bucket": 32
+    },
+    {
+      "category": "prose",
+      "context_seed": "train-prose-seed-1114",
+      "expected_answer": "MARKER-1114",
+      "group_id": "train-sealed-114",
+      "prompt_id": "train-prose-114",
+      "split": "train",
+      "template": "Background material:\n{context}\nIgnore incidental numbers. Return exactly `Final answer: MARKER-1114` and no other text.",
+      "token_bucket": 32
+    },
+    {
+      "category": "chat",
+      "context_seed": "train-chat-seed-1115",
+      "expected_answer": "ACK-1115",
+      "group_id": "train-sealed-115",
+      "prompt_id": "train-chat-115",
+      "split": "train",
+      "template": "Conversation memory:\n{context}\nReturn exactly `Final answer: ACK-1115` and no other text.",
+      "token_bucket": 32
+    },
+    {
+      "category": "math",
+      "context_seed": "train-math-seed-1116",
+      "expected_answer": "47",
+      "group_id": "train-sealed-116",
+      "prompt_id": "train-math-116",
+      "split": "train",
+      "template": "Reference notes:\n{context}\nCompute 26 + 21. Return exactly `Final answer: 47` and no other text.",
+      "token_bucket": 128
+    },
+    {
+      "category": "code",
+      "context_seed": "train-code-seed-1117",
+      "expected_answer": "54",
+      "group_id": "train-sealed-117",
+      "prompt_id": "train-code-117",
+      "split": "train",
+      "template": "Code review context:\n{context}\nWhat does `print(9 * 6)` output? Return exactly `Final answer: 54` and no other text.",
+      "token_bucket": 128
+    },
+    {
+      "category": "prose",
+      "context_seed": "train-prose-seed-1118",
+      "expected_answer": "MARKER-1118",
+      "group_id": "train-sealed-118",
+      "prompt_id": "train-prose-118",
+      "split": "train",
+      "template": "Background material:\n{context}\nIgnore incidental numbers. Return exactly `Final answer: MARKER-1118` and no other text.",
+      "token_bucket": 128
+    },
+    {
+      "category": "chat",
+      "context_seed": "train-chat-seed-1119",
+      "expected_answer": "ACK-1119",
+      "group_id": "train-sealed-119",
+      "prompt_id": "train-chat-119",
+      "split": "train",
+      "template": "Conversation memory:\n{context}\nReturn exactly `Final answer: ACK-1119` and no other text.",
+      "token_bucket": 128
+    },
+    {
+      "category": "math",
+      "context_seed": "train-math-seed-1120",
+      "expected_answer": "55",
+      "group_id": "train-sealed-120",
+      "prompt_id": "train-math-120",
+      "split": "train",
+      "template": "Reference notes:\n{context}\nCompute 30 + 25. Return exactly `Final answer: 55` and no other text.",
+      "token_bucket": 512
+    },
+    {
+      "category": "code",
+      "context_seed": "train-code-seed-1121",
+      "expected_answer": "39",
+      "group_id": "train-sealed-121",
+      "prompt_id": "train-code-121",
+      "split": "train",
+      "template": "Code review context:\n{context}\nWhat does `print(13 * 3)` output? Return exactly `Final answer: 39` and no other text.",
+      "token_bucket": 512
+    },
+    {
+      "category": "prose",
+      "context_seed": "train-prose-seed-1122",
+      "expected_answer": "MARKER-1122",
+      "group_id": "train-sealed-122",
+      "prompt_id": "train-prose-122",
+      "split": "train",
+      "template": "Background material:\n{context}\nIgnore incidental numbers. Return exactly `Final answer: MARKER-1122` and no other text.",
+      "token_bucket": 512
+    },
+    {
+      "category": "chat",
+      "context_seed": "train-chat-seed-1123",
+      "expected_answer": "ACK-1123",
+      "group_id": "train-sealed-123",
+      "prompt_id": "train-chat-123",
+      "split": "train",
+      "template": "Conversation memory:\n{context}\nReturn exactly `Final answer: ACK-1123` and no other text.",
+      "token_bucket": 512
+    },
+    {
+      "category": "math",
+      "context_seed": "train-math-seed-1124",
+      "expected_answer": "44",
+      "group_id": "train-sealed-124",
+      "prompt_id": "train-math-124",
+      "split": "train",
+      "template": "Reference notes:\n{context}\nCompute 34 + 10. Return exactly `Final answer: 44` and no other text.",
+      "token_bucket": 2048
+    },
+    {
+      "category": "code",
+      "context_seed": "train-code-seed-1125",
+      "expected_answer": "42",
+      "group_id": "train-sealed-125",
+      "prompt_id": "train-code-125",
+      "split": "train",
+      "template": "Code review context:\n{context}\nWhat does `print(6 * 7)` output? Return exactly `Final answer: 42` and no other text.",
+      "token_bucket": 2048
+    },
+    {
+      "category": "prose",
+      "context_seed": "train-prose-seed-1126",
+      "expected_answer": "MARKER-1126",
+      "group_id": "train-sealed-126",
+      "prompt_id": "train-prose-126",
+      "split": "train",
+      "template": "Background material:\n{context}\nIgnore incidental numbers. Return exactly `Final answer: MARKER-1126` and no other text.",
+      "token_bucket": 2048
+    },
+    {
+      "category": "chat",
+      "context_seed": "train-chat-seed-1127",
+      "expected_answer": "ACK-1127",
+      "group_id": "train-sealed-127",
+      "prompt_id": "train-chat-127",
+      "split": "train",
+      "template": "Conversation memory:\n{context}\nReturn exactly `Final answer: ACK-1127` and no other text.",
+      "token_bucket": 2048
+    },
+    {
+      "category": "math",
+      "context_seed": "train-math-seed-1128",
+      "expected_answer": "52",
+      "group_id": "train-sealed-128",
+      "prompt_id": "train-math-128",
+      "split": "train",
+      "template": "Reference notes:\n{context}\nCompute 38 + 14. Return exactly `Final answer: 52` and no other text.",
+      "token_bucket": 32
+    },
+    {
+      "category": "code",
+      "context_seed": "train-code-seed-1129",
+      "expected_answer": "40",
+      "group_id": "train-sealed-129",
+      "prompt_id": "train-code-129",
+      "split": "train",
+      "template": "Code review context:\n{context}\nWhat does `print(10 * 4)` output? Return exactly `Final answer: 40` and no other text.",
+      "token_bucket": 32
+    },
+    {
+      "category": "prose",
+      "context_seed": "train-prose-seed-1130",
+      "expected_answer": "MARKER-1130",
+      "group_id": "train-sealed-130",
+      "prompt_id": "train-prose-130",
+      "split": "train",
+      "template": "Background material:\n{context}\nIgnore incidental numbers. Return exactly `Final answer: MARKER-1130` and no other text.",
+      "token_bucket": 32
+    },
+    {
+      "category": "chat",
+      "context_seed": "train-chat-seed-1131",
+      "expected_answer": "ACK-1131",
+      "group_id": "train-sealed-131",
+      "prompt_id": "train-chat-131",
+      "split": "train",
+      "template": "Conversation memory:\n{context}\nReturn exactly `Final answer: ACK-1131` and no other text.",
+      "token_bucket": 32
+    },
+    {
+      "category": "math",
+      "context_seed": "train-math-seed-1132",
+      "expected_answer": "60",
+      "group_id": "train-sealed-132",
+      "prompt_id": "train-math-132",
+      "split": "train",
+      "template": "Reference notes:\n{context}\nCompute 42 + 18. Return exactly `Final answer: 60` and no other text.",
+      "token_bucket": 128
+    },
+    {
+      "category": "code",
+      "context_seed": "train-code-seed-1133",
+      "expected_answer": "24",
+      "group_id": "train-sealed-133",
+      "prompt_id": "train-code-133",
+      "split": "train",
+      "template": "Code review context:\n{context}\nWhat does `print(3 * 8)` output? Return exactly `Final answer: 24` and no other text.",
+      "token_bucket": 128
+    },
+    {
+      "category": "prose",
+      "context_seed": "train-prose-seed-1134",
+      "expected_answer": "MARKER-1134",
+      "group_id": "train-sealed-134",
+      "prompt_id": "train-prose-134",
+      "split": "train",
+      "template": "Background material:\n{context}\nIgnore incidental numbers. Return exactly `Final answer: MARKER-1134` and no other text.",
+      "token_bucket": 128
+    },
+    {
+      "category": "chat",
+      "context_seed": "train-chat-seed-1135",
+      "expected_answer": "ACK-1135",
+      "group_id": "train-sealed-135",
+      "prompt_id": "train-chat-135",
+      "split": "train",
+      "template": "Conversation memory:\n{context}\nReturn exactly `Final answer: ACK-1135` and no other text.",
+      "token_bucket": 128
+    },
+    {
+      "category": "math",
+      "context_seed": "train-math-seed-1136",
+      "expected_answer": "68",
+      "group_id": "train-sealed-136",
+      "prompt_id": "train-math-136",
+      "split": "train",
+      "template": "Reference notes:\n{context}\nCompute 46 + 22. Return exactly `Final answer: 68` and no other text.",
+      "token_bucket": 512
+    },
+    {
+      "category": "code",
+      "context_seed": "train-code-seed-1137",
+      "expected_answer": "35",
+      "group_id": "train-sealed-137",
+      "prompt_id": "train-code-137",
+      "split": "train",
+      "template": "Code review context:\n{context}\nWhat does `print(7 * 5)` output? Return exactly `Final answer: 35` and no other text.",
+      "token_bucket": 512
+    },
+    {
+      "category": "prose",
+      "context_seed": "train-prose-seed-1138",
+      "expected_answer": "MARKER-1138",
+      "group_id": "train-sealed-138",
+      "prompt_id": "train-prose-138",
+      "split": "train",
+      "template": "Background material:\n{context}\nIgnore incidental numbers. Return exactly `Final answer: MARKER-1138` and no other text.",
+      "token_bucket": 512
+    },
+    {
+      "category": "chat",
+      "context_seed": "train-chat-seed-1139",
+      "expected_answer": "ACK-1139",
+      "group_id": "train-sealed-139",
+      "prompt_id": "train-chat-139",
+      "split": "train",
+      "template": "Conversation memory:\n{context}\nReturn exactly `Final answer: ACK-1139` and no other text.",
+      "token_bucket": 512
+    },
+    {
+      "category": "math",
+      "context_seed": "train-math-seed-1140",
+      "expected_answer": "57",
+      "group_id": "train-sealed-140",
+      "prompt_id": "train-math-140",
+      "split": "train",
+      "template": "Reference notes:\n{context}\nCompute 50 + 7. Return exactly `Final answer: 57` and no other text.",
+      "token_bucket": 2048
+    },
+    {
+      "category": "code",
+      "context_seed": "train-code-seed-1141",
+      "expected_answer": "22",
+      "group_id": "train-sealed-141",
+      "prompt_id": "train-code-141",
+      "split": "train",
+      "template": "Code review context:\n{context}\nWhat does `print(11 * 2)` output? Return exactly `Final answer: 22` and no other text.",
+      "token_bucket": 2048
+    },
+    {
+      "category": "prose",
+      "context_seed": "train-prose-seed-1142",
+      "expected_answer": "MARKER-1142",
+      "group_id": "train-sealed-142",
+      "prompt_id": "train-prose-142",
+      "split": "train",
+      "template": "Background material:\n{context}\nIgnore incidental numbers. Return exactly `Final answer: MARKER-1142` and no other text.",
+      "token_bucket": 2048
+    },
+    {
+      "category": "chat",
+      "context_seed": "train-chat-seed-1143",
+      "expected_answer": "ACK-1143",
+      "group_id": "train-sealed-143",
+      "prompt_id": "train-chat-143",
+      "split": "train",
+      "template": "Conversation memory:\n{context}\nReturn exactly `Final answer: ACK-1143` and no other text.",
+      "token_bucket": 2048
+    },
+    {
+      "category": "math",
+      "context_seed": "train-math-seed-1144",
+      "expected_answer": "65",
+      "group_id": "train-sealed-144",
+      "prompt_id": "train-math-144",
+      "split": "train",
+      "template": "Reference notes:\n{context}\nCompute 54 + 11. Return exactly `Final answer: 65` and no other text.",
+      "token_bucket": 32
+    },
+    {
+      "category": "code",
+      "context_seed": "train-code-seed-1145",
+      "expected_answer": "24",
+      "group_id": "train-sealed-145",
+      "prompt_id": "train-code-145",
+      "split": "train",
+      "template": "Code review context:\n{context}\nWhat does `print(4 * 6)` output? Return exactly `Final answer: 24` and no other text.",
+      "token_bucket": 32
+    },
+    {
+      "category": "prose",
+      "context_seed": "train-prose-seed-1146",
+      "expected_answer": "MARKER-1146",
+      "group_id": "train-sealed-146",
+      "prompt_id": "train-prose-146",
+      "split": "train",
+      "template": "Background material:\n{context}\nIgnore incidental numbers. Return exactly `Final answer: MARKER-1146` and no other text.",
+      "token_bucket": 32
+    },
+    {
+      "category": "chat",
+      "context_seed": "train-chat-seed-1147",
+      "expected_answer": "ACK-1147",
+      "group_id": "train-sealed-147",
+      "prompt_id": "train-chat-147",
+      "split": "train",
+      "template": "Conversation memory:\n{context}\nReturn exactly `Final answer: ACK-1147` and no other text.",
+      "token_bucket": 32
+    },
+    {
+      "category": "math",
+      "context_seed": "train-math-seed-1148",
+      "expected_answer": "36",
+      "group_id": "train-sealed-148",
+      "prompt_id": "train-math-148",
+      "split": "train",
+      "template": "Reference notes:\n{context}\nCompute 21 + 15. Return exactly `Final answer: 36` and no other text.",
+      "token_bucket": 128
+    },
+    {
+      "category": "code",
+      "context_seed": "train-code-seed-1149",
+      "expected_answer": "24",
+      "group_id": "train-sealed-149",
+      "prompt_id": "train-code-149",
+      "split": "train",
+      "template": "Code review context:\n{context}\nWhat does `print(8 * 3)` output? Return exactly `Final answer: 24` and no other text.",
+      "token_bucket": 128
+    },
+    {
+      "category": "prose",
+      "context_seed": "train-prose-seed-1150",
+      "expected_answer": "MARKER-1150",
+      "group_id": "train-sealed-150",
+      "prompt_id": "train-prose-150",
+      "split": "train",
+      "template": "Background material:\n{context}\nIgnore incidental numbers. Return exactly `Final answer: MARKER-1150` and no other text.",
+      "token_bucket": 128
+    },
+    {
+      "category": "chat",
+      "context_seed": "train-chat-seed-1151",
+      "expected_answer": "ACK-1151",
+      "group_id": "train-sealed-151",
+      "prompt_id": "train-chat-151",
+      "split": "train",
+      "template": "Conversation memory:\n{context}\nReturn exactly `Final answer: ACK-1151` and no other text.",
+      "token_bucket": 128
+    },
+    {
+      "category": "math",
+      "context_seed": "train-math-seed-1152",
+      "expected_answer": "44",
+      "group_id": "train-sealed-152",
+      "prompt_id": "train-math-152",
+      "split": "train",
+      "template": "Reference notes:\n{context}\nCompute 25 + 19. Return exactly `Final answer: 44` and no other text.",
+      "token_bucket": 512
+    },
+    {
+      "category": "code",
+      "context_seed": "train-code-seed-1153",
+      "expected_answer": "84",
+      "group_id": "train-sealed-153",
+      "prompt_id": "train-code-153",
+      "split": "train",
+      "template": "Code review context:\n{context}\nWhat does `print(12 * 7)` output? Return exactly `Final answer: 84` and no other text.",
+      "token_bucket": 512
+    },
+    {
+      "category": "prose",
+      "context_seed": "train-prose-seed-1154",
+      "expected_answer": "MARKER-1154",
+      "group_id": "train-sealed-154",
+      "prompt_id": "train-prose-154",
+      "split": "train",
+      "template": "Background material:\n{context}\nIgnore incidental numbers. Return exactly `Final answer: MARKER-1154` and no other text.",
+      "token_bucket": 512
+    },
+    {
+      "category": "chat",
+      "context_seed": "train-chat-seed-1155",
+      "expected_answer": "ACK-1155",
+      "group_id": "train-sealed-155",
+      "prompt_id": "train-chat-155",
+      "split": "train",
+      "template": "Conversation memory:\n{context}\nReturn exactly `Final answer: ACK-1155` and no other text.",
+      "token_bucket": 512
+    },
+    {
+      "category": "math",
+      "context_seed": "train-math-seed-1156",
+      "expected_answer": "52",
+      "group_id": "train-sealed-156",
+      "prompt_id": "train-math-156",
+      "split": "train",
+      "template": "Reference notes:\n{context}\nCompute 29 + 23. Return exactly `Final answer: 52` and no other text.",
+      "token_bucket": 2048
+    },
+    {
+      "category": "code",
+      "context_seed": "train-code-seed-1157",
+      "expected_answer": "20",
+      "group_id": "train-sealed-157",
+      "prompt_id": "train-code-157",
+      "split": "train",
+      "template": "Code review context:\n{context}\nWhat does `print(5 * 4)` output? Return exactly `Final answer: 20` and no other text.",
+      "token_bucket": 2048
+    },
+    {
+      "category": "prose",
+      "context_seed": "train-prose-seed-1158",
+      "expected_answer": "MARKER-1158",
+      "group_id": "train-sealed-158",
+      "prompt_id": "train-prose-158",
+      "split": "train",
+      "template": "Background material:\n{context}\nIgnore incidental numbers. Return exactly `Final answer: MARKER-1158` and no other text.",
+      "token_bucket": 2048
+    },
+    {
+      "category": "chat",
+      "context_seed": "train-chat-seed-1159",
+      "expected_answer": "ACK-1159",
+      "group_id": "train-sealed-159",
+      "prompt_id": "train-chat-159",
+      "split": "train",
+      "template": "Conversation memory:\n{context}\nReturn exactly `Final answer: ACK-1159` and no other text.",
+      "token_bucket": 2048
+    },
+    {
+      "category": "math",
+      "context_seed": "train-math-seed-1160",
+      "expected_answer": "41",
+      "group_id": "train-sealed-160",
+      "prompt_id": "train-math-160",
+      "split": "train",
+      "template": "Reference notes:\n{context}\nCompute 33 + 8. Return exactly `Final answer: 41` and no other text.",
+      "token_bucket": 32
+    },
+    {
+      "category": "code",
+      "context_seed": "train-code-seed-1161",
+      "expected_answer": "72",
+      "group_id": "train-sealed-161",
+      "prompt_id": "train-code-161",
+      "split": "train",
+      "template": "Code review context:\n{context}\nWhat does `print(9 * 8)` output? Return exactly `Final answer: 72` and no other text.",
+      "token_bucket": 32
+    },
+    {
+      "category": "prose",
+      "context_seed": "train-prose-seed-1162",
+      "expected_answer": "MARKER-1162",
+      "group_id": "train-sealed-162",
+      "prompt_id": "train-prose-162",
+      "split": "train",
+      "template": "Background material:\n{context}\nIgnore incidental numbers. Return exactly `Final answer: MARKER-1162` and no other text.",
+      "token_bucket": 32
+    },
+    {
+      "category": "chat",
+      "context_seed": "train-chat-seed-1163",
+      "expected_answer": "ACK-1163",
+      "group_id": "train-sealed-163",
+      "prompt_id": "train-chat-163",
+      "split": "train",
+      "template": "Conversation memory:\n{context}\nReturn exactly `Final answer: ACK-1163` and no other text.",
+      "token_bucket": 32
+    },
+    {
+      "category": "math",
+      "context_seed": "train-math-seed-1164",
+      "expected_answer": "49",
+      "group_id": "train-sealed-164",
+      "prompt_id": "train-math-164",
+      "split": "train",
+      "template": "Reference notes:\n{context}\nCompute 37 + 12. Return exactly `Final answer: 49` and no other text.",
+      "token_bucket": 128
+    },
+    {
+      "category": "code",
+      "context_seed": "train-code-seed-1165",
+      "expected_answer": "65",
+      "group_id": "train-sealed-165",
+      "prompt_id": "train-code-165",
+      "split": "train",
+      "template": "Code review context:\n{context}\nWhat does `print(13 * 5)` output? Return exactly `Final answer: 65` and no other text.",
+      "token_bucket": 128
+    },
+    {
+      "category": "prose",
+      "context_seed": "train-prose-seed-1166",
+      "expected_answer": "MARKER-1166",
+      "group_id": "train-sealed-166",
+      "prompt_id": "train-prose-166",
+      "split": "train",
+      "template": "Background material:\n{context}\nIgnore incidental numbers. Return exactly `Final answer: MARKER-1166` and no other text.",
+      "token_bucket": 128
+    },
+    {
+      "category": "chat",
+      "context_seed": "train-chat-seed-1167",
+      "expected_answer": "ACK-1167",
+      "group_id": "train-sealed-167",
+      "prompt_id": "train-chat-167",
+      "split": "train",
+      "template": "Conversation memory:\n{context}\nReturn exactly `Final answer: ACK-1167` and no other text.",
+      "token_bucket": 128
+    },
+    {
+      "category": "math",
+      "context_seed": "train-math-seed-1168",
+      "expected_answer": "57",
+      "group_id": "train-sealed-168",
+      "prompt_id": "train-math-168",
+      "split": "train",
+      "template": "Reference notes:\n{context}\nCompute 41 + 16. Return exactly `Final answer: 57` and no other text.",
+      "token_bucket": 512
+    },
+    {
+      "category": "code",
+      "context_seed": "train-code-seed-1169",
+      "expected_answer": "12",
+      "group_id": "train-sealed-169",
+      "prompt_id": "train-code-169",
+      "split": "train",
+      "template": "Code review context:\n{context}\nWhat does `print(6 * 2)` output? Return exactly `Final answer: 12` and no other text.",
+      "token_bucket": 512
+    },
+    {
+      "category": "prose",
+      "context_seed": "train-prose-seed-1170",
+      "expected_answer": "MARKER-1170",
+      "group_id": "train-sealed-170",
+      "prompt_id": "train-prose-170",
+      "split": "train",
+      "template": "Background material:\n{context}\nIgnore incidental numbers. Return exactly `Final answer: MARKER-1170` and no other text.",
+      "token_bucket": 512
+    },
+    {
+      "category": "chat",
+      "context_seed": "train-chat-seed-1171",
+      "expected_answer": "ACK-1171",
+      "group_id": "train-sealed-171",
+      "prompt_id": "train-chat-171",
+      "split": "train",
+      "template": "Conversation memory:\n{context}\nReturn exactly `Final answer: ACK-1171` and no other text.",
+      "token_bucket": 512
+    },
+    {
+      "category": "math",
+      "context_seed": "train-math-seed-1172",
+      "expected_answer": "65",
+      "group_id": "train-sealed-172",
+      "prompt_id": "train-math-172",
+      "split": "train",
+      "template": "Reference notes:\n{context}\nCompute 45 + 20. Return exactly `Final answer: 65` and no other text.",
+      "token_bucket": 2048
+    },
+    {
+      "category": "code",
+      "context_seed": "train-code-seed-1173",
+      "expected_answer": "60",
+      "group_id": "train-sealed-173",
+      "prompt_id": "train-code-173",
+      "split": "train",
+      "template": "Code review context:\n{context}\nWhat does `print(10 * 6)` output? Return exactly `Final answer: 60` and no other text.",
+      "token_bucket": 2048
+    },
+    {
+      "category": "prose",
+      "context_seed": "train-prose-seed-1174",
+      "expected_answer": "MARKER-1174",
+      "group_id": "train-sealed-174",
+      "prompt_id": "train-prose-174",
+      "split": "train",
+      "template": "Background material:\n{context}\nIgnore incidental numbers. Return exactly `Final answer: MARKER-1174` and no other text.",
+      "token_bucket": 2048
+    },
+    {
+      "category": "chat",
+      "context_seed": "train-chat-seed-1175",
+      "expected_answer": "ACK-1175",
+      "group_id": "train-sealed-175",
+      "prompt_id": "train-chat-175",
+      "split": "train",
+      "template": "Conversation memory:\n{context}\nReturn exactly `Final answer: ACK-1175` and no other text.",
+      "token_bucket": 2048
+    },
+    {
+      "category": "math",
+      "context_seed": "train-math-seed-1176",
+      "expected_answer": "73",
+      "group_id": "train-sealed-176",
+      "prompt_id": "train-math-176",
+      "split": "train",
+      "template": "Reference notes:\n{context}\nCompute 49 + 24. Return exactly `Final answer: 73` and no other text.",
+      "token_bucket": 32
+    },
+    {
+      "category": "code",
+      "context_seed": "train-code-seed-1177",
+      "expected_answer": "9",
+      "group_id": "train-sealed-177",
+      "prompt_id": "train-code-177",
+      "split": "train",
+      "template": "Code review context:\n{context}\nWhat does `print(3 * 3)` output? Return exactly `Final answer: 9` and no other text.",
+      "token_bucket": 32
+    },
+    {
+      "category": "prose",
+      "context_seed": "train-prose-seed-1178",
+      "expected_answer": "MARKER-1178",
+      "group_id": "train-sealed-178",
+      "prompt_id": "train-prose-178",
+      "split": "train",
+      "template": "Background material:\n{context}\nIgnore incidental numbers. Return exactly `Final answer: MARKER-1178` and no other text.",
+      "token_bucket": 32
+    },
+    {
+      "category": "chat",
+      "context_seed": "train-chat-seed-1179",
+      "expected_answer": "ACK-1179",
+      "group_id": "train-sealed-179",
+      "prompt_id": "train-chat-179",
+      "split": "train",
+      "template": "Conversation memory:\n{context}\nReturn exactly `Final answer: ACK-1179` and no other text.",
+      "token_bucket": 32
+    },
+    {
+      "category": "math",
+      "context_seed": "train-math-seed-1180",
+      "expected_answer": "62",
+      "group_id": "train-sealed-180",
+      "prompt_id": "train-math-180",
+      "split": "train",
+      "template": "Reference notes:\n{context}\nCompute 53 + 9. Return exactly `Final answer: 62` and no other text.",
+      "token_bucket": 128
+    },
+    {
+      "category": "code",
+      "context_seed": "train-code-seed-1181",
+      "expected_answer": "49",
+      "group_id": "train-sealed-181",
+      "prompt_id": "train-code-181",
+      "split": "train",
+      "template": "Code review context:\n{context}\nWhat does `print(7 * 7)` output? Return exactly `Final answer: 49` and no other text.",
+      "token_bucket": 128
+    },
+    {
+      "category": "prose",
+      "context_seed": "train-prose-seed-1182",
+      "expected_answer": "MARKER-1182",
+      "group_id": "train-sealed-182",
+      "prompt_id": "train-prose-182",
+      "split": "train",
+      "template": "Background material:\n{context}\nIgnore incidental numbers. Return exactly `Final answer: MARKER-1182` and no other text.",
+      "token_bucket": 128
+    },
+    {
+      "category": "chat",
+      "context_seed": "train-chat-seed-1183",
+      "expected_answer": "ACK-1183",
+      "group_id": "train-sealed-183",
+      "prompt_id": "train-chat-183",
+      "split": "train",
+      "template": "Conversation memory:\n{context}\nReturn exactly `Final answer: ACK-1183` and no other text.",
+      "token_bucket": 128
+    },
+    {
+      "category": "math",
+      "context_seed": "train-math-seed-1184",
+      "expected_answer": "33",
+      "group_id": "train-sealed-184",
+      "prompt_id": "train-math-184",
+      "split": "train",
+      "template": "Reference notes:\n{context}\nCompute 20 + 13. Return exactly `Final answer: 33` and no other text.",
+      "token_bucket": 512
+    },
+    {
+      "category": "code",
+      "context_seed": "train-code-seed-1185",
+      "expected_answer": "44",
+      "group_id": "train-sealed-185",
+      "prompt_id": "train-code-185",
+      "split": "train",
+      "template": "Code review context:\n{context}\nWhat does `print(11 * 4)` output? Return exactly `Final answer: 44` and no other text.",
+      "token_bucket": 512
+    },
+    {
+      "category": "prose",
+      "context_seed": "train-prose-seed-1186",
+      "expected_answer": "MARKER-1186",
+      "group_id": "train-sealed-186",
+      "prompt_id": "train-prose-186",
+      "split": "train",
+      "template": "Background material:\n{context}\nIgnore incidental numbers. Return exactly `Final answer: MARKER-1186` and no other text.",
+      "token_bucket": 512
+    },
+    {
+      "category": "chat",
+      "context_seed": "train-chat-seed-1187",
+      "expected_answer": "ACK-1187",
+      "group_id": "train-sealed-187",
+      "prompt_id": "train-chat-187",
+      "split": "train",
+      "template": "Conversation memory:\n{context}\nReturn exactly `Final answer: ACK-1187` and no other text.",
+      "token_bucket": 512
+    },
+    {
+      "category": "math",
+      "context_seed": "train-math-seed-1188",
+      "expected_answer": "41",
+      "group_id": "train-sealed-188",
+      "prompt_id": "train-math-188",
+      "split": "train",
+      "template": "Reference notes:\n{context}\nCompute 24 + 17. Return exactly `Final answer: 41` and no other text.",
+      "token_bucket": 2048
+    },
+    {
+      "category": "code",
+      "context_seed": "train-code-seed-1189",
+      "expected_answer": "32",
+      "group_id": "train-sealed-189",
+      "prompt_id": "train-code-189",
+      "split": "train",
+      "template": "Code review context:\n{context}\nWhat does `print(4 * 8)` output? Return exactly `Final answer: 32` and no other text.",
+      "token_bucket": 2048
+    },
+    {
+      "category": "prose",
+      "context_seed": "train-prose-seed-1190",
+      "expected_answer": "MARKER-1190",
+      "group_id": "train-sealed-190",
+      "prompt_id": "train-prose-190",
+      "split": "train",
+      "template": "Background material:\n{context}\nIgnore incidental numbers. Return exactly `Final answer: MARKER-1190` and no other text.",
+      "token_bucket": 2048
+    },
+    {
+      "category": "chat",
+      "context_seed": "train-chat-seed-1191",
+      "expected_answer": "ACK-1191",
+      "group_id": "train-sealed-191",
+      "prompt_id": "train-chat-191",
+      "split": "train",
+      "template": "Conversation memory:\n{context}\nReturn exactly `Final answer: ACK-1191` and no other text.",
+      "token_bucket": 2048
+    },
+    {
+      "category": "math",
+      "context_seed": "train-math-seed-1192",
+      "expected_answer": "49",
+      "group_id": "train-sealed-192",
+      "prompt_id": "train-math-192",
+      "split": "train",
+      "template": "Reference notes:\n{context}\nCompute 28 + 21. Return exactly `Final answer: 49` and no other text.",
+      "token_bucket": 32
+    },
+    {
+      "category": "code",
+      "context_seed": "train-code-seed-1193",
+      "expected_answer": "40",
+      "group_id": "train-sealed-193",
+      "prompt_id": "train-code-193",
+      "split": "train",
+      "template": "Code review context:\n{context}\nWhat does `print(8 * 5)` output? Return exactly `Final answer: 40` and no other text.",
+      "token_bucket": 32
+    },
+    {
+      "category": "prose",
+      "context_seed": "train-prose-seed-1194",
+      "expected_answer": "MARKER-1194",
+      "group_id": "train-sealed-194",
+      "prompt_id": "train-prose-194",
+      "split": "train",
+      "template": "Background material:\n{context}\nIgnore incidental numbers. Return exactly `Final answer: MARKER-1194` and no other text.",
+      "token_bucket": 32
+    },
+    {
+      "category": "chat",
+      "context_seed": "train-chat-seed-1195",
+      "expected_answer": "ACK-1195",
+      "group_id": "train-sealed-195",
+      "prompt_id": "train-chat-195",
+      "split": "train",
+      "template": "Conversation memory:\n{context}\nReturn exactly `Final answer: ACK-1195` and no other text.",
+      "token_bucket": 32
+    },
+    {
+      "category": "math",
+      "context_seed": "train-math-seed-1196",
+      "expected_answer": "57",
+      "group_id": "train-sealed-196",
+      "prompt_id": "train-math-196",
+      "split": "train",
+      "template": "Reference notes:\n{context}\nCompute 32 + 25. Return exactly `Final answer: 57` and no other text.",
+      "token_bucket": 128
+    },
+    {
+      "category": "code",
+      "context_seed": "train-code-seed-1197",
+      "expected_answer": "24",
+      "group_id": "train-sealed-197",
+      "prompt_id": "train-code-197",
+      "split": "train",
+      "template": "Code review context:\n{context}\nWhat does `print(12 * 2)` output? Return exactly `Final answer: 24` and no other text.",
+      "token_bucket": 128
+    },
+    {
+      "category": "prose",
+      "context_seed": "train-prose-seed-1198",
+      "expected_answer": "MARKER-1198",
+      "group_id": "train-sealed-198",
+      "prompt_id": "train-prose-198",
+      "split": "train",
+      "template": "Background material:\n{context}\nIgnore incidental numbers. Return exactly `Final answer: MARKER-1198` and no other text.",
+      "token_bucket": 128
+    },
+    {
+      "category": "chat",
+      "context_seed": "train-chat-seed-1199",
+      "expected_answer": "ACK-1199",
+      "group_id": "train-sealed-199",
+      "prompt_id": "train-chat-199",
+      "split": "train",
+      "template": "Conversation memory:\n{context}\nReturn exactly `Final answer: ACK-1199` and no other text.",
+      "token_bucket": 128
+    },
+    {
+      "category": "math",
+      "context_seed": "train-math-seed-1200",
+      "expected_answer": "46",
+      "group_id": "train-sealed-200",
+      "prompt_id": "train-math-200",
+      "split": "train",
+      "template": "Reference notes:\n{context}\nCompute 36 + 10. Return exactly `Final answer: 46` and no other text.",
+      "token_bucket": 512
+    },
+    {
+      "category": "code",
+      "context_seed": "train-code-seed-1201",
+      "expected_answer": "30",
+      "group_id": "train-sealed-201",
+      "prompt_id": "train-code-201",
+      "split": "train",
+      "template": "Code review context:\n{context}\nWhat does `print(5 * 6)` output? Return exactly `Final answer: 30` and no other text.",
+      "token_bucket": 512
+    },
+    {
+      "category": "prose",
+      "context_seed": "train-prose-seed-1202",
+      "expected_answer": "MARKER-1202",
+      "group_id": "train-sealed-202",
+      "prompt_id": "train-prose-202",
+      "split": "train",
+      "template": "Background material:\n{context}\nIgnore incidental numbers. Return exactly `Final answer: MARKER-1202` and no other text.",
+      "token_bucket": 512
+    },
+    {
+      "category": "chat",
+      "context_seed": "train-chat-seed-1203",
+      "expected_answer": "ACK-1203",
+      "group_id": "train-sealed-203",
+      "prompt_id": "train-chat-203",
+      "split": "train",
+      "template": "Conversation memory:\n{context}\nReturn exactly `Final answer: ACK-1203` and no other text.",
+      "token_bucket": 512
+    },
+    {
+      "category": "math",
+      "context_seed": "train-math-seed-1204",
+      "expected_answer": "54",
+      "group_id": "train-sealed-204",
+      "prompt_id": "train-math-204",
+      "split": "train",
+      "template": "Reference notes:\n{context}\nCompute 40 + 14. Return exactly `Final answer: 54` and no other text.",
+      "token_bucket": 2048
+    },
+    {
+      "category": "code",
+      "context_seed": "train-code-seed-1205",
+      "expected_answer": "27",
+      "group_id": "train-sealed-205",
+      "prompt_id": "train-code-205",
+      "split": "train",
+      "template": "Code review context:\n{context}\nWhat does `print(9 * 3)` output? Return exactly `Final answer: 27` and no other text.",
+      "token_bucket": 2048
+    },
+    {
+      "category": "prose",
+      "context_seed": "train-prose-seed-1206",
+      "expected_answer": "MARKER-1206",
+      "group_id": "train-sealed-206",
+      "prompt_id": "train-prose-206",
+      "split": "train",
+      "template": "Background material:\n{context}\nIgnore incidental numbers. Return exactly `Final answer: MARKER-1206` and no other text.",
+      "token_bucket": 2048
+    },
+    {
+      "category": "chat",
+      "context_seed": "train-chat-seed-1207",
+      "expected_answer": "ACK-1207",
+      "group_id": "train-sealed-207",
+      "prompt_id": "train-chat-207",
+      "split": "train",
+      "template": "Conversation memory:\n{context}\nReturn exactly `Final answer: ACK-1207` and no other text.",
+      "token_bucket": 2048
+    },
+    {
+      "category": "math",
+      "context_seed": "train-math-seed-1208",
+      "expected_answer": "62",
+      "group_id": "train-sealed-208",
+      "prompt_id": "train-math-208",
+      "split": "train",
+      "template": "Reference notes:\n{context}\nCompute 44 + 18. Return exactly `Final answer: 62` and no other text.",
+      "token_bucket": 32
+    },
+    {
+      "category": "code",
+      "context_seed": "train-code-seed-1209",
+      "expected_answer": "91",
+      "group_id": "train-sealed-209",
+      "prompt_id": "train-code-209",
+      "split": "train",
+      "template": "Code review context:\n{context}\nWhat does `print(13 * 7)` output? Return exactly `Final answer: 91` and no other text.",
+      "token_bucket": 32
+    },
+    {
+      "category": "prose",
+      "context_seed": "train-prose-seed-1210",
+      "expected_answer": "MARKER-1210",
+      "group_id": "train-sealed-210",
+      "prompt_id": "train-prose-210",
+      "split": "train",
+      "template": "Background material:\n{context}\nIgnore incidental numbers. Return exactly `Final answer: MARKER-1210` and no other text.",
+      "token_bucket": 32
+    },
+    {
+      "category": "chat",
+      "context_seed": "train-chat-seed-1211",
+      "expected_answer": "ACK-1211",
+      "group_id": "train-sealed-211",
+      "prompt_id": "train-chat-211",
+      "split": "train",
+      "template": "Conversation memory:\n{context}\nReturn exactly `Final answer: ACK-1211` and no other text.",
+      "token_bucket": 32
+    },
+    {
+      "category": "math",
+      "context_seed": "train-math-seed-1212",
+      "expected_answer": "70",
+      "group_id": "train-sealed-212",
+      "prompt_id": "train-math-212",
+      "split": "train",
+      "template": "Reference notes:\n{context}\nCompute 48 + 22. Return exactly `Final answer: 70` and no other text.",
+      "token_bucket": 128
+    },
+    {
+      "category": "code",
+      "context_seed": "train-code-seed-1213",
+      "expected_answer": "24",
+      "group_id": "train-sealed-213",
+      "prompt_id": "train-code-213",
+      "split": "train",
+      "template": "Code review context:\n{context}\nWhat does `print(6 * 4)` output? Return exactly `Final answer: 24` and no other text.",
+      "token_bucket": 128
+    },
+    {
+      "category": "prose",
+      "context_seed": "train-prose-seed-1214",
+      "expected_answer": "MARKER-1214",
+      "group_id": "train-sealed-214",
+      "prompt_id": "train-prose-214",
+      "split": "train",
+      "template": "Background material:\n{context}\nIgnore incidental numbers. Return exactly `Final answer: MARKER-1214` and no other text.",
+      "token_bucket": 128
+    },
+    {
+      "category": "chat",
+      "context_seed": "train-chat-seed-1215",
+      "expected_answer": "ACK-1215",
+      "group_id": "train-sealed-215",
+      "prompt_id": "train-chat-215",
+      "split": "train",
+      "template": "Conversation memory:\n{context}\nReturn exactly `Final answer: ACK-1215` and no other text.",
+      "token_bucket": 128
+    },
+    {
+      "category": "math",
+      "context_seed": "train-math-seed-1216",
+      "expected_answer": "59",
+      "group_id": "train-sealed-216",
+      "prompt_id": "train-math-216",
+      "split": "train",
+      "template": "Reference notes:\n{context}\nCompute 52 + 7. Return exactly `Final answer: 59` and no other text.",
+      "token_bucket": 512
+    },
+    {
+      "category": "code",
+      "context_seed": "train-code-seed-1217",
+      "expected_answer": "80",
+      "group_id": "train-sealed-217",
+      "prompt_id": "train-code-217",
+      "split": "train",
+      "template": "Code review context:\n{context}\nWhat does `print(10 * 8)` output? Return exactly `Final answer: 80` and no other text.",
+      "token_bucket": 512
+    },
+    {
+      "category": "prose",
+      "context_seed": "train-prose-seed-1218",
+      "expected_answer": "MARKER-1218",
+      "group_id": "train-sealed-218",
+      "prompt_id": "train-prose-218",
+      "split": "train",
+      "template": "Background material:\n{context}\nIgnore incidental numbers. Return exactly `Final answer: MARKER-1218` and no other text.",
+      "token_bucket": 512
+    },
+    {
+      "category": "chat",
+      "context_seed": "train-chat-seed-1219",
+      "expected_answer": "ACK-1219",
+      "group_id": "train-sealed-219",
+      "prompt_id": "train-chat-219",
+      "split": "train",
+      "template": "Conversation memory:\n{context}\nReturn exactly `Final answer: ACK-1219` and no other text.",
+      "token_bucket": 512
+    },
+    {
+      "category": "math",
+      "context_seed": "train-math-seed-1220",
+      "expected_answer": "67",
+      "group_id": "train-sealed-220",
+      "prompt_id": "train-math-220",
+      "split": "train",
+      "template": "Reference notes:\n{context}\nCompute 56 + 11. Return exactly `Final answer: 67` and no other text.",
+      "token_bucket": 2048
+    },
+    {
+      "category": "code",
+      "context_seed": "train-code-seed-1221",
+      "expected_answer": "15",
+      "group_id": "train-sealed-221",
+      "prompt_id": "train-code-221",
+      "split": "train",
+      "template": "Code review context:\n{context}\nWhat does `print(3 * 5)` output? Return exactly `Final answer: 15` and no other text.",
+      "token_bucket": 2048
+    },
+    {
+      "category": "prose",
+      "context_seed": "train-prose-seed-1222",
+      "expected_answer": "MARKER-1222",
+      "group_id": "train-sealed-222",
+      "prompt_id": "train-prose-222",
+      "split": "train",
+      "template": "Background material:\n{context}\nIgnore incidental numbers. Return exactly `Final answer: MARKER-1222` and no other text.",
+      "token_bucket": 2048
+    },
+    {
+      "category": "chat",
+      "context_seed": "train-chat-seed-1223",
+      "expected_answer": "ACK-1223",
+      "group_id": "train-sealed-223",
+      "prompt_id": "train-chat-223",
+      "split": "train",
+      "template": "Conversation memory:\n{context}\nReturn exactly `Final answer: ACK-1223` and no other text.",
+      "token_bucket": 2048
+    },
+    {
+      "category": "math",
+      "context_seed": "train-math-seed-1224",
+      "expected_answer": "38",
+      "group_id": "train-sealed-224",
+      "prompt_id": "train-math-224",
+      "split": "train",
+      "template": "Reference notes:\n{context}\nCompute 23 + 15. Return exactly `Final answer: 38` and no other text.",
+      "token_bucket": 32
+    },
+    {
+      "category": "code",
+      "context_seed": "train-code-seed-1225",
+      "expected_answer": "14",
+      "group_id": "train-sealed-225",
+      "prompt_id": "train-code-225",
+      "split": "train",
+      "template": "Code review context:\n{context}\nWhat does `print(7 * 2)` output? Return exactly `Final answer: 14` and no other text.",
+      "token_bucket": 32
+    },
+    {
+      "category": "prose",
+      "context_seed": "train-prose-seed-1226",
+      "expected_answer": "MARKER-1226",
+      "group_id": "train-sealed-226",
+      "prompt_id": "train-prose-226",
+      "split": "train",
+      "template": "Background material:\n{context}\nIgnore incidental numbers. Return exactly `Final answer: MARKER-1226` and no other text.",
+      "token_bucket": 32
+    },
+    {
+      "category": "chat",
+      "context_seed": "train-chat-seed-1227",
+      "expected_answer": "ACK-1227",
+      "group_id": "train-sealed-227",
+      "prompt_id": "train-chat-227",
+      "split": "train",
+      "template": "Conversation memory:\n{context}\nReturn exactly `Final answer: ACK-1227` and no other text.",
+      "token_bucket": 32
+    },
+    {
+      "category": "math",
+      "context_seed": "train-math-seed-1228",
+      "expected_answer": "46",
+      "group_id": "train-sealed-228",
+      "prompt_id": "train-math-228",
+      "split": "train",
+      "template": "Reference notes:\n{context}\nCompute 27 + 19. Return exactly `Final answer: 46` and no other text.",
+      "token_bucket": 128
+    },
+    {
+      "category": "code",
+      "context_seed": "train-code-seed-1229",
+      "expected_answer": "66",
+      "group_id": "train-sealed-229",
+      "prompt_id": "train-code-229",
+      "split": "train",
+      "template": "Code review context:\n{context}\nWhat does `print(11 * 6)` output? Return exactly `Final answer: 66` and no other text.",
+      "token_bucket": 128
+    },
+    {
+      "category": "prose",
+      "context_seed": "train-prose-seed-1230",
+      "expected_answer": "MARKER-1230",
+      "group_id": "train-sealed-230",
+      "prompt_id": "train-prose-230",
+      "split": "train",
+      "template": "Background material:\n{context}\nIgnore incidental numbers. Return exactly `Final answer: MARKER-1230` and no other text.",
+      "token_bucket": 128
+    },
+    {
+      "category": "chat",
+      "context_seed": "train-chat-seed-1231",
+      "expected_answer": "ACK-1231",
+      "group_id": "train-sealed-231",
+      "prompt_id": "train-chat-231",
+      "split": "train",
+      "template": "Conversation memory:\n{context}\nReturn exactly `Final answer: ACK-1231` and no other text.",
+      "token_bucket": 128
+    },
+    {
+      "category": "math",
+      "context_seed": "train-math-seed-1232",
+      "expected_answer": "54",
+      "group_id": "train-sealed-232",
+      "prompt_id": "train-math-232",
+      "split": "train",
+      "template": "Reference notes:\n{context}\nCompute 31 + 23. Return exactly `Final answer: 54` and no other text.",
+      "token_bucket": 512
+    },
+    {
+      "category": "code",
+      "context_seed": "train-code-seed-1233",
+      "expected_answer": "12",
+      "group_id": "train-sealed-233",
+      "prompt_id": "train-code-233",
+      "split": "train",
+      "template": "Code review context:\n{context}\nWhat does `print(4 * 3)` output? Return exactly `Final answer: 12` and no other text.",
+      "token_bucket": 512
+    },
+    {
+      "category": "prose",
+      "context_seed": "train-prose-seed-1234",
+      "expected_answer": "MARKER-1234",
+      "group_id": "train-sealed-234",
+      "prompt_id": "train-prose-234",
+      "split": "train",
+      "template": "Background material:\n{context}\nIgnore incidental numbers. Return exactly `Final answer: MARKER-1234` and no other text.",
+      "token_bucket": 512
+    },
+    {
+      "category": "chat",
+      "context_seed": "train-chat-seed-1235",
+      "expected_answer": "ACK-1235",
+      "group_id": "train-sealed-235",
+      "prompt_id": "train-chat-235",
+      "split": "train",
+      "template": "Conversation memory:\n{context}\nReturn exactly `Final answer: ACK-1235` and no other text.",
+      "token_bucket": 512
+    },
+    {
+      "category": "math",
+      "context_seed": "train-math-seed-1236",
+      "expected_answer": "43",
+      "group_id": "train-sealed-236",
+      "prompt_id": "train-math-236",
+      "split": "train",
+      "template": "Reference notes:\n{context}\nCompute 35 + 8. Return exactly `Final answer: 43` and no other text.",
+      "token_bucket": 2048
+    },
+    {
+      "category": "code",
+      "context_seed": "train-code-seed-1237",
+      "expected_answer": "56",
+      "group_id": "train-sealed-237",
+      "prompt_id": "train-code-237",
+      "split": "train",
+      "template": "Code review context:\n{context}\nWhat does `print(8 * 7)` output? Return exactly `Final answer: 56` and no other text.",
+      "token_bucket": 2048
+    },
+    {
+      "category": "prose",
+      "context_seed": "train-prose-seed-1238",
+      "expected_answer": "MARKER-1238",
+      "group_id": "train-sealed-238",
+      "prompt_id": "train-prose-238",
+      "split": "train",
+      "template": "Background material:\n{context}\nIgnore incidental numbers. Return exactly `Final answer: MARKER-1238` and no other text.",
+      "token_bucket": 2048
+    },
+    {
+      "category": "chat",
+      "context_seed": "train-chat-seed-1239",
+      "expected_answer": "ACK-1239",
+      "group_id": "train-sealed-239",
+      "prompt_id": "train-chat-239",
+      "split": "train",
+      "template": "Conversation memory:\n{context}\nReturn exactly `Final answer: ACK-1239` and no other text.",
+      "token_bucket": 2048
+    },
+    {
+      "category": "math",
+      "context_seed": "train-math-seed-1240",
+      "expected_answer": "51",
+      "group_id": "train-sealed-240",
+      "prompt_id": "train-math-240",
+      "split": "train",
+      "template": "Reference notes:\n{context}\nCompute 39 + 12. Return exactly `Final answer: 51` and no other text.",
+      "token_bucket": 32
+    },
+    {
+      "category": "code",
+      "context_seed": "train-code-seed-1241",
+      "expected_answer": "48",
+      "group_id": "train-sealed-241",
+      "prompt_id": "train-code-241",
+      "split": "train",
+      "template": "Code review context:\n{context}\nWhat does `print(12 * 4)` output? Return exactly `Final answer: 48` and no other text.",
+      "token_bucket": 32
+    },
+    {
+      "category": "prose",
+      "context_seed": "train-prose-seed-1242",
+      "expected_answer": "MARKER-1242",
+      "group_id": "train-sealed-242",
+      "prompt_id": "train-prose-242",
+      "split": "train",
+      "template": "Background material:\n{context}\nIgnore incidental numbers. Return exactly `Final answer: MARKER-1242` and no other text.",
+      "token_bucket": 32
+    },
+    {
+      "category": "chat",
+      "context_seed": "train-chat-seed-1243",
+      "expected_answer": "ACK-1243",
+      "group_id": "train-sealed-243",
+      "prompt_id": "train-chat-243",
+      "split": "train",
+      "template": "Conversation memory:\n{context}\nReturn exactly `Final answer: ACK-1243` and no other text.",
+      "token_bucket": 32
+    },
+    {
+      "category": "math",
+      "context_seed": "train-math-seed-1244",
+      "expected_answer": "59",
+      "group_id": "train-sealed-244",
+      "prompt_id": "train-math-244",
+      "split": "train",
+      "template": "Reference notes:\n{context}\nCompute 43 + 16. Return exactly `Final answer: 59` and no other text.",
+      "token_bucket": 128
+    },
+    {
+      "category": "code",
+      "context_seed": "train-code-seed-1245",
+      "expected_answer": "40",
+      "group_id": "train-sealed-245",
+      "prompt_id": "train-code-245",
+      "split": "train",
+      "template": "Code review context:\n{context}\nWhat does `print(5 * 8)` output? Return exactly `Final answer: 40` and no other text.",
+      "token_bucket": 128
+    },
+    {
+      "category": "prose",
+      "context_seed": "train-prose-seed-1246",
+      "expected_answer": "MARKER-1246",
+      "group_id": "train-sealed-246",
+      "prompt_id": "train-prose-246",
+      "split": "train",
+      "template": "Background material:\n{context}\nIgnore incidental numbers. Return exactly `Final answer: MARKER-1246` and no other text.",
+      "token_bucket": 128
+    },
+    {
+      "category": "chat",
+      "context_seed": "train-chat-seed-1247",
+      "expected_answer": "ACK-1247",
+      "group_id": "train-sealed-247",
+      "prompt_id": "train-chat-247",
+      "split": "train",
+      "template": "Conversation memory:\n{context}\nReturn exactly `Final answer: ACK-1247` and no other text.",
+      "token_bucket": 128
+    },
+    {
+      "category": "math",
+      "context_seed": "train-math-seed-1248",
+      "expected_answer": "67",
+      "group_id": "train-sealed-248",
+      "prompt_id": "train-math-248",
+      "split": "train",
+      "template": "Reference notes:\n{context}\nCompute 47 + 20. Return exactly `Final answer: 67` and no other text.",
+      "token_bucket": 512
+    },
+    {
+      "category": "code",
+      "context_seed": "train-code-seed-1249",
+      "expected_answer": "45",
+      "group_id": "train-sealed-249",
+      "prompt_id": "train-code-249",
+      "split": "train",
+      "template": "Code review context:\n{context}\nWhat does `print(9 * 5)` output? Return exactly `Final answer: 45` and no other text.",
+      "token_bucket": 512
+    },
+    {
+      "category": "prose",
+      "context_seed": "train-prose-seed-1250",
+      "expected_answer": "MARKER-1250",
+      "group_id": "train-sealed-250",
+      "prompt_id": "train-prose-250",
+      "split": "train",
+      "template": "Background material:\n{context}\nIgnore incidental numbers. Return exactly `Final answer: MARKER-1250` and no other text.",
+      "token_bucket": 512
+    },
+    {
+      "category": "chat",
+      "context_seed": "train-chat-seed-1251",
+      "expected_answer": "ACK-1251",
+      "group_id": "train-sealed-251",
+      "prompt_id": "train-chat-251",
+      "split": "train",
+      "template": "Conversation memory:\n{context}\nReturn exactly `Final answer: ACK-1251` and no other text.",
+      "token_bucket": 512
+    },
+    {
+      "category": "math",
+      "context_seed": "train-math-seed-1252",
+      "expected_answer": "75",
+      "group_id": "train-sealed-252",
+      "prompt_id": "train-math-252",
+      "split": "train",
+      "template": "Reference notes:\n{context}\nCompute 51 + 24. Return exactly `Final answer: 75` and no other text.",
+      "token_bucket": 2048
+    },
+    {
+      "category": "code",
+      "context_seed": "train-code-seed-1253",
+      "expected_answer": "26",
+      "group_id": "train-sealed-253",
+      "prompt_id": "train-code-253",
+      "split": "train",
+      "template": "Code review context:\n{context}\nWhat does `print(13 * 2)` output? Return exactly `Final answer: 26` and no other text.",
+      "token_bucket": 2048
+    },
+    {
+      "category": "prose",
+      "context_seed": "train-prose-seed-1254",
+      "expected_answer": "MARKER-1254",
+      "group_id": "train-sealed-254",
+      "prompt_id": "train-prose-254",
+      "split": "train",
+      "template": "Background material:\n{context}\nIgnore incidental numbers. Return exactly `Final answer: MARKER-1254` and no other text.",
+      "token_bucket": 2048
+    },
+    {
+      "category": "chat",
+      "context_seed": "train-chat-seed-1255",
+      "expected_answer": "ACK-1255",
+      "group_id": "train-sealed-255",
+      "prompt_id": "train-chat-255",
+      "split": "train",
+      "template": "Conversation memory:\n{context}\nReturn exactly `Final answer: ACK-1255` and no other text.",
+      "token_bucket": 2048
+    },
+    {
+      "category": "math",
       "context_seed": "validation-math-seed-2000",
       "expected_answer": "34",
       "group_id": "validation-sealed-000",
@@ -318,6 +2718,486 @@
       "prompt_id": "validation-chat-015",
       "split": "validation",
       "template": "Conversation memory:\n{context}\nReturn exactly `Final answer: ACK-2015` and no other text.",
+      "token_bucket": 2048
+    },
+    {
+      "category": "math",
+      "context_seed": "validation-math-seed-2016",
+      "expected_answer": "47",
+      "group_id": "validation-sealed-016",
+      "prompt_id": "validation-math-016",
+      "split": "validation",
+      "template": "Reference notes:\n{context}\nCompute 38 + 9. Return exactly `Final answer: 47` and no other text.",
+      "token_bucket": 32
+    },
+    {
+      "category": "code",
+      "context_seed": "validation-code-seed-2017",
+      "expected_answer": "21",
+      "group_id": "validation-sealed-017",
+      "prompt_id": "validation-code-017",
+      "split": "validation",
+      "template": "Code review context:\n{context}\nWhat does `print(7 * 3)` output? Return exactly `Final answer: 21` and no other text.",
+      "token_bucket": 32
+    },
+    {
+      "category": "prose",
+      "context_seed": "validation-prose-seed-2018",
+      "expected_answer": "MARKER-2018",
+      "group_id": "validation-sealed-018",
+      "prompt_id": "validation-prose-018",
+      "split": "validation",
+      "template": "Background material:\n{context}\nIgnore incidental numbers. Return exactly `Final answer: MARKER-2018` and no other text.",
+      "token_bucket": 32
+    },
+    {
+      "category": "chat",
+      "context_seed": "validation-chat-seed-2019",
+      "expected_answer": "ACK-2019",
+      "group_id": "validation-sealed-019",
+      "prompt_id": "validation-chat-019",
+      "split": "validation",
+      "template": "Conversation memory:\n{context}\nReturn exactly `Final answer: ACK-2019` and no other text.",
+      "token_bucket": 32
+    },
+    {
+      "category": "math",
+      "context_seed": "validation-math-seed-2020",
+      "expected_answer": "55",
+      "group_id": "validation-sealed-020",
+      "prompt_id": "validation-math-020",
+      "split": "validation",
+      "template": "Reference notes:\n{context}\nCompute 42 + 13. Return exactly `Final answer: 55` and no other text.",
+      "token_bucket": 128
+    },
+    {
+      "category": "code",
+      "context_seed": "validation-code-seed-2021",
+      "expected_answer": "77",
+      "group_id": "validation-sealed-021",
+      "prompt_id": "validation-code-021",
+      "split": "validation",
+      "template": "Code review context:\n{context}\nWhat does `print(11 * 7)` output? Return exactly `Final answer: 77` and no other text.",
+      "token_bucket": 128
+    },
+    {
+      "category": "prose",
+      "context_seed": "validation-prose-seed-2022",
+      "expected_answer": "MARKER-2022",
+      "group_id": "validation-sealed-022",
+      "prompt_id": "validation-prose-022",
+      "split": "validation",
+      "template": "Background material:\n{context}\nIgnore incidental numbers. Return exactly `Final answer: MARKER-2022` and no other text.",
+      "token_bucket": 128
+    },
+    {
+      "category": "chat",
+      "context_seed": "validation-chat-seed-2023",
+      "expected_answer": "ACK-2023",
+      "group_id": "validation-sealed-023",
+      "prompt_id": "validation-chat-023",
+      "split": "validation",
+      "template": "Conversation memory:\n{context}\nReturn exactly `Final answer: ACK-2023` and no other text.",
+      "token_bucket": 128
+    },
+    {
+      "category": "math",
+      "context_seed": "validation-math-seed-2024",
+      "expected_answer": "63",
+      "group_id": "validation-sealed-024",
+      "prompt_id": "validation-math-024",
+      "split": "validation",
+      "template": "Reference notes:\n{context}\nCompute 46 + 17. Return exactly `Final answer: 63` and no other text.",
+      "token_bucket": 512
+    },
+    {
+      "category": "code",
+      "context_seed": "validation-code-seed-2025",
+      "expected_answer": "16",
+      "group_id": "validation-sealed-025",
+      "prompt_id": "validation-code-025",
+      "split": "validation",
+      "template": "Code review context:\n{context}\nWhat does `print(4 * 4)` output? Return exactly `Final answer: 16` and no other text.",
+      "token_bucket": 512
+    },
+    {
+      "category": "prose",
+      "context_seed": "validation-prose-seed-2026",
+      "expected_answer": "MARKER-2026",
+      "group_id": "validation-sealed-026",
+      "prompt_id": "validation-prose-026",
+      "split": "validation",
+      "template": "Background material:\n{context}\nIgnore incidental numbers. Return exactly `Final answer: MARKER-2026` and no other text.",
+      "token_bucket": 512
+    },
+    {
+      "category": "chat",
+      "context_seed": "validation-chat-seed-2027",
+      "expected_answer": "ACK-2027",
+      "group_id": "validation-sealed-027",
+      "prompt_id": "validation-chat-027",
+      "split": "validation",
+      "template": "Conversation memory:\n{context}\nReturn exactly `Final answer: ACK-2027` and no other text.",
+      "token_bucket": 512
+    },
+    {
+      "category": "math",
+      "context_seed": "validation-math-seed-2028",
+      "expected_answer": "71",
+      "group_id": "validation-sealed-028",
+      "prompt_id": "validation-math-028",
+      "split": "validation",
+      "template": "Reference notes:\n{context}\nCompute 50 + 21. Return exactly `Final answer: 71` and no other text.",
+      "token_bucket": 2048
+    },
+    {
+      "category": "code",
+      "context_seed": "validation-code-seed-2029",
+      "expected_answer": "64",
+      "group_id": "validation-sealed-029",
+      "prompt_id": "validation-code-029",
+      "split": "validation",
+      "template": "Code review context:\n{context}\nWhat does `print(8 * 8)` output? Return exactly `Final answer: 64` and no other text.",
+      "token_bucket": 2048
+    },
+    {
+      "category": "prose",
+      "context_seed": "validation-prose-seed-2030",
+      "expected_answer": "MARKER-2030",
+      "group_id": "validation-sealed-030",
+      "prompt_id": "validation-prose-030",
+      "split": "validation",
+      "template": "Background material:\n{context}\nIgnore incidental numbers. Return exactly `Final answer: MARKER-2030` and no other text.",
+      "token_bucket": 2048
+    },
+    {
+      "category": "chat",
+      "context_seed": "validation-chat-seed-2031",
+      "expected_answer": "ACK-2031",
+      "group_id": "validation-sealed-031",
+      "prompt_id": "validation-chat-031",
+      "split": "validation",
+      "template": "Conversation memory:\n{context}\nReturn exactly `Final answer: ACK-2031` and no other text.",
+      "token_bucket": 2048
+    },
+    {
+      "category": "math",
+      "context_seed": "validation-math-seed-2032",
+      "expected_answer": "79",
+      "group_id": "validation-sealed-032",
+      "prompt_id": "validation-math-032",
+      "split": "validation",
+      "template": "Reference notes:\n{context}\nCompute 54 + 25. Return exactly `Final answer: 79` and no other text.",
+      "token_bucket": 32
+    },
+    {
+      "category": "code",
+      "context_seed": "validation-code-seed-2033",
+      "expected_answer": "60",
+      "group_id": "validation-sealed-033",
+      "prompt_id": "validation-code-033",
+      "split": "validation",
+      "template": "Code review context:\n{context}\nWhat does `print(12 * 5)` output? Return exactly `Final answer: 60` and no other text.",
+      "token_bucket": 32
+    },
+    {
+      "category": "prose",
+      "context_seed": "validation-prose-seed-2034",
+      "expected_answer": "MARKER-2034",
+      "group_id": "validation-sealed-034",
+      "prompt_id": "validation-prose-034",
+      "split": "validation",
+      "template": "Background material:\n{context}\nIgnore incidental numbers. Return exactly `Final answer: MARKER-2034` and no other text.",
+      "token_bucket": 32
+    },
+    {
+      "category": "chat",
+      "context_seed": "validation-chat-seed-2035",
+      "expected_answer": "ACK-2035",
+      "group_id": "validation-sealed-035",
+      "prompt_id": "validation-chat-035",
+      "split": "validation",
+      "template": "Conversation memory:\n{context}\nReturn exactly `Final answer: ACK-2035` and no other text.",
+      "token_bucket": 32
+    },
+    {
+      "category": "math",
+      "context_seed": "validation-math-seed-2036",
+      "expected_answer": "31",
+      "group_id": "validation-sealed-036",
+      "prompt_id": "validation-math-036",
+      "split": "validation",
+      "template": "Reference notes:\n{context}\nCompute 21 + 10. Return exactly `Final answer: 31` and no other text.",
+      "token_bucket": 128
+    },
+    {
+      "category": "code",
+      "context_seed": "validation-code-seed-2037",
+      "expected_answer": "10",
+      "group_id": "validation-sealed-037",
+      "prompt_id": "validation-code-037",
+      "split": "validation",
+      "template": "Code review context:\n{context}\nWhat does `print(5 * 2)` output? Return exactly `Final answer: 10` and no other text.",
+      "token_bucket": 128
+    },
+    {
+      "category": "prose",
+      "context_seed": "validation-prose-seed-2038",
+      "expected_answer": "MARKER-2038",
+      "group_id": "validation-sealed-038",
+      "prompt_id": "validation-prose-038",
+      "split": "validation",
+      "template": "Background material:\n{context}\nIgnore incidental numbers. Return exactly `Final answer: MARKER-2038` and no other text.",
+      "token_bucket": 128
+    },
+    {
+      "category": "chat",
+      "context_seed": "validation-chat-seed-2039",
+      "expected_answer": "ACK-2039",
+      "group_id": "validation-sealed-039",
+      "prompt_id": "validation-chat-039",
+      "split": "validation",
+      "template": "Conversation memory:\n{context}\nReturn exactly `Final answer: ACK-2039` and no other text.",
+      "token_bucket": 128
+    },
+    {
+      "category": "math",
+      "context_seed": "validation-math-seed-2040",
+      "expected_answer": "39",
+      "group_id": "validation-sealed-040",
+      "prompt_id": "validation-math-040",
+      "split": "validation",
+      "template": "Reference notes:\n{context}\nCompute 25 + 14. Return exactly `Final answer: 39` and no other text.",
+      "token_bucket": 512
+    },
+    {
+      "category": "code",
+      "context_seed": "validation-code-seed-2041",
+      "expected_answer": "54",
+      "group_id": "validation-sealed-041",
+      "prompt_id": "validation-code-041",
+      "split": "validation",
+      "template": "Code review context:\n{context}\nWhat does `print(9 * 6)` output? Return exactly `Final answer: 54` and no other text.",
+      "token_bucket": 512
+    },
+    {
+      "category": "prose",
+      "context_seed": "validation-prose-seed-2042",
+      "expected_answer": "MARKER-2042",
+      "group_id": "validation-sealed-042",
+      "prompt_id": "validation-prose-042",
+      "split": "validation",
+      "template": "Background material:\n{context}\nIgnore incidental numbers. Return exactly `Final answer: MARKER-2042` and no other text.",
+      "token_bucket": 512
+    },
+    {
+      "category": "chat",
+      "context_seed": "validation-chat-seed-2043",
+      "expected_answer": "ACK-2043",
+      "group_id": "validation-sealed-043",
+      "prompt_id": "validation-chat-043",
+      "split": "validation",
+      "template": "Conversation memory:\n{context}\nReturn exactly `Final answer: ACK-2043` and no other text.",
+      "token_bucket": 512
+    },
+    {
+      "category": "math",
+      "context_seed": "validation-math-seed-2044",
+      "expected_answer": "47",
+      "group_id": "validation-sealed-044",
+      "prompt_id": "validation-math-044",
+      "split": "validation",
+      "template": "Reference notes:\n{context}\nCompute 29 + 18. Return exactly `Final answer: 47` and no other text.",
+      "token_bucket": 2048
+    },
+    {
+      "category": "code",
+      "context_seed": "validation-code-seed-2045",
+      "expected_answer": "39",
+      "group_id": "validation-sealed-045",
+      "prompt_id": "validation-code-045",
+      "split": "validation",
+      "template": "Code review context:\n{context}\nWhat does `print(13 * 3)` output? Return exactly `Final answer: 39` and no other text.",
+      "token_bucket": 2048
+    },
+    {
+      "category": "prose",
+      "context_seed": "validation-prose-seed-2046",
+      "expected_answer": "MARKER-2046",
+      "group_id": "validation-sealed-046",
+      "prompt_id": "validation-prose-046",
+      "split": "validation",
+      "template": "Background material:\n{context}\nIgnore incidental numbers. Return exactly `Final answer: MARKER-2046` and no other text.",
+      "token_bucket": 2048
+    },
+    {
+      "category": "chat",
+      "context_seed": "validation-chat-seed-2047",
+      "expected_answer": "ACK-2047",
+      "group_id": "validation-sealed-047",
+      "prompt_id": "validation-chat-047",
+      "split": "validation",
+      "template": "Conversation memory:\n{context}\nReturn exactly `Final answer: ACK-2047` and no other text.",
+      "token_bucket": 2048
+    },
+    {
+      "category": "math",
+      "context_seed": "validation-math-seed-2048",
+      "expected_answer": "55",
+      "group_id": "validation-sealed-048",
+      "prompt_id": "validation-math-048",
+      "split": "validation",
+      "template": "Reference notes:\n{context}\nCompute 33 + 22. Return exactly `Final answer: 55` and no other text.",
+      "token_bucket": 32
+    },
+    {
+      "category": "code",
+      "context_seed": "validation-code-seed-2049",
+      "expected_answer": "42",
+      "group_id": "validation-sealed-049",
+      "prompt_id": "validation-code-049",
+      "split": "validation",
+      "template": "Code review context:\n{context}\nWhat does `print(6 * 7)` output? Return exactly `Final answer: 42` and no other text.",
+      "token_bucket": 32
+    },
+    {
+      "category": "prose",
+      "context_seed": "validation-prose-seed-2050",
+      "expected_answer": "MARKER-2050",
+      "group_id": "validation-sealed-050",
+      "prompt_id": "validation-prose-050",
+      "split": "validation",
+      "template": "Background material:\n{context}\nIgnore incidental numbers. Return exactly `Final answer: MARKER-2050` and no other text.",
+      "token_bucket": 32
+    },
+    {
+      "category": "chat",
+      "context_seed": "validation-chat-seed-2051",
+      "expected_answer": "ACK-2051",
+      "group_id": "validation-sealed-051",
+      "prompt_id": "validation-chat-051",
+      "split": "validation",
+      "template": "Conversation memory:\n{context}\nReturn exactly `Final answer: ACK-2051` and no other text.",
+      "token_bucket": 32
+    },
+    {
+      "category": "math",
+      "context_seed": "validation-math-seed-2052",
+      "expected_answer": "44",
+      "group_id": "validation-sealed-052",
+      "prompt_id": "validation-math-052",
+      "split": "validation",
+      "template": "Reference notes:\n{context}\nCompute 37 + 7. Return exactly `Final answer: 44` and no other text.",
+      "token_bucket": 128
+    },
+    {
+      "category": "code",
+      "context_seed": "validation-code-seed-2053",
+      "expected_answer": "40",
+      "group_id": "validation-sealed-053",
+      "prompt_id": "validation-code-053",
+      "split": "validation",
+      "template": "Code review context:\n{context}\nWhat does `print(10 * 4)` output? Return exactly `Final answer: 40` and no other text.",
+      "token_bucket": 128
+    },
+    {
+      "category": "prose",
+      "context_seed": "validation-prose-seed-2054",
+      "expected_answer": "MARKER-2054",
+      "group_id": "validation-sealed-054",
+      "prompt_id": "validation-prose-054",
+      "split": "validation",
+      "template": "Background material:\n{context}\nIgnore incidental numbers. Return exactly `Final answer: MARKER-2054` and no other text.",
+      "token_bucket": 128
+    },
+    {
+      "category": "chat",
+      "context_seed": "validation-chat-seed-2055",
+      "expected_answer": "ACK-2055",
+      "group_id": "validation-sealed-055",
+      "prompt_id": "validation-chat-055",
+      "split": "validation",
+      "template": "Conversation memory:\n{context}\nReturn exactly `Final answer: ACK-2055` and no other text.",
+      "token_bucket": 128
+    },
+    {
+      "category": "math",
+      "context_seed": "validation-math-seed-2056",
+      "expected_answer": "52",
+      "group_id": "validation-sealed-056",
+      "prompt_id": "validation-math-056",
+      "split": "validation",
+      "template": "Reference notes:\n{context}\nCompute 41 + 11. Return exactly `Final answer: 52` and no other text.",
+      "token_bucket": 512
+    },
+    {
+      "category": "code",
+      "context_seed": "validation-code-seed-2057",
+      "expected_answer": "24",
+      "group_id": "validation-sealed-057",
+      "prompt_id": "validation-code-057",
+      "split": "validation",
+      "template": "Code review context:\n{context}\nWhat does `print(3 * 8)` output? Return exactly `Final answer: 24` and no other text.",
+      "token_bucket": 512
+    },
+    {
+      "category": "prose",
+      "context_seed": "validation-prose-seed-2058",
+      "expected_answer": "MARKER-2058",
+      "group_id": "validation-sealed-058",
+      "prompt_id": "validation-prose-058",
+      "split": "validation",
+      "template": "Background material:\n{context}\nIgnore incidental numbers. Return exactly `Final answer: MARKER-2058` and no other text.",
+      "token_bucket": 512
+    },
+    {
+      "category": "chat",
+      "context_seed": "validation-chat-seed-2059",
+      "expected_answer": "ACK-2059",
+      "group_id": "validation-sealed-059",
+      "prompt_id": "validation-chat-059",
+      "split": "validation",
+      "template": "Conversation memory:\n{context}\nReturn exactly `Final answer: ACK-2059` and no other text.",
+      "token_bucket": 512
+    },
+    {
+      "category": "math",
+      "context_seed": "validation-math-seed-2060",
+      "expected_answer": "60",
+      "group_id": "validation-sealed-060",
+      "prompt_id": "validation-math-060",
+      "split": "validation",
+      "template": "Reference notes:\n{context}\nCompute 45 + 15. Return exactly `Final answer: 60` and no other text.",
+      "token_bucket": 2048
+    },
+    {
+      "category": "code",
+      "context_seed": "validation-code-seed-2061",
+      "expected_answer": "35",
+      "group_id": "validation-sealed-061",
+      "prompt_id": "validation-code-061",
+      "split": "validation",
+      "template": "Code review context:\n{context}\nWhat does `print(7 * 5)` output? Return exactly `Final answer: 35` and no other text.",
+      "token_bucket": 2048
+    },
+    {
+      "category": "prose",
+      "context_seed": "validation-prose-seed-2062",
+      "expected_answer": "MARKER-2062",
+      "group_id": "validation-sealed-062",
+      "prompt_id": "validation-prose-062",
+      "split": "validation",
+      "template": "Background material:\n{context}\nIgnore incidental numbers. Return exactly `Final answer: MARKER-2062` and no other text.",
+      "token_bucket": 2048
+    },
+    {
+      "category": "chat",
+      "context_seed": "validation-chat-seed-2063",
+      "expected_answer": "ACK-2063",
+      "group_id": "validation-sealed-063",
+      "prompt_id": "validation-chat-063",
+      "split": "validation",
+      "template": "Conversation memory:\n{context}\nReturn exactly `Final answer: ACK-2063` and no other text.",
       "token_bucket": 2048
     },
     {
@@ -638,6 +3518,326 @@
       "prompt_id": "test-chat-031",
       "split": "test",
       "template": "Conversation memory:\n{context}\nReturn exactly `Final answer: ACK-3031` and no other text.",
+      "token_bucket": 2048
+    },
+    {
+      "category": "math",
+      "context_seed": "test-math-seed-3032",
+      "expected_answer": "73",
+      "group_id": "test-sealed-032",
+      "prompt_id": "test-math-032",
+      "split": "test",
+      "template": "Reference notes:\n{context}\nCompute 55 + 18. Return exactly `Final answer: 73` and no other text.",
+      "token_bucket": 32
+    },
+    {
+      "category": "code",
+      "context_seed": "test-code-seed-3033",
+      "expected_answer": "44",
+      "group_id": "test-sealed-033",
+      "prompt_id": "test-code-033",
+      "split": "test",
+      "template": "Code review context:\n{context}\nWhat does `print(11 * 4)` output? Return exactly `Final answer: 44` and no other text.",
+      "token_bucket": 32
+    },
+    {
+      "category": "prose",
+      "context_seed": "test-prose-seed-3034",
+      "expected_answer": "MARKER-3034",
+      "group_id": "test-sealed-034",
+      "prompt_id": "test-prose-034",
+      "split": "test",
+      "template": "Background material:\n{context}\nIgnore incidental numbers. Return exactly `Final answer: MARKER-3034` and no other text.",
+      "token_bucket": 32
+    },
+    {
+      "category": "chat",
+      "context_seed": "test-chat-seed-3035",
+      "expected_answer": "ACK-3035",
+      "group_id": "test-sealed-035",
+      "prompt_id": "test-chat-035",
+      "split": "test",
+      "template": "Conversation memory:\n{context}\nReturn exactly `Final answer: ACK-3035` and no other text.",
+      "token_bucket": 32
+    },
+    {
+      "category": "math",
+      "context_seed": "test-math-seed-3036",
+      "expected_answer": "44",
+      "group_id": "test-sealed-036",
+      "prompt_id": "test-math-036",
+      "split": "test",
+      "template": "Reference notes:\n{context}\nCompute 22 + 22. Return exactly `Final answer: 44` and no other text.",
+      "token_bucket": 128
+    },
+    {
+      "category": "code",
+      "context_seed": "test-code-seed-3037",
+      "expected_answer": "32",
+      "group_id": "test-sealed-037",
+      "prompt_id": "test-code-037",
+      "split": "test",
+      "template": "Code review context:\n{context}\nWhat does `print(4 * 8)` output? Return exactly `Final answer: 32` and no other text.",
+      "token_bucket": 128
+    },
+    {
+      "category": "prose",
+      "context_seed": "test-prose-seed-3038",
+      "expected_answer": "MARKER-3038",
+      "group_id": "test-sealed-038",
+      "prompt_id": "test-prose-038",
+      "split": "test",
+      "template": "Background material:\n{context}\nIgnore incidental numbers. Return exactly `Final answer: MARKER-3038` and no other text.",
+      "token_bucket": 128
+    },
+    {
+      "category": "chat",
+      "context_seed": "test-chat-seed-3039",
+      "expected_answer": "ACK-3039",
+      "group_id": "test-sealed-039",
+      "prompt_id": "test-chat-039",
+      "split": "test",
+      "template": "Conversation memory:\n{context}\nReturn exactly `Final answer: ACK-3039` and no other text.",
+      "token_bucket": 128
+    },
+    {
+      "category": "math",
+      "context_seed": "test-math-seed-3040",
+      "expected_answer": "33",
+      "group_id": "test-sealed-040",
+      "prompt_id": "test-math-040",
+      "split": "test",
+      "template": "Reference notes:\n{context}\nCompute 26 + 7. Return exactly `Final answer: 33` and no other text.",
+      "token_bucket": 512
+    },
+    {
+      "category": "code",
+      "context_seed": "test-code-seed-3041",
+      "expected_answer": "40",
+      "group_id": "test-sealed-041",
+      "prompt_id": "test-code-041",
+      "split": "test",
+      "template": "Code review context:\n{context}\nWhat does `print(8 * 5)` output? Return exactly `Final answer: 40` and no other text.",
+      "token_bucket": 512
+    },
+    {
+      "category": "prose",
+      "context_seed": "test-prose-seed-3042",
+      "expected_answer": "MARKER-3042",
+      "group_id": "test-sealed-042",
+      "prompt_id": "test-prose-042",
+      "split": "test",
+      "template": "Background material:\n{context}\nIgnore incidental numbers. Return exactly `Final answer: MARKER-3042` and no other text.",
+      "token_bucket": 512
+    },
+    {
+      "category": "chat",
+      "context_seed": "test-chat-seed-3043",
+      "expected_answer": "ACK-3043",
+      "group_id": "test-sealed-043",
+      "prompt_id": "test-chat-043",
+      "split": "test",
+      "template": "Conversation memory:\n{context}\nReturn exactly `Final answer: ACK-3043` and no other text.",
+      "token_bucket": 512
+    },
+    {
+      "category": "math",
+      "context_seed": "test-math-seed-3044",
+      "expected_answer": "41",
+      "group_id": "test-sealed-044",
+      "prompt_id": "test-math-044",
+      "split": "test",
+      "template": "Reference notes:\n{context}\nCompute 30 + 11. Return exactly `Final answer: 41` and no other text.",
+      "token_bucket": 2048
+    },
+    {
+      "category": "code",
+      "context_seed": "test-code-seed-3045",
+      "expected_answer": "24",
+      "group_id": "test-sealed-045",
+      "prompt_id": "test-code-045",
+      "split": "test",
+      "template": "Code review context:\n{context}\nWhat does `print(12 * 2)` output? Return exactly `Final answer: 24` and no other text.",
+      "token_bucket": 2048
+    },
+    {
+      "category": "prose",
+      "context_seed": "test-prose-seed-3046",
+      "expected_answer": "MARKER-3046",
+      "group_id": "test-sealed-046",
+      "prompt_id": "test-prose-046",
+      "split": "test",
+      "template": "Background material:\n{context}\nIgnore incidental numbers. Return exactly `Final answer: MARKER-3046` and no other text.",
+      "token_bucket": 2048
+    },
+    {
+      "category": "chat",
+      "context_seed": "test-chat-seed-3047",
+      "expected_answer": "ACK-3047",
+      "group_id": "test-sealed-047",
+      "prompt_id": "test-chat-047",
+      "split": "test",
+      "template": "Conversation memory:\n{context}\nReturn exactly `Final answer: ACK-3047` and no other text.",
+      "token_bucket": 2048
+    },
+    {
+      "category": "math",
+      "context_seed": "test-math-seed-3048",
+      "expected_answer": "49",
+      "group_id": "test-sealed-048",
+      "prompt_id": "test-math-048",
+      "split": "test",
+      "template": "Reference notes:\n{context}\nCompute 34 + 15. Return exactly `Final answer: 49` and no other text.",
+      "token_bucket": 32
+    },
+    {
+      "category": "code",
+      "context_seed": "test-code-seed-3049",
+      "expected_answer": "30",
+      "group_id": "test-sealed-049",
+      "prompt_id": "test-code-049",
+      "split": "test",
+      "template": "Code review context:\n{context}\nWhat does `print(5 * 6)` output? Return exactly `Final answer: 30` and no other text.",
+      "token_bucket": 32
+    },
+    {
+      "category": "prose",
+      "context_seed": "test-prose-seed-3050",
+      "expected_answer": "MARKER-3050",
+      "group_id": "test-sealed-050",
+      "prompt_id": "test-prose-050",
+      "split": "test",
+      "template": "Background material:\n{context}\nIgnore incidental numbers. Return exactly `Final answer: MARKER-3050` and no other text.",
+      "token_bucket": 32
+    },
+    {
+      "category": "chat",
+      "context_seed": "test-chat-seed-3051",
+      "expected_answer": "ACK-3051",
+      "group_id": "test-sealed-051",
+      "prompt_id": "test-chat-051",
+      "split": "test",
+      "template": "Conversation memory:\n{context}\nReturn exactly `Final answer: ACK-3051` and no other text.",
+      "token_bucket": 32
+    },
+    {
+      "category": "math",
+      "context_seed": "test-math-seed-3052",
+      "expected_answer": "57",
+      "group_id": "test-sealed-052",
+      "prompt_id": "test-math-052",
+      "split": "test",
+      "template": "Reference notes:\n{context}\nCompute 38 + 19. Return exactly `Final answer: 57` and no other text.",
+      "token_bucket": 128
+    },
+    {
+      "category": "code",
+      "context_seed": "test-code-seed-3053",
+      "expected_answer": "27",
+      "group_id": "test-sealed-053",
+      "prompt_id": "test-code-053",
+      "split": "test",
+      "template": "Code review context:\n{context}\nWhat does `print(9 * 3)` output? Return exactly `Final answer: 27` and no other text.",
+      "token_bucket": 128
+    },
+    {
+      "category": "prose",
+      "context_seed": "test-prose-seed-3054",
+      "expected_answer": "MARKER-3054",
+      "group_id": "test-sealed-054",
+      "prompt_id": "test-prose-054",
+      "split": "test",
+      "template": "Background material:\n{context}\nIgnore incidental numbers. Return exactly `Final answer: MARKER-3054` and no other text.",
+      "token_bucket": 128
+    },
+    {
+      "category": "chat",
+      "context_seed": "test-chat-seed-3055",
+      "expected_answer": "ACK-3055",
+      "group_id": "test-sealed-055",
+      "prompt_id": "test-chat-055",
+      "split": "test",
+      "template": "Conversation memory:\n{context}\nReturn exactly `Final answer: ACK-3055` and no other text.",
+      "token_bucket": 128
+    },
+    {
+      "category": "math",
+      "context_seed": "test-math-seed-3056",
+      "expected_answer": "65",
+      "group_id": "test-sealed-056",
+      "prompt_id": "test-math-056",
+      "split": "test",
+      "template": "Reference notes:\n{context}\nCompute 42 + 23. Return exactly `Final answer: 65` and no other text.",
+      "token_bucket": 512
+    },
+    {
+      "category": "code",
+      "context_seed": "test-code-seed-3057",
+      "expected_answer": "91",
+      "group_id": "test-sealed-057",
+      "prompt_id": "test-code-057",
+      "split": "test",
+      "template": "Code review context:\n{context}\nWhat does `print(13 * 7)` output? Return exactly `Final answer: 91` and no other text.",
+      "token_bucket": 512
+    },
+    {
+      "category": "prose",
+      "context_seed": "test-prose-seed-3058",
+      "expected_answer": "MARKER-3058",
+      "group_id": "test-sealed-058",
+      "prompt_id": "test-prose-058",
+      "split": "test",
+      "template": "Background material:\n{context}\nIgnore incidental numbers. Return exactly `Final answer: MARKER-3058` and no other text.",
+      "token_bucket": 512
+    },
+    {
+      "category": "chat",
+      "context_seed": "test-chat-seed-3059",
+      "expected_answer": "ACK-3059",
+      "group_id": "test-sealed-059",
+      "prompt_id": "test-chat-059",
+      "split": "test",
+      "template": "Conversation memory:\n{context}\nReturn exactly `Final answer: ACK-3059` and no other text.",
+      "token_bucket": 512
+    },
+    {
+      "category": "math",
+      "context_seed": "test-math-seed-3060",
+      "expected_answer": "54",
+      "group_id": "test-sealed-060",
+      "prompt_id": "test-math-060",
+      "split": "test",
+      "template": "Reference notes:\n{context}\nCompute 46 + 8. Return exactly `Final answer: 54` and no other text.",
+      "token_bucket": 2048
+    },
+    {
+      "category": "code",
+      "context_seed": "test-code-seed-3061",
+      "expected_answer": "24",
+      "group_id": "test-sealed-061",
+      "prompt_id": "test-code-061",
+      "split": "test",
+      "template": "Code review context:\n{context}\nWhat does `print(6 * 4)` output? Return exactly `Final answer: 24` and no other text.",
+      "token_bucket": 2048
+    },
+    {
+      "category": "prose",
+      "context_seed": "test-prose-seed-3062",
+      "expected_answer": "MARKER-3062",
+      "group_id": "test-sealed-062",
+      "prompt_id": "test-prose-062",
+      "split": "test",
+      "template": "Background material:\n{context}\nIgnore incidental numbers. Return exactly `Final answer: MARKER-3062` and no other text.",
+      "token_bucket": 2048
+    },
+    {
+      "category": "chat",
+      "context_seed": "test-chat-seed-3063",
+      "expected_answer": "ACK-3063",
+      "group_id": "test-sealed-063",
+      "prompt_id": "test-chat-063",
+      "split": "test",
+      "template": "Conversation memory:\n{context}\nReturn exactly `Final answer: ACK-3063` and no other text.",
       "token_bucket": 2048
     }
   ],

@@ -20,7 +20,7 @@ from goldenexperience.size_variant.cached_kv_dataset import (
 
 BUCKETS = (32, 128, 512, 2048)
 CATEGORIES = ("math", "code", "prose", "chat")
-SPLIT_COUNTS = {"train": 16, "validation": 16, "test": 32}
+SPLIT_COUNTS = {"train": 256, "validation": 64, "test": 64}
 SPLIT_OFFSETS = {"train": 1000, "validation": 2000, "test": 3000}
 
 

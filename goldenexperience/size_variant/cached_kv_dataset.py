@@ -112,16 +112,28 @@ class CachedKVPromptDataset:
     def approval_errors(
         self,
         *,
-        min_test_prompts: int = 32,
+        min_train_prompts: int = 256,
+        min_validation_prompts: int = 64,
+        min_test_prompts: int = 64,
         required_token_buckets: tuple[int, ...] = (32, 128, 512, 2048),
+        required_categories: tuple[str, ...] = ("math", "code", "prose", "chat"),
     ) -> list[str]:
         errors = self.validate()
-        test_samples = self.split("test")
-        if len(test_samples) < min_test_prompts:
-            errors.append("sealed test split has too few prompts")
-        test_buckets = {sample.token_bucket for sample in test_samples}
-        if not set(required_token_buckets) <= test_buckets:
-            errors.append("sealed test split is missing required token buckets")
+        minimums = {
+            "train": min_train_prompts,
+            "validation": min_validation_prompts,
+            "test": min_test_prompts,
+        }
+        for split, minimum in minimums.items():
+            samples = self.split(split)
+            if len(samples) < minimum:
+                errors.append(f"{split} split has too few prompts")
+            buckets = {sample.token_bucket for sample in samples}
+            if not set(required_token_buckets) <= buckets:
+                errors.append(f"{split} split is missing required token buckets")
+            categories = {sample.category for sample in samples}
+            if not set(required_categories) <= categories:
+                errors.append(f"{split} split is missing required categories")
         return errors
 
     def split(self, name: str) -> tuple[CachedKVPrompt, ...]:

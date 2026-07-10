@@ -93,6 +93,10 @@ def test_prompt_dataset_rejects_id_content_and_group_leakage() -> None:
         samples=valid.samples + (_prompt("test-group-copy", "test", group_id="train-group"),),
     )
     assert any("crosses train and test" in error for error in group_leak.validate())
+    approval_errors = valid.approval_errors()
+    assert "train split has too few prompts" in approval_errors
+    assert "validation split has too few prompts" in approval_errors
+    assert "test split has too few prompts" in approval_errors
 
 
 class _WhitespaceTokenizer:
