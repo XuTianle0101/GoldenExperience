@@ -423,6 +423,22 @@ Use `--emit-validation-candidate` to write unapproved safetensors for a non-publ
 runtime cost benchmark. Production loading still rejects this artifact; only the explicit
 benchmark loader accepts its fully content-addressed structure without granting approval.
 
+Measure a candidate with real Mooncake source objects and an independently recorded native
+target-prefill report. The benchmark writes only unique temporary target keys, verifies
+their exact remote sizes, rolls every key back, and never publishes an external index:
+
+```bash
+python3 scripts/benchmark_qwen3_cached_kv_cost.py \
+  --candidate-manifest artifacts/cached_kv/qwen3_8b_to_14b.candidate.json \
+  --source-model /workspace/volume/softdata/models/Qwen3-8B \
+  --target-model /workspace/volume/softdata/models/Qwen3-14B \
+  --mooncake-setup /path/to/mooncake_setup.json \
+  --source-key source-key-from-current-prompt \
+  --chunk-size 256 \
+  --native-prefill-report /path/to/native_prefill.json \
+  --output artifacts/cached_kv/qwen3_8b_to_14b.cost.json
+```
+
 Run a resident materializer worker with one JSON request and compact JSON response per
 line. Send `mode=preload_cached_kv_bridge` first to load an already approved artifact
 without touching Mooncake, then send normal `mode=cached_kv` requests:

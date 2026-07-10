@@ -7,6 +7,11 @@ from types import SimpleNamespace
 import pytest
 import torch
 
+from goldenexperience.benchmarks.cached_kv_cost import (
+    NATIVE_PREFILL_COST_SCHEMA_VERSION,
+    load_native_prefill_evidence,
+    run_cached_kv_cost_benchmark,
+)
 from goldenexperience.runtime import cross_model_materializer
 from goldenexperience.runtime.cross_model_materializer import (
     materialize_cached_qwen3,
@@ -394,3 +399,75 @@ def test_jsonl_worker_isolates_invalid_requests_and_continues() -> None:
     ]
     assert parsed[1]["line_number"] == 2
     assert parsed[2]["line_number"] == 3
+
+
+def test_cost_benchmark_uses_exact_io_and_never_publishes_targets(tmp_path: Path) -> None:
+    request = _request(tmp_path)
+    fake = FakeMooncakeStore(_source_objects(request))
+    bridge = FakeBridge()
+    bridge.manifest.approved = False
+    bridge.manifest.artifact_errors = lambda: []
+    bridge.manifest.weights_sha256 = "a" * 64
+    bridge.manifest.source.weights_sha256 = "b" * 64
+    bridge.manifest.target.weights_sha256 = "c" * 64
+    bridge.manifest.validation_dataset_sha256 = "d" * 64
+    manifest_path = tmp_path / "candidate.json"
+    manifest_path.write_text("{}", encoding="utf-8")
+
+    report = run_cached_kv_cost_benchmark(
+        bridge,
+        candidate_manifest_path=manifest_path,
+        setup_config={"metadata_server": "http://metadata"},
+        source_keys=["source@0xaa", "source@0xbb"],
+        chunk_size=2,
+        native_prefill_samples_ms=[100.0, 101.0],
+        iterations=2,
+        warmup_iterations=1,
+        store_factory=lambda: fake,
+    )
+
+    assert report["eligible_for_approval"] is False
+    assert report["store_backend"] == "test_double"
+    assert report["non_publishing"] is True
+    assert report["external_index_published"] is False
+    assert report["all_temporary_targets_rolled_back"] is True
+    assert len(report["measurements_ms"]["read_transform_put"]) == 2
+    assert not any(key.startswith("ge-cost/") for key in fake.objects)
+
+
+def test_native_prefill_evidence_binds_target_identity_and_runtime(tmp_path: Path) -> None:
+    bridge = FakeBridge()
+    bridge.manifest.target.weights_sha256 = "c" * 64
+    report_path = tmp_path / "native.json"
+    report_path.write_text(
+        json.dumps(
+            {
+                "schema_version": NATIVE_PREFILL_COST_SCHEMA_VERSION,
+                "direction": "8b_to_14b",
+                "target_model_weights_sha256": "c" * 64,
+                "token_count": 512,
+                "backend": "vllm_native_target",
+                "eligible_for_approval": True,
+                "samples_ms": [100.0] * 20,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    evidence = load_native_prefill_evidence(
+        report_path,
+        bridge=bridge,
+        expected_tokens=512,
+    )
+
+    assert evidence.eligible_for_approval is True
+    assert evidence.backend == "vllm_native_target"
+    assert len(evidence.samples_ms) == 20
+    assert len(evidence.report_sha256) == 64
+
+    with pytest.raises(ValueError, match="token count mismatch"):
+        load_native_prefill_evidence(
+            report_path,
+            bridge=bridge,
+            expected_tokens=256,
+        )
