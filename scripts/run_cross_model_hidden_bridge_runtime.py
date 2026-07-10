@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Run quality-gated Qwen3 cached-KV translation against vLLM/LMCache."""
 
+# ruff: noqa: E402
+
 from __future__ import annotations
 
 import json
@@ -21,9 +23,9 @@ from goldenexperience.runtime.cross_model_reuse import (
     load_lookup_hash_records,
     mooncake_key_exists,
     object_key_string,
-    select_lookup_candidate,
-    token_ids_sha256,
+    select_shared_prefix_candidate,
     token_ids_from_prompt,
+    token_ids_sha256,
 )
 from goldenexperience.runtime.kv_baseline.config import BaselineConfig
 from goldenexperience.runtime.kv_baseline.prompts import write_generated_disk_prompt
@@ -37,6 +39,11 @@ from scripts.run_cross_model_runtime import _cache_dir_summary, _log_evidence, _
 
 def _env_bool(name: str, default: str = "0") -> bool:
     return os.environ.get(name, default).lower() in {"1", "true", "yes", "on"}
+
+
+def _env_path(name: str, default: Path) -> Path:
+    path = Path(os.environ.get(name, str(default)))
+    return path if path.is_absolute() else REPO_ROOT / path
 
 
 def _json(path: Path) -> dict[str, Any]:
@@ -85,6 +92,10 @@ def _update_metadata(
         "source_model_name": source.model_name,
         "target_model_path": target.model_path,
         "target_model_name": target.model_name,
+        "source_prompt_id": source.prompt_id,
+        "source_prompt_file": str(source.prompt_file),
+        "target_prompt_id": target.prompt_id,
+        "target_prompt_file": str(target.prompt_file),
         "materializer_mode": "cached_kv",
         "external_index_path": str(external_index_path),
         "quality_gate_required": True,
@@ -100,7 +111,8 @@ def _candidate_keys(model_name: str, chunk_hashes: list[str]) -> list[str]:
 def _lookup_source_candidate(
     config: BaselineConfig,
     source_config: BaselineConfig,
-    token_ids: list[int],
+    source_token_ids: list[int],
+    target_token_ids: list[int],
 ) -> dict[str, Any]:
     records = load_lookup_hash_records(config.lmcache_mp_lookup_hash_log_dir)
     source_request = _phase_request(config, "source_offload")
@@ -111,36 +123,41 @@ def _lookup_source_candidate(
             "fallback_reason": "source_request_identity_missing",
             "records_scanned": len(records),
         }
-    candidate = select_lookup_candidate(
-        records,
-        model_name=source_config.model_name,
-        request_id=source_response_id,
-        expected_seq_len=len(token_ids),
-        expected_chunk_size=config.chunk_size,
-    )
+    try:
+        candidate = select_shared_prefix_candidate(
+            records,
+            model_name=source_config.model_name,
+            source_request_id=source_response_id,
+            source_token_ids=source_token_ids,
+            target_token_ids=target_token_ids,
+            chunk_size=config.chunk_size,
+            hash_algorithm=config.hash_algorithm,
+        )
+    except ValueError as exc:
+        return {
+            "success": False,
+            "fallback_reason": "deterministic_prompt_hashing_unavailable",
+            "records_scanned": len(records),
+            "error": str(exc),
+        }
     if candidate is None:
         return {
             "success": False,
-            "fallback_reason": "prompt_bound_source_candidate_not_found",
+            "fallback_reason": "prompt_bound_shared_prefix_not_found",
             "records_scanned": len(records),
             "source_response_id": source_response_id,
-            "token_ids_sha256": token_ids_sha256(token_ids),
+            "source_token_ids_sha256": token_ids_sha256(source_token_ids),
+            "target_token_ids_sha256": token_ids_sha256(target_token_ids),
         }
-    chunk_hashes = [str(item) for item in candidate.get("chunk_hashes", [])]
+    chunk_hashes = candidate["chunk_hashes"]
     source_keys = _candidate_keys(source_config.model_name, chunk_hashes)
     return {
         "success": True,
         "records_scanned": len(records),
-        "record": candidate,
+        "record": candidate["record"],
         "chunk_hashes": chunk_hashes,
         "source_key_strings": source_keys,
-        "binding": {
-            "source_response_id": source_response_id,
-            "lookup_request_id": candidate.get("request_id"),
-            "token_count": len(token_ids),
-            "token_ids_sha256": token_ids_sha256(token_ids),
-            "chunk_size": config.chunk_size,
-        },
+        "binding": candidate["binding"],
     }
 
 
@@ -166,6 +183,7 @@ def _run_materializer(
         "chunk_hashes": candidate["chunk_hashes"],
         "source_lookup_record": candidate["record"],
         "prompt_binding": candidate["binding"],
+        "hash_algorithm": config.hash_algorithm,
         "chunk_size": config.chunk_size,
         "max_chunks": int(os.environ.get("GE_MATERIALIZER_MAX_CHUNKS", "0")),
         "bridge_manifest_path": os.environ.get(
@@ -347,8 +365,22 @@ def main() -> int:
     os.environ["GE_MODEL_PATH"] = source_model_path
     os.environ["GE_MODEL_NAME"] = source_model_name
     config = BaselineConfig.from_env(sys.argv[1:])
-    source_config = replace(config, model_path=source_model_path, model_name=source_model_name)
-    target_config = replace(config, model_path=target_model_path, model_name=target_model_name)
+    source_config = replace(
+        config,
+        model_path=source_model_path,
+        model_name=source_model_name,
+        prompt_file=_env_path("GE_SOURCE_PROMPT_FILE", config.prompt_file),
+        prompt_file_was_set=True,
+        prompt_id=os.environ.get("GE_SOURCE_PROMPT_ID", config.prompt_id),
+    )
+    target_config = replace(
+        config,
+        model_path=target_model_path,
+        model_name=target_model_name,
+        prompt_file=_env_path("GE_TARGET_PROMPT_FILE", config.prompt_file),
+        prompt_file_was_set=True,
+        prompt_id=os.environ.get("GE_TARGET_PROMPT_ID", config.prompt_id),
+    )
     external_index_path = Path(
         os.environ.get(
             "GE_MOONCAKE_EXTERNAL_INDEX", str(config.run_dir / "mooncake_external_index.jsonl")
@@ -365,6 +397,8 @@ def main() -> int:
     print(f"Cross-model cached-KV run directory: {config.run_dir}")
     print(f"Source: {source_model_path}")
     print(f"Target: {target_model_path}")
+    print(f"Source prompt: {source_config.prompt_file}#{source_config.prompt_id}")
+    print(f"Target prompt: {target_config.prompt_file}#{target_config.prompt_id}")
     print(f"External Mooncake index: {external_index_path}")
     print(f"Allow unsafe reuse: {int(_env_bool('GE_ALLOW_UNSAFE_CROSS_MODEL_REUSE', '0'))}")
 
@@ -397,24 +431,41 @@ def main() -> int:
         time.sleep(float(os.environ.get("GE_AFTER_ENGINE_STOP_SLEEP_SEC", "10")))
 
         try:
-            token_ids = token_ids_from_prompt(
+            source_token_ids = token_ids_from_prompt(
+                tokenizer_path=source_config.model_path,
+                prompt_file=source_config.prompt_file,
+                prompt_id=source_config.prompt_id,
+            )
+            target_token_ids = token_ids_from_prompt(
                 tokenizer_path=target_config.model_path,
-                prompt_file=config.prompt_file,
-                prompt_id=config.prompt_id,
+                prompt_file=target_config.prompt_file,
+                prompt_id=target_config.prompt_id,
             )
             tokenization: dict[str, Any] = {
                 "success": True,
-                "token_count": len(token_ids),
-                "token_ids_sha256": token_ids_sha256(token_ids),
+                "source": {
+                    "token_count": len(source_token_ids),
+                    "token_ids_sha256": token_ids_sha256(source_token_ids),
+                },
+                "target": {
+                    "token_count": len(target_token_ids),
+                    "token_ids_sha256": token_ids_sha256(target_token_ids),
+                },
             }
         except Exception as exc:  # noqa: BLE001 - runtime fallback boundary.
-            token_ids = []
+            source_token_ids = []
+            target_token_ids = []
             tokenization = {
                 "success": False,
                 "error": repr(exc),
             }
         lookup = (
-            _lookup_source_candidate(config, source_config, token_ids)
+            _lookup_source_candidate(
+                config,
+                source_config,
+                source_token_ids,
+                target_token_ids,
+            )
             if tokenization["success"]
             else {"success": False, "fallback_reason": "tokenization_failed"}
         )
@@ -438,8 +489,13 @@ def main() -> int:
                 key_strings=target_keys,
             )
             seq_len = int(lookup["record"].get("seq_len") or 0)
+            shared_prefix_tokens = len(chunk_hashes) * config.chunk_size
             tokenization["lookup_seq_len"] = seq_len
-            tokenization["success"] = len(token_ids) == seq_len
+            tokenization["shared_prefix_tokens"] = shared_prefix_tokens
+            tokenization["success"] = (
+                len(source_token_ids) == seq_len
+                and len(target_token_ids) >= shared_prefix_tokens
+            )
             if tokenization["success"]:
                 materializer = _run_materializer(
                     config=config,

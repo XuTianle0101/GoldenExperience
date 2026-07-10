@@ -206,6 +206,9 @@ def materialize_cached_qwen3(
         prompt_binding = request.get("prompt_binding")
         if not isinstance(prompt_binding, dict):
             raise ValueError("prompt_binding is required")
+        hash_algorithm = _required_string(request, "hash_algorithm")
+        if hash_algorithm != "blake3":
+            raise ValueError("cached KV materialization requires deterministic blake3 hashes")
 
         load_started = time.perf_counter()
         bridge_cache_hit = False
@@ -236,7 +239,12 @@ def materialize_cached_qwen3(
             source_width=bridge.manifest.source.kv_width,
             source_dtype=bridge.manifest.source.dtype,
         )
-        _validate_prompt_binding(prompt_binding, lookup_record)
+        _validate_prompt_binding(
+            prompt_binding,
+            lookup_record,
+            chunk_hashes=all_chunk_hashes,
+            hash_algorithm=hash_algorithm,
+        )
         requested_ratio = float(
             request.get(
                 "max_materialization_ratio",
@@ -371,6 +379,10 @@ def materialize_cached_qwen3(
                         "source_key": source_keys[chunk_index],
                         "bridge_id": bridge.manifest.bridge_id,
                         "direction": bridge.manifest.direction,
+                        "hash_algorithm": hash_algorithm,
+                        "source_token_ids_sha256": prompt_binding["token_ids_sha256"],
+                        "target_token_ids_sha256": prompt_binding["target_token_ids_sha256"],
+                        "shared_prefix_chunk_count": len(all_chunk_hashes),
                     },
                 }
                 for chunk_index, (chunk_hash, write) in enumerate(
@@ -415,6 +427,7 @@ def materialize_cached_qwen3(
                     "target_exact_write": all(
                         write.put_rc == 0 and write.bytes == write.remote_bytes for write in writes
                     ),
+                    "prompt_prefix_bound": True,
                     "cost_gate": actual_ratio <= requested_ratio,
                 }
             },
@@ -423,8 +436,10 @@ def materialize_cached_qwen3(
                 "injected_count": len(writes),
                 "keys": target_keys,
                 "bytes": sum(write.bytes for write in writes),
+                "shared_prefix_tokens": len(writes) * chunk_size,
                 "external_index_path": str(request["external_index_path"]),
             },
+            "prompt_binding": prompt_binding,
             "source_keys": source_keys,
             "object_shape": list(target_shape),
             "object_dtype": f"torch.{bridge.manifest.target.dtype}",
@@ -526,8 +541,8 @@ def _validate_lookup_record(
     record_hashes = _chunk_hashes(record.get("chunk_hashes"))
     if record.get("model_name") != source_model_name:
         raise ValueError("source lookup model namespace mismatch")
-    if record_hashes != chunk_hashes:
-        raise ValueError("source lookup chunk hashes do not match the current prompt")
+    if record_hashes[: len(chunk_hashes)] != chunk_hashes:
+        raise ValueError("source lookup chunk hashes do not match the shared prompt prefix")
     if int(record.get("chunk_size", -1)) != chunk_size:
         raise ValueError("source lookup chunk_size mismatch")
     seq_len = int(record.get("seq_len", -1))
@@ -542,7 +557,13 @@ def _validate_lookup_record(
         raise ValueError("source lookup dtype mismatch")
 
 
-def _validate_prompt_binding(binding: dict[str, Any], record: dict[str, Any]) -> None:
+def _validate_prompt_binding(
+    binding: dict[str, Any],
+    record: dict[str, Any],
+    *,
+    chunk_hashes: list[str],
+    hash_algorithm: str,
+) -> None:
     source_response_id = binding.get("source_response_id")
     lookup_request_id = record.get("request_id")
     if not isinstance(source_response_id, str) or not source_response_id:
@@ -558,13 +579,24 @@ def _validate_prompt_binding(binding: dict[str, Any], record: dict[str, Any]) ->
         raise ValueError("prompt binding token count mismatch")
     if int(binding.get("chunk_size", -1)) != int(record.get("chunk_size", -2)):
         raise ValueError("prompt binding chunk_size mismatch")
-    token_digest = binding.get("token_ids_sha256")
-    if not isinstance(token_digest, str) or len(token_digest) != 64:
-        raise ValueError("prompt binding token_ids_sha256 is required")
-    try:
-        int(token_digest, 16)
-    except ValueError as exc:
-        raise ValueError("prompt binding token_ids_sha256 is invalid") from exc
+    target_token_count = int(binding.get("target_token_count", -1))
+    chunk_size = int(binding["chunk_size"])
+    if target_token_count < len(chunk_hashes) * chunk_size:
+        raise ValueError("prompt binding target token count is shorter than the shared prefix")
+    if int(binding.get("shared_prefix_chunk_count", -1)) != len(chunk_hashes):
+        raise ValueError("prompt binding shared prefix chunk count mismatch")
+    if int(binding.get("shared_prefix_token_count", -1)) != len(chunk_hashes) * chunk_size:
+        raise ValueError("prompt binding shared prefix token count mismatch")
+    if binding.get("hash_algorithm") != hash_algorithm:
+        raise ValueError("prompt binding hash algorithm mismatch")
+    for name in ("token_ids_sha256", "target_token_ids_sha256"):
+        token_digest = binding.get(name)
+        if not isinstance(token_digest, str) or len(token_digest) != 64:
+            raise ValueError(f"prompt binding {name} is required")
+        try:
+            int(token_digest, 16)
+        except ValueError as exc:
+            raise ValueError(f"prompt binding {name} is invalid") from exc
 
 
 def _chunk_hashes(value: Any) -> list[str]:

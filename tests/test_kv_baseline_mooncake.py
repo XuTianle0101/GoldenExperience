@@ -73,6 +73,17 @@ def test_mooncake_store_adapter_is_default(tmp_path: Path) -> None:
     assert "mooncake_store" in (run_dir / "lmc_config.yaml").read_text(encoding="utf-8")
 
 
+def test_lmcache_hash_algorithm_defaults_to_deterministic_blake3(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("GE_RUN_DIR", str(tmp_path / "run"))
+    monkeypatch.setenv("GE_MODEL_PATH", "test/model")
+    monkeypatch.delenv("GE_LMCACHE_HASH_ALGORITHM", raising=False)
+
+    assert BaselineConfig.from_env([]).hash_algorithm == "blake3"
+
+
 def test_mooncake_master_defaults_follow_run_storage(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

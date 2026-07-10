@@ -163,8 +163,14 @@ def _request(tmp_path: Path) -> dict:
             "lookup_request_id": "request-worker",
             "token_count": 5,
             "token_ids_sha256": "a" * 64,
+            "target_token_count": 5,
+            "target_token_ids_sha256": "b" * 64,
             "chunk_size": 2,
+            "shared_prefix_chunk_count": 2,
+            "shared_prefix_token_count": 4,
+            "hash_algorithm": "blake3",
         },
+        "hash_algorithm": "blake3",
         "world_size": 1,
         "kv_rank": 7,
         "native_target_prefill_ms": 100_000.0,
@@ -266,6 +272,9 @@ def test_cached_materializer_uses_source_objects_and_publishes_target_index(
     assert result["injected"] is True
     assert result["artifact_cache"] == {"hit": False, "resident_loader": False}
     assert result["injection"]["injected_count"] == 2
+    assert result["injection"]["shared_prefix_tokens"] == 4
+    assert result["runtime_quality_gate"]["checks"]["prompt_prefix_bound"] is True
+    assert result["prompt_binding"]["target_token_ids_sha256"] == "b" * 64
     assert bridge.positions == [0, 2]
     assert "target@0xaa" in fake.objects
     assert "target@0xbb" in fake.objects
@@ -283,6 +292,37 @@ def test_cached_materializer_uses_source_objects_and_publishes_target_index(
     ]
     assert [record["key"] for record in records] == ["target@0xaa", "target@0xbb"]
     assert all(record["provenance"]["bridge_id"] == "fake-8b_to_14b" for record in records)
+    assert all(record["provenance"]["hash_algorithm"] == "blake3" for record in records)
+
+
+def test_cached_materializer_accepts_only_an_exact_shorter_shared_prefix(
+    tmp_path: Path,
+) -> None:
+    request = _request(tmp_path)
+    request["source_lookup_record"]["seq_len"] = 7
+    request["source_lookup_record"]["chunk_hashes"] = ["0xaa", "0xbb", "0xcc"]
+    request["prompt_binding"]["token_count"] = 7
+    fake = FakeMooncakeStore(_source_objects(request))
+
+    result = materialize_cached_qwen3(
+        request,
+        store_factory=lambda: fake,
+        bridge_loader=lambda *args, **kwargs: FakeBridge(),
+        key_builder=_key_builder,
+    )
+
+    assert result["success"] is True
+    assert result["injection"]["injected_count"] == 2
+    assert result["source_keys"] == ["source@0xaa", "source@0xbb"]
+
+    request["source_lookup_record"]["chunk_hashes"][1] = "0xdd"
+    result = materialize_cached_qwen3(
+        request,
+        store_factory=lambda: fake,
+        bridge_loader=lambda *args, **kwargs: FakeBridge(),
+        key_builder=_key_builder,
+    )
+    assert result["fallback_reason"] == "invalid_materializer_request"
 
 
 @pytest.mark.parametrize(

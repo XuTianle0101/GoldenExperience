@@ -2,14 +2,18 @@ import json
 from copy import deepcopy
 from pathlib import Path
 
+import pytest
+
 from goldenexperience.runtime.cross_model_materializer import materialize_qwen3_8b_to_14b
 from goldenexperience.runtime.cross_model_reuse import (
     chunk_hash_hex_to_bytes,
     common_chunk_hash_prefix,
     evaluate_runtime_reuse,
+    lmcache_chunk_hashes,
     mooncake_setup_config,
     object_key_string,
     select_lookup_candidate,
+    select_shared_prefix_candidate,
     token_ids_sha256,
 )
 
@@ -18,6 +22,7 @@ def valid_runtime_evidence() -> dict:
     keys = ["target@rank@hash-a", "target@rank@hash-b"]
     request = {
         "prompt": {"expected_final_answer": "72"},
+        "timing": {"ttft_ms": 100.0},
         "response": {
             "text": "Final answer: 72",
             "contains_expected_final_answer": True,
@@ -34,6 +39,7 @@ def valid_runtime_evidence() -> dict:
             "offline_quality_gate": {"checks": {"hidden": True, "decode": True}},
             "runtime_quality_gate": {"checks": {"key": True, "value": True}},
             "injection": {"keys": keys, "injected_count": 2},
+            "elapsed_ms": 10.0,
         },
         "target_key_strings": keys,
         "source_key_status": {
@@ -60,7 +66,7 @@ def valid_runtime_evidence() -> dict:
         "target_external_tokens": 32,
         "chunk_size": 16,
         "native_request": deepcopy(request),
-        "reuse_request": deepcopy(request),
+        "reuse_request": {**deepcopy(request), "timing": {"ttft_ms": 80.0}},
     }
 
 
@@ -161,6 +167,84 @@ def test_cross_prompt_hashes_only_share_exact_complete_prefix_chunks() -> None:
     assert common_chunk_hash_prefix(prompt_a, prompt_c) == ["0x11", "0x22"]
 
 
+def test_lmcache_blake3_hashes_match_the_runtime_wire_algorithm() -> None:
+    hashes = lmcache_chunk_hashes(
+        list(range(1, 34)),
+        chunk_size=16,
+        hash_algorithm="blake3",
+    )
+
+    assert hashes == [
+        "0x4c5b938a8d6e2c965ae6ae33b3c82479be3d7e7486dfa2f2bc3ffdb30f7e84c0",
+        "0x3234e83644ba92553bbb47f688c6a1e77384c9ad49a40202a2e12e535cd6c135",
+    ]
+
+
+def test_shared_prefix_candidate_binds_source_request_and_target_tokens() -> None:
+    source_tokens = list(range(1, 49))
+    target_tokens = list(range(1, 17)) + list(range(1001, 1033))
+    source_hashes = lmcache_chunk_hashes(
+        source_tokens,
+        chunk_size=16,
+        hash_algorithm="blake3",
+    )
+    record = {
+        "timestamp": 10.0,
+        "request_id": "source-request-worker",
+        "model_name": "source",
+        "seq_len": len(source_tokens),
+        "chunk_size": 16,
+        "chunk_hashes": source_hashes,
+    }
+
+    candidate = select_shared_prefix_candidate(
+        [record],
+        model_name="source",
+        source_request_id="source-request",
+        source_token_ids=source_tokens,
+        target_token_ids=target_tokens,
+        chunk_size=16,
+        hash_algorithm="blake3",
+    )
+
+    assert candidate is not None
+    assert candidate["record"] is record
+    assert candidate["chunk_hashes"] == source_hashes[:1]
+    assert candidate["binding"]["shared_prefix_token_count"] == 16
+    assert candidate["binding"]["token_ids_sha256"] == token_ids_sha256(source_tokens)
+    assert candidate["binding"]["target_token_ids_sha256"] == token_ids_sha256(target_tokens)
+
+    assert (
+        select_shared_prefix_candidate(
+            [record],
+            model_name="source",
+            source_request_id="different-request",
+            source_token_ids=source_tokens,
+            target_token_ids=target_tokens,
+            chunk_size=16,
+            hash_algorithm="blake3",
+        )
+        is None
+    )
+    assert (
+        select_shared_prefix_candidate(
+            [record],
+            model_name="source",
+            source_request_id="source-request",
+            source_token_ids=source_tokens,
+            target_token_ids=list(range(1001, 1049)),
+            chunk_size=16,
+            hash_algorithm="blake3",
+        )
+        is None
+    )
+
+
+def test_cross_prompt_lookup_rejects_process_local_builtin_hashes() -> None:
+    with pytest.raises(ValueError, match="deterministic blake3"):
+        lmcache_chunk_hashes([1] * 16, chunk_size=16, hash_algorithm="builtin")
+
+
 def test_token_id_digest_distinguishes_equal_length_prompts() -> None:
     assert token_ids_sha256([1, 2, 3, 4]) != token_ids_sha256([4, 3, 2, 1])
 
@@ -182,6 +266,17 @@ def test_runtime_reuse_rejects_failed_task_assertion() -> None:
     assert validation["success"] is False
     assert validation["status"] == "quality_validation_failed"
     assert "reuse_task_assertion" in validation["failure_reasons"]
+
+
+def test_runtime_reuse_requires_end_to_end_ttft_improvement() -> None:
+    evidence = valid_runtime_evidence()
+    evidence["reuse_request"]["timing"]["ttft_ms"] = 95.0
+
+    validation = evaluate_runtime_reuse(**evidence)
+
+    assert validation["success"] is False
+    assert "end_to_end_ttft_improved" in validation["failure_reasons"]
+    assert validation["timing"]["materialization_plus_reuse_ttft_ms"] == 105.0
 
 
 def test_runtime_reuse_rejects_output_drift_from_native() -> None:

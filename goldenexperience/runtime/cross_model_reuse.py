@@ -5,6 +5,7 @@ from __future__ import annotations
 import ctypes
 import hashlib
 import json
+import math
 import os
 import struct
 import time
@@ -148,6 +149,100 @@ def common_chunk_hash_prefix(left: list[str], right: list[str]) -> list[str]:
     return matched
 
 
+def lmcache_chunk_hashes(
+    token_ids: list[int],
+    *,
+    chunk_size: int,
+    hash_algorithm: str,
+) -> list[str]:
+    """Compute deterministic LMCache rolling hashes for complete token chunks."""
+
+    if chunk_size <= 0:
+        raise ValueError("chunk_size must be positive")
+    if hash_algorithm != "blake3":
+        raise ValueError("cross-prompt lookup requires the deterministic blake3 hash algorithm")
+    for token_id in token_ids:
+        if token_id < 0 or token_id > 0xFFFFFFFF:
+            raise ValueError("token ids must fit in an unsigned 32-bit integer")
+
+    import blake3
+
+    def hash_tokens(prefix_hash: int | bytes, tokens: list[int]) -> bytes:
+        digest = blake3.blake3()
+        if isinstance(prefix_hash, bytes):
+            digest.update(prefix_hash)
+        else:
+            digest.update(prefix_hash.to_bytes(8, byteorder="big", signed=True))
+        digest.update(struct.pack(f">{len(tokens)}I", *tokens))
+        return digest.digest()
+
+    prefix_hash = hash_tokens(0, [0])
+    hashes: list[str] = []
+    complete_tokens = len(token_ids) - len(token_ids) % chunk_size
+    for start in range(0, complete_tokens, chunk_size):
+        prefix_hash = hash_tokens(prefix_hash, token_ids[start : start + chunk_size])
+        hashes.append("0x" + prefix_hash.hex())
+    return hashes
+
+
+def select_shared_prefix_candidate(
+    records: list[dict[str, Any]],
+    *,
+    model_name: str,
+    source_request_id: str,
+    source_token_ids: list[int],
+    target_token_ids: list[int],
+    chunk_size: int,
+    hash_algorithm: str,
+    min_chunks: int = 1,
+) -> dict[str, Any] | None:
+    """Bind a source request to the exact complete prefix shared by a target prompt."""
+
+    if not source_request_id or min_chunks <= 0:
+        return None
+    source_hashes = lmcache_chunk_hashes(
+        source_token_ids,
+        chunk_size=chunk_size,
+        hash_algorithm=hash_algorithm,
+    )
+    target_hashes = lmcache_chunk_hashes(
+        target_token_ids,
+        chunk_size=chunk_size,
+        hash_algorithm=hash_algorithm,
+    )
+    record = select_lookup_candidate(
+        records,
+        model_name=model_name,
+        request_id=source_request_id,
+        expected_chunk_hashes=source_hashes,
+        expected_seq_len=len(source_token_ids),
+        expected_chunk_size=chunk_size,
+        min_chunks=min_chunks,
+    )
+    if record is None:
+        return None
+    shared_hashes = common_chunk_hash_prefix(source_hashes, target_hashes)
+    if len(shared_hashes) < min_chunks:
+        return None
+    lookup_request_id = record.get("request_id")
+    return {
+        "record": record,
+        "chunk_hashes": shared_hashes,
+        "binding": {
+            "source_response_id": source_request_id,
+            "lookup_request_id": lookup_request_id,
+            "token_count": len(source_token_ids),
+            "token_ids_sha256": token_ids_sha256(source_token_ids),
+            "target_token_count": len(target_token_ids),
+            "target_token_ids_sha256": token_ids_sha256(target_token_ids),
+            "chunk_size": chunk_size,
+            "shared_prefix_chunk_count": len(shared_hashes),
+            "shared_prefix_token_count": len(shared_hashes) * chunk_size,
+            "hash_algorithm": hash_algorithm,
+        },
+    }
+
+
 def token_ids_sha256(token_ids: list[int]) -> str:
     """Create a stable prompt identity without storing prompt token contents."""
 
@@ -238,6 +333,14 @@ def evaluate_runtime_reuse(
     after_missing = {str(key) for key in after.get("missing", [])}
     injected_count = int(injection.get("injected_count") or 0)
     expected_external_tokens = injected_count * chunk_size
+    materializer_elapsed_ms = _finite_non_negative(materializer.get("elapsed_ms"))
+    native_ttft_ms = _request_timing(native_request, "ttft_ms")
+    reuse_ttft_ms = _request_timing(reuse_request, "ttft_ms")
+    total_reuse_ttft_ms = (
+        materializer_elapsed_ms + reuse_ttft_ms
+        if materializer_elapsed_ms is not None and reuse_ttft_ms is not None
+        else None
+    )
 
     offline_checks = materializer.get("offline_quality_gate", {}).get("checks", {})
     runtime_checks = materializer.get("runtime_quality_gate", {}).get("checks", {})
@@ -268,6 +371,11 @@ def evaluate_runtime_reuse(
             isinstance(target_external_tokens, (int, float))
             and target_external_tokens == expected_external_tokens
             and expected_external_tokens > 0
+        ),
+        "end_to_end_ttft_improved": bool(
+            native_ttft_ms is not None
+            and total_reuse_ttft_ms is not None
+            and total_reuse_ttft_ms < native_ttft_ms
         ),
         "native_task_assertion": _request_task_passed(native_request),
         "reuse_task_assertion": _request_task_passed(reuse_request),
@@ -302,6 +410,17 @@ def evaluate_runtime_reuse(
         "checks": checks,
         "failure_reasons": reasons,
         "expected_external_tokens": expected_external_tokens,
+        "timing": {
+            "materializer_elapsed_ms": materializer_elapsed_ms,
+            "native_target_ttft_ms": native_ttft_ms,
+            "reuse_target_ttft_ms": reuse_ttft_ms,
+            "materialization_plus_reuse_ttft_ms": total_reuse_ttft_ms,
+            "end_to_end_ttft_savings_ms": (
+                native_ttft_ms - total_reuse_ttft_ms
+                if native_ttft_ms is not None and total_reuse_ttft_ms is not None
+                else None
+            ),
+        },
         "consumed_materialized_kv": consumed,
         "success": success,
         "status": status,
@@ -314,6 +433,18 @@ def _all_checks_pass(checks: Any) -> bool:
         and bool(checks)
         and all(value is True for value in checks.values())
     )
+
+
+def _finite_non_negative(value: Any) -> float | None:
+    if not isinstance(value, (int, float)):
+        return None
+    parsed = float(value)
+    return parsed if math.isfinite(parsed) and parsed >= 0 else None
+
+
+def _request_timing(request: dict[str, Any], name: str) -> float | None:
+    parsed = _finite_non_negative(request.get("timing", {}).get(name))
+    return parsed if parsed is not None and parsed > 0 else None
 
 
 def _request_task_passed(request: dict[str, Any]) -> bool:

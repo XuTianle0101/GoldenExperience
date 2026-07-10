@@ -353,6 +353,11 @@ objects. No cached-KV bridge is automatically approved until a global held-out a
 passes both the accuracy and end-to-end cost gates.
 Set `GE_CACHED_KV_DIRECTION=8b_to_14b` or `14b_to_8b`; each direction uses a separate
 manifest and the runtime swaps the local model defaults accordingly.
+The runtime uses deterministic LMCache `blake3` rolling hashes by default. Set
+`GE_SOURCE_PROMPT_FILE`/`GE_SOURCE_PROMPT_ID` and
+`GE_TARGET_PROMPT_FILE`/`GE_TARGET_PROMPT_ID` to exercise different requests: only the
+longest sequence of exact, complete prefix chunks is eligible for materialization, and
+the target computes every divergent or partial-tail token locally.
 
 ## GoldenScale Reuse
 

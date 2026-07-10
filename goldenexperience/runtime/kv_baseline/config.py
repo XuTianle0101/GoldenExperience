@@ -252,7 +252,7 @@ class BaselineConfig:
             local_cpu_enabled=local_cpu_enabled,
             local_cpu_gb=local_cpu_gb,
             local_disk_gb=float(os.environ.get("GE_KV_LOCAL_DISK_GB", "100")),
-            hash_algorithm=os.environ.get("GE_LMCACHE_HASH_ALGORITHM", "builtin"),
+            hash_algorithm=os.environ.get("GE_LMCACHE_HASH_ALGORITHM", "blake3"),
             disk_prompt_id=disk_prompt_id,
             disk_prompt_repeat=int(os.environ.get("GE_DISK_PROMPT_REPEAT", "256")),
             disk_prompt_max_tokens=int(os.environ.get("GE_DISK_PROMPT_MAX_TOKENS", "128")),
