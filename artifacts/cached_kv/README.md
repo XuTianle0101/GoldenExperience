@@ -14,6 +14,10 @@ results against the bounded non-thinking chat contract. Native task assertions p
 both bridge directions remain far below the accuracy thresholds. The sealed test remains
 unopened and no candidate weights are checked in.
 
+`scaled_baseline_ab_20260710.json` compares the v1 fixed interpolation baseline with the
+v2 learned per-channel baseline under identical rank, data, and prompt settings. v2
+improves both directions, but still fails the end-to-end accuracy gates.
+
 Only a `CachedKVBridgeManifest` whose derived `approved` property is true may be used by
 the runtime materializer. Missing held-out accuracy or Mooncake cost evidence keeps a
 manifest fail closed.

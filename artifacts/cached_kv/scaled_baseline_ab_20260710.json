@@ -1,0 +1,74 @@
+{
+  "automatic_reuse_approved": false,
+  "comparisons": {
+    "14b_to_8b": {
+      "v1_fixed_baseline": {
+        "bridge_task_score": 0.0,
+        "greedy_continuation_match_rate": 0.03515625,
+        "key_cosine": 0.851151816546917,
+        "next_token_top1_agreement": 0.30078125,
+        "perplexity_drift_pct": 728.7173887057643,
+        "value_cosine": 0.587454330176115
+      },
+      "v2_scaled_baseline": {
+        "bridge_task_score": 0.125,
+        "greedy_continuation_match_rate": 0.20703125,
+        "key_cosine": 0.8960765823721886,
+        "next_token_top1_agreement": 0.36328125,
+        "perplexity_drift_pct": 123.71420396143414,
+        "value_cosine": 0.7061014100909233
+      }
+    },
+    "8b_to_14b": {
+      "v1_fixed_baseline": {
+        "bridge_task_score": 0.0,
+        "greedy_continuation_match_rate": 0.02734375,
+        "key_cosine": 0.8504121899604797,
+        "next_token_top1_agreement": 0.02734375,
+        "perplexity_drift_pct": 20722.535504239855,
+        "value_cosine": 0.6146048195660114
+      },
+      "v2_scaled_baseline": {
+        "bridge_task_score": 0.0,
+        "greedy_continuation_match_rate": 0.015625,
+        "key_cosine": 0.8973392844200134,
+        "next_token_top1_agreement": 0.03125,
+        "perplexity_drift_pct": 11196.854670470677,
+        "value_cosine": 0.7193847671151161
+      }
+    }
+  },
+  "dataset_split_hashes": {
+    "test": "136f6c1c357f5f31246a5ac455c46ec8f17d6604cf9d8d901f802983ec956908",
+    "train": "d38b8509c793475513207595be43722a6d92073b1c9efffc2fea5b03ceead4e0",
+    "validation": "386bc5df4af6382325b9a4f802352aace5ab9ef2b7d6441e5420ad6c31000a8f"
+  },
+  "experiment": {
+    "greedy_tokens": 16,
+    "rank": 256,
+    "ridge_lambda": 0.01,
+    "source_window": 3,
+    "suffix_tokens": 16,
+    "training_samples": 1018,
+    "validation_prompts": 16
+  },
+  "finalized": false,
+  "generated_at_utc": "2026-07-10T06:47:36Z",
+  "model_identities": {
+    "qwen3_14b_weights_sha256": "cb0d7f0a0bec1ee514630fefd9d2468fe4f61a684cb154f3f288bf42eec70661",
+    "qwen3_8b_weights_sha256": "ee9fc280e4d520ded7fea3db8f0eb6f8c596b0babe95b081b6bcb60544f98b38",
+    "tokenizer_sha256": "7dc5ac23a90090f6b3f3545fdd8a1da2d262a7916ec4649e660f03180cbb403c"
+  },
+  "rejection_reasons": [
+    "v2 remains below both key and value cosine thresholds",
+    "v2 remains below next-token and greedy continuation thresholds",
+    "v2 perplexity drift remains above threshold in both directions",
+    "8b_to_14b fails every bridged task assertion",
+    "14b_to_8b passes only two of sixteen bridged task assertions",
+    "sealed test split remains unopened",
+    "runtime Mooncake read-transform-write cost evidence is missing"
+  ],
+  "runtime_cost_measured": false,
+  "schema_version": "goldenexperience.cached_kv_scaled_baseline_ab.v1",
+  "sealed_test_opened": false
+}
