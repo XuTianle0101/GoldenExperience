@@ -242,7 +242,7 @@ def transform_with_state(
     source = source_kv.to(device=parsed_device, dtype=compute_dtype)
     positions = position_ids.to(device=device, dtype=torch.long)
     layer_ids = state["source_layer_ids"].to(device=device, dtype=torch.long)
-    weights = state["source_layer_weights"].to(device=device, dtype=torch.float32)
+    weights = state["source_layer_weights"].to(device=device, dtype=compute_dtype)
     selected_key = source[0][layer_ids]
     selected_value = source[1][layer_ids]
     unrotated_key = _apply_rope_flat(

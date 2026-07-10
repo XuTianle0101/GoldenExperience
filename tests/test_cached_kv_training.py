@@ -223,6 +223,40 @@ def test_supervised_low_rank_fit_reconstructs_synthetic_cached_kv() -> None:
     torch.testing.assert_close(reconstructed, target, atol=2e-3, rtol=2e-3)
 
 
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA is required for BF16 regression")
+def test_training_transform_uses_one_compute_dtype_on_cuda() -> None:
+    source = torch.randn(2, 2, 8, 4, dtype=torch.bfloat16)
+    positions = torch.arange(8)
+    layer_ids, layer_weights = build_source_layer_plan(2, 2, 1)
+    state = {
+        "source_layer_ids": layer_ids,
+        "source_layer_weights": layer_weights,
+        "feature_mean": torch.zeros(2, 8),
+        "key_down": torch.zeros(2, 8, 1, dtype=torch.bfloat16),
+        "key_up": torch.zeros(2, 1, 4, dtype=torch.bfloat16),
+        "key_bias": torch.zeros(2, 4),
+        "value_down": torch.zeros(2, 8, 1, dtype=torch.bfloat16),
+        "value_up": torch.zeros(2, 1, 4, dtype=torch.bfloat16),
+        "value_bias": torch.zeros(2, 4),
+    }
+
+    transformed = transform_with_state(
+        source,
+        positions,
+        state,
+        source_heads=1,
+        source_head_dim=4,
+        source_rope_theta=1_000_000,
+        target_heads=1,
+        target_head_dim=4,
+        target_rope_theta=1_000_000,
+        device="cuda:0",
+    )
+
+    assert transformed.dtype == torch.bfloat16
+    assert transformed.is_cuda
+
+
 def test_quality_evidence_fails_closed_without_runtime_cost_measurement() -> None:
     quality = CachedKVQualityEvidence(
         evaluation_dataset_sha256="a" * 64,
