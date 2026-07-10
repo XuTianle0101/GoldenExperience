@@ -35,6 +35,7 @@ class ReusePolicy:
         mapper_confidence: float,
         prefix_similarity: float,
         expected_latency_savings_ms: float,
+        mapper_calibrated: bool = False,
     ) -> ReuseDecision:
         compatibility = source_signature.compatibility_with(target_signature)
         quality_score = min(source_metadata.quality_score, mapper_confidence)
@@ -42,6 +43,14 @@ class ReusePolicy:
             return ReuseDecision(
                 action=ReuseAction.FALLBACK_RECOMPUTE,
                 reason="incompatible architecture or model family",
+                expected_latency_savings_ms=0.0,
+                quality_score=quality_score,
+                compatibility=compatibility,
+            )
+        if compatibility != CompatibilityLevel.EXACT and not mapper_calibrated:
+            return ReuseDecision(
+                action=ReuseAction.FALLBACK_RECOMPUTE,
+                reason="cross-model mapper has no verified calibration evidence",
                 expected_latency_savings_ms=0.0,
                 quality_score=quality_score,
                 compatibility=compatibility,
@@ -85,4 +94,3 @@ class ReusePolicy:
             quality_score=quality_score,
             compatibility=compatibility,
         )
-

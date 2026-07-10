@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import uuid
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
@@ -67,20 +68,12 @@ class IdentityKVMapper(KVMapper):
         self.source_signature = source_signature
         self.target_signature = target_signature
         self.compatibility = source_signature.compatibility_with(target_signature)
-        if self.compatibility == CompatibilityLevel.EXACT:
-            self.confidence = 1.0
-        elif self.compatibility == CompatibilityLevel.SHAPE_COMPATIBLE:
-            self.confidence = 0.97
-        else:
-            self.confidence = 0.0
+        self.confidence = 1.0 if self.compatibility == CompatibilityLevel.EXACT else 0.0
         return self
 
     def transform(self, source_block: CacheBlock) -> MappingResult:
         self._require_fit()
-        if self.compatibility not in {
-            CompatibilityLevel.EXACT,
-            CompatibilityLevel.SHAPE_COMPATIBLE,
-        }:
+        if self.compatibility != CompatibilityLevel.EXACT:
             raise ValueError(f"Identity mapping cannot handle {self.compatibility.value}.")
         assert self.target_signature is not None
         mapped = CacheBlock.from_payload(
@@ -102,7 +95,7 @@ class IdentityKVMapper(KVMapper):
             compatibility=self.compatibility,
             confidence=self.confidence,
             mapper_id=self.mapper_id,
-            reason="direct shape-compatible reuse",
+            reason="verified identical-weight reuse",
         )
 
     def score(self, mapped_block: CacheBlock, probe_tokens: list[int] | None = None) -> float:
@@ -124,6 +117,7 @@ class LinearProjectionKVMapper(KVMapper):
         self.key_weight: Any | None = None
         self.value_weight: Any | None = None
         self.confidence = 0.0
+        self.calibrated = False
 
     def fit(
         self,
@@ -140,15 +134,24 @@ class LinearProjectionKVMapper(KVMapper):
 
         self.key_weight = identity_projection(source_signature.head_dim, target_signature.head_dim)
         self.value_weight = identity_projection(source_signature.head_dim, target_signature.head_dim)
-        self.confidence = self._confidence_from_compatibility(self.compatibility)
-        if calibration_data:
-            self.confidence = min(0.99, self.confidence + min(0.03, len(calibration_data) * 0.005))
+        if not calibration_data:
+            self.confidence = 0.0
+            self.calibrated = False
+            return self
+        scores = [self._score_calibration_pair(pair) for pair in calibration_data]
+        self.confidence = min(
+            self._confidence_from_compatibility(self.compatibility),
+            sum(scores) / len(scores),
+        )
+        self.calibrated = self.confidence > 0.0
         return self
 
     def transform(self, source_block: CacheBlock) -> MappingResult:
         self._require_fit()
         if self.compatibility == CompatibilityLevel.INCOMPATIBLE:
             raise ValueError("Cannot map incompatible model families or architectures.")
+        if not self.calibrated:
+            raise ValueError("Linear projection requires verified calibration pairs.")
         assert self.target_signature is not None
         assert self.key_weight is not None
         assert self.value_weight is not None
@@ -178,7 +181,7 @@ class LinearProjectionKVMapper(KVMapper):
             compatibility=self.compatibility,
             confidence=self.confidence,
             mapper_id=self.mapper_id,
-            reason=f"projected final dim to {self.target_signature.head_dim}",
+            reason=f"calibrated projection to final dim {self.target_signature.head_dim}",
         )
 
     def score(self, mapped_block: CacheBlock, probe_tokens: list[int] | None = None) -> float:
@@ -200,3 +203,39 @@ class LinearProjectionKVMapper(KVMapper):
             CompatibilityLevel.INCOMPATIBLE: 0.0,
         }[compatibility]
 
+    def _score_calibration_pair(self, pair: CalibrationPair) -> float:
+        assert self.key_weight is not None
+        assert self.value_weight is not None
+        projected_key = project_last_dim(pair.source.payload.key, self.key_weight)
+        projected_value = project_last_dim(pair.source.payload.value, self.value_weight)
+        key_score = _cosine_similarity(projected_key, pair.target.payload.key)
+        value_score = _cosine_similarity(projected_value, pair.target.payload.value)
+        return min(key_score, value_score)
+
+
+def _cosine_similarity(lhs: Any, rhs: Any) -> float:
+    left = _flatten_numeric(lhs)
+    right = _flatten_numeric(rhs)
+    if not left or len(left) != len(right):
+        return 0.0
+    numerator = sum(a * b for a, b in zip(left, right, strict=True))
+    left_norm = math.sqrt(sum(value * value for value in left))
+    right_norm = math.sqrt(sum(value * value for value in right))
+    if left_norm == 0.0 or right_norm == 0.0:
+        return 0.0
+    return max(0.0, min(1.0, numerator / (left_norm * right_norm)))
+
+
+def _flatten_numeric(value: Any) -> list[float]:
+    if hasattr(value, "detach"):
+        value = value.detach().cpu().reshape(-1).tolist()
+    elif hasattr(value, "reshape") and hasattr(value, "tolist"):
+        value = value.reshape(-1).tolist()
+    if isinstance(value, (list, tuple)):
+        flattened: list[float] = []
+        for item in value:
+            flattened.extend(_flatten_numeric(item))
+        return flattened
+    if isinstance(value, (int, float)):
+        return [float(value)]
+    return []

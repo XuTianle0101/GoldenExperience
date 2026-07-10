@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 from typing import Any
 
 from goldenexperience.cache_core.block import CacheBlock, KVPayload
@@ -76,6 +78,11 @@ class TransformersAdapter(ModelAdapter):
         num_key_value_heads = int(getattr(config, "num_key_value_heads", num_attention_heads))
         head_dim = int(getattr(config, "head_dim", hidden_size // num_attention_heads))
         tokenizer_id = getattr(tokenizer, "name_or_path", None) if tokenizer is not None else None
+        config_payload = config.to_dict() if hasattr(config, "to_dict") else {}
+        config_hash = hashlib.sha256(
+            json.dumps(config_payload, sort_keys=True, default=str).encode("utf-8")
+        ).hexdigest()
+        rope_scaling = getattr(config, "rope_scaling", None)
         return ArchitectureSignature(
             model_id=str(resolved_model_id),
             family=family or str(resolved_model_id).split("-")[0].lower(),
@@ -86,8 +93,15 @@ class TransformersAdapter(ModelAdapter):
             num_key_value_heads=num_key_value_heads,
             head_dim=head_dim,
             rope_theta=getattr(config, "rope_theta", None),
+            rope_scaling=(
+                json.dumps(rope_scaling, sort_keys=True, default=str)
+                if rope_scaling is not None
+                else None
+            ),
+            sliding_window=getattr(config, "sliding_window", None),
             tokenizer_id=tokenizer_id,
             dtype=str(getattr(config, "torch_dtype", "float16")).replace("torch.", ""),
             vocab_size=getattr(config, "vocab_size", None),
+            revision=getattr(config, "_commit_hash", None),
+            model_config_hash=config_hash,
         )
-
