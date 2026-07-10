@@ -1,0 +1,92 @@
+{
+  "automatic_reuse_approved": false,
+  "comparisons": {
+    "14b_to_8b": {
+      "v3_scaled_linear": {
+        "bridge_task_score": 0.796875,
+        "greedy_continuation_match_rate": 0.62109375,
+        "key_cosine": 0.9282558700069785,
+        "next_token_top1_agreement": 0.69140625,
+        "perplexity_drift_pct": 27.90982630497322,
+        "value_cosine": 0.7858614707365632
+      },
+      "v4_silu": {
+        "bridge_task_score": 0.84375,
+        "greedy_continuation_match_rate": 0.6318359375,
+        "key_cosine": 0.9289917759597301,
+        "next_token_top1_agreement": 0.740234375,
+        "perplexity_drift_pct": 48.94493652529634,
+        "value_cosine": 0.7923919875174761
+      }
+    },
+    "8b_to_14b": {
+      "v3_scaled_linear": {
+        "bridge_task_score": 0.015625,
+        "greedy_continuation_match_rate": 0.03125,
+        "key_cosine": 0.9308839710429311,
+        "next_token_top1_agreement": 0.763671875,
+        "perplexity_drift_pct": 31.971955546709786,
+        "value_cosine": 0.7931793769821525
+      },
+      "v4_silu": {
+        "bridge_task_score": 0.171875,
+        "greedy_continuation_match_rate": 0.13671875,
+        "key_cosine": 0.9316568123176694,
+        "next_token_top1_agreement": 0.814453125,
+        "perplexity_drift_pct": 25.120724860063078,
+        "value_cosine": 0.7989904452115297
+      }
+    }
+  },
+  "dataset": {
+    "split_hashes": {
+      "test": "243c6f21e1ad7066fd0d345236736f141fea47b19b3fede89f2ff0b48ad41179",
+      "train": "3e4cc882a2cae05c34211b46f247691cd4b4fd96ccb33632e98fe33149640113",
+      "validation": "fbcb5a68716be8230945d01c503774f5a733b043822d78aaedeac9816a6b0936"
+    },
+    "test_prompts": 64,
+    "train_prompts": 256,
+    "validation_prompts": 64
+  },
+  "experiment": {
+    "greedy_tokens": 16,
+    "nonlinear_ridge_lambda": 1000.0,
+    "rank": 512,
+    "ridge_lambda": 1000.0,
+    "source_window": 3,
+    "suffix_tokens": 16,
+    "training_prompt_limit": 64,
+    "training_samples": 2048,
+    "training_samples_per_prompt": 32
+  },
+  "generated_at_utc": "2026-07-10T08:51:01Z",
+  "model_identities": {
+    "qwen3_14b_weights_sha256": "cb0d7f0a0bec1ee514630fefd9d2468fe4f61a684cb154f3f288bf42eec70661",
+    "qwen3_8b_weights_sha256": "ee9fc280e4d520ded7fea3db8f0eb6f8c596b0babe95b081b6bcb60544f98b38",
+    "tokenizer_sha256": "7dc5ac23a90090f6b3f3545fdd8a1da2d262a7916ec4649e660f03180cbb403c"
+  },
+  "rejected_variants": {
+    "8b_to_14b_source_window_5": {
+      "next_token_top1_agreement": 0.7919921875,
+      "perplexity_drift_pct": 53.41476366008449,
+      "p95_transform_ms": 36.60569619387388,
+      "reason": "no generation improvement and higher transform cost"
+    },
+    "nonlinear_ridge_10000": {
+      "reason": "lower output agreement than nonlinear ridge 1000 in both directions"
+    },
+    "sparse_256_prompt_sampling": {
+      "reason": "eight positions per prompt regressed bridge task score to zero"
+    }
+  },
+  "rejection_reasons": [
+    "both v4 directions remain below key and value cosine thresholds",
+    "both v4 directions remain below next-token and greedy continuation thresholds",
+    "both v4 directions remain above perplexity drift and task-drop thresholds",
+    "sealed test split remains unopened",
+    "runtime Mooncake cost evidence remains unavailable due local CUDA ABI mismatch"
+  ],
+  "runtime_cost_measured": false,
+  "schema_version": "goldenexperience.cached_kv_expanded_corpus_nonlinear_ab.v1",
+  "sealed_test_opened": false
+}

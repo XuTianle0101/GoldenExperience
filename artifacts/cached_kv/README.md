@@ -23,6 +23,10 @@ sweep after the v2 scaled baseline. Stronger regularization and more supervised 
 substantially improve both directions, but the best candidates remain below every
 production output-quality threshold.
 
+`expanded_corpus_nonlinear_ab_20260710.json` records the 256-train/64-validation corpus
+and compares the v3 linear map with the v4 SiLU correction. v4 improves generation in
+both directions, especially 8B to 14B, but neither direction is approved.
+
 Only a `CachedKVBridgeManifest` whose derived `approved` property is true may be used by
 the runtime materializer. Missing held-out accuracy or Mooncake cost evidence keeps a
 manifest fail closed.
