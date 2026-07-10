@@ -415,6 +415,10 @@ python3 scripts/train_qwen3_cached_kv_bridge.py \
   --output artifacts/cached_kv/qwen3_8b_to_14b.json
 ```
 
+The default fit uses rank 512, ridge 1000, and 2048 supervised positions distributed as
+32 positions across 64 training prompts. Override both sampling flags together when
+running a larger fit; sparse eight-position prompt sampling is known to regress validation.
+
 Run the same command with `--direction 14b_to_8b` for the reverse artifact. Add
 `--finalize` only for the selected hyperparameters; this evaluates the sealed 64-prompt
 test split and writes safetensors plus a content-addressed manifest. A separate runtime

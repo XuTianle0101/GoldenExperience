@@ -514,7 +514,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--rank", type=int, default=512)
     parser.add_argument("--source-window", type=int, default=3)
     parser.add_argument("--ridge-lambda", type=float, default=1000.0)
-    parser.add_argument("--samples-per-prompt", type=int, default=8)
+    parser.add_argument("--samples-per-prompt", type=int, default=32)
     parser.add_argument("--max-training-samples", type=int, default=2048)
     parser.add_argument("--suffix-tokens", type=int, default=16)
     parser.add_argument("--greedy-tokens", type=int, default=16)
