@@ -10,7 +10,7 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
-CACHED_KV_SCHEMA_VERSION = "goldenexperience.qwen3_cached_kv_bridge.v1"
+CACHED_KV_SCHEMA_VERSION = "goldenexperience.qwen3_cached_kv_bridge.v2"
 _SHA256_LENGTH = 64
 _TOKENIZER_FILES = (
     "tokenizer.json",
@@ -268,7 +268,7 @@ class CachedKVBridgeManifest:
     schema_version: str = CACHED_KV_SCHEMA_VERSION
     scope: str = "global"
     layout: str = "kv_layer_token_width"
-    method: str = "joint_kv_low_rank_residual"
+    method: str = "joint_kv_scaled_low_rank_residual"
     rope_convention: str = "qwen_half_split"
 
     @property
@@ -313,7 +313,7 @@ class CachedKVBridgeManifest:
             errors.append("source and target sliding-window contracts differ")
         if self.layout != "kv_layer_token_width":
             errors.append("unsupported cached KV object layout")
-        if self.method != "joint_kv_low_rank_residual":
+        if self.method != "joint_kv_scaled_low_rank_residual":
             errors.append("unsupported cached KV bridge method")
         if self.rope_convention != "qwen_half_split":
             errors.append("unsupported RoPE convention")

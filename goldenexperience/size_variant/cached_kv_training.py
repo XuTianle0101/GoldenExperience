@@ -169,51 +169,73 @@ def fit_low_rank_state(
         raise ValueError("training tensors must have [layer, sample, width] layout")
     if features.shape[:2] != key_residual.shape[:2] or key_residual.shape != value_residual.shape:
         raise ValueError("training tensor layer/sample dimensions differ")
-    if rank <= 0 or ridge_lambda < 0 or not math.isfinite(ridge_lambda):
+    if rank <= 0 or ridge_lambda <= 0 or not math.isfinite(ridge_lambda):
         raise ValueError("rank and ridge_lambda must be valid")
     target_layers = int(features.shape[0])
     feature_means: list[Any] = []
     key_down: list[Any] = []
     key_up: list[Any] = []
     key_bias: list[Any] = []
+    key_base_scale: list[Any] = []
     value_down: list[Any] = []
     value_up: list[Any] = []
     value_bias: list[Any] = []
+    value_base_scale: list[Any] = []
+    source_window = int(source_layer_ids.shape[1])
+    output_width = int(key_residual.shape[-1])
+    expected_feature_width = source_window * output_width * 2
+    if int(features.shape[-1]) != expected_feature_width:
+        raise ValueError("training feature width does not match source layer plan")
     for layer_id in range(target_layers):
         x = features[layer_id].to(device=device, dtype=torch.float32)
-        key_y = key_residual[layer_id].to(device=device, dtype=torch.float32)
-        value_y = value_residual[layer_id].to(device=device, dtype=torch.float32)
+        key_delta = key_residual[layer_id].to(device=device, dtype=torch.float32)
+        value_delta = value_residual[layer_id].to(device=device, dtype=torch.float32)
+        weights = source_layer_weights[layer_id].to(device=device, dtype=torch.float32)
+        key_sources = x[:, : source_window * output_width].reshape(
+            x.shape[0], source_window, output_width
+        )
+        value_sources = x[:, source_window * output_width :].reshape(
+            x.shape[0], source_window, output_width
+        )
+        key_base = torch.einsum("s,tsw->tw", weights, key_sources)
+        value_base = torch.einsum("s,tsw->tw", weights, value_sources)
         mean_x = x.mean(dim=0)
         x_centered = x - mean_x
-        key_mean, key_basis, key_projection = _fit_supervised_projection(
+        key_scale, key_mean, key_basis, key_projection = _fit_scaled_projection(
             x_centered,
-            key_y,
+            key_base,
+            key_delta,
             rank=rank,
             ridge_lambda=ridge_lambda,
         )
-        value_mean, value_basis, value_projection = _fit_supervised_projection(
+        value_scale, value_mean, value_basis, value_projection = _fit_scaled_projection(
             x_centered,
-            value_y,
+            value_base,
+            value_delta,
             rank=rank,
             ridge_lambda=ridge_lambda,
         )
         feature_means.append(mean_x.cpu())
+        key_base_scale.append(key_scale.cpu())
         key_down.append(key_basis.cpu())
         key_up.append(key_projection.cpu())
         key_bias.append(key_mean.cpu())
+        value_base_scale.append(value_scale.cpu())
         value_down.append(value_basis.cpu())
         value_up.append(value_projection.cpu())
         value_bias.append(value_mean.cpu())
-        del x, key_y, value_y, x_centered
+        del x, key_delta, value_delta, x_centered
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
     return {
         "source_layer_ids": source_layer_ids.to(torch.int64).cpu(),
         "source_layer_weights": source_layer_weights.to(torch.float32).cpu(),
         "feature_mean": torch.stack(feature_means),
+        "key_base_scale": torch.stack(key_base_scale),
         "key_down": torch.stack(key_down),
         "key_up": torch.stack(key_up),
         "key_bias": torch.stack(key_bias),
+        "value_base_scale": torch.stack(value_base_scale),
         "value_down": torch.stack(value_down),
         "value_up": torch.stack(value_up),
         "value_bias": torch.stack(value_bias),
@@ -263,7 +285,11 @@ def transform_with_state(
     )
     centered = features - state["feature_mean"].to(device=device, dtype=source.dtype).unsqueeze(1)
     base_key = torch.einsum("ls,lstw->ltw", weights, unrotated_key)
+    base_key = base_key * state["key_base_scale"].to(device=device, dtype=source.dtype).unsqueeze(1)
     base_value = torch.einsum("ls,lstw->ltw", weights, selected_value)
+    base_value = base_value * state["value_base_scale"].to(
+        device=device, dtype=source.dtype
+    ).unsqueeze(1)
     key = (
         base_key
         + torch.bmm(
@@ -342,6 +368,48 @@ def _fit_supervised_projection(
     source_factor = source_basis * singular_values.unsqueeze(0)
     target_factor = target_basis.T
     return mean_y, source_factor, target_factor
+
+
+def _fit_diagonal_baseline(base: Any, target: Any, *, ridge_lambda: float) -> Any:
+    base_centered = base - base.mean(dim=0)
+    target_centered = target - target.mean(dim=0)
+    numerator = (base_centered * target_centered).sum(dim=0)
+    denominator = base_centered.square().sum(dim=0) + ridge_lambda
+    return numerator / denominator
+
+
+def _fit_scaled_projection(
+    x_centered: Any,
+    base: Any,
+    delta: Any,
+    *,
+    rank: int,
+    ridge_lambda: float,
+    alternating_steps: int = 4,
+) -> tuple[Any, Any, Any, Any]:
+    import torch
+
+    scale = torch.ones(base.shape[-1], dtype=base.dtype, device=base.device)
+    for _ in range(alternating_steps):
+        mean, basis, projection = _fit_supervised_projection(
+            x_centered,
+            delta - base * (scale - 1),
+            rank=rank,
+            ridge_lambda=ridge_lambda,
+        )
+        prediction = (x_centered @ basis) @ projection + mean
+        scale = 1 + _fit_diagonal_baseline(
+            base,
+            delta - prediction,
+            ridge_lambda=ridge_lambda,
+        )
+    mean, basis, projection = _fit_supervised_projection(
+        x_centered,
+        delta - base * (scale - 1),
+        rank=rank,
+        ridge_lambda=ridge_lambda,
+    )
+    return scale, mean, basis, projection
 
 
 def _validate_object_pair(

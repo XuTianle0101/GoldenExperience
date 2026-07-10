@@ -253,6 +253,72 @@ def test_supervised_low_rank_fit_reconstructs_synthetic_cached_kv() -> None:
     torch.testing.assert_close(reconstructed, target, atol=2e-3, rtol=2e-3)
 
 
+def test_supervised_fit_learns_full_width_diagonal_baseline() -> None:
+    torch.manual_seed(11)
+    source = torch.randn(2, 2, 128, 4)
+    positions = torch.arange(128)
+    layer_ids, layer_weights = build_source_layer_plan(2, 2, 1)
+    source_key = _apply_rope_flat(
+        source[0],
+        positions,
+        num_heads=1,
+        head_dim=4,
+        theta=1_000_000,
+        inverse=True,
+    )
+    selected_key = source_key[layer_ids].squeeze(1)
+    selected_value = source[1][layer_ids].squeeze(1)
+    key_scale = torch.tensor(((0.5, 1.5, -0.75, 2.0), (1.25, -0.5, 0.8, 1.8)))
+    value_scale = torch.tensor(((1.7, 0.6, -1.2, 0.4), (-0.3, 1.4, 2.1, 0.9)))
+    target_key = _apply_rope_flat(
+        selected_key * key_scale.unsqueeze(1),
+        positions,
+        num_heads=1,
+        head_dim=4,
+        theta=1_000_000,
+        inverse=False,
+    )
+    target = torch.stack((target_key, selected_value * value_scale.unsqueeze(1)))
+    features, key_residual, value_residual = build_training_matrices(
+        source,
+        target,
+        positions,
+        layer_ids,
+        layer_weights,
+        source_heads=1,
+        source_head_dim=4,
+        source_rope_theta=1_000_000,
+        target_heads=1,
+        target_head_dim=4,
+        target_rope_theta=1_000_000,
+    )
+    state = fit_low_rank_state(
+        features,
+        key_residual,
+        value_residual,
+        layer_ids,
+        layer_weights,
+        rank=1,
+        ridge_lambda=1e-5,
+        device="cpu",
+    )
+
+    reconstructed = transform_with_state(
+        source,
+        positions,
+        state,
+        source_heads=1,
+        source_head_dim=4,
+        source_rope_theta=1_000_000,
+        target_heads=1,
+        target_head_dim=4,
+        target_rope_theta=1_000_000,
+        device="cpu",
+    )
+
+    torch.testing.assert_close(reconstructed, target, atol=2e-3, rtol=2e-3)
+
+
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA is required for BF16 regression")
 def test_training_transform_uses_one_compute_dtype_on_cuda() -> None:
     source = torch.randn(2, 2, 8, 4, dtype=torch.bfloat16)
@@ -262,9 +328,11 @@ def test_training_transform_uses_one_compute_dtype_on_cuda() -> None:
         "source_layer_ids": layer_ids,
         "source_layer_weights": layer_weights,
         "feature_mean": torch.zeros(2, 8),
+        "key_base_scale": torch.ones(2, 4),
         "key_down": torch.zeros(2, 8, 1, dtype=torch.bfloat16),
         "key_up": torch.zeros(2, 1, 4, dtype=torch.bfloat16),
         "key_bias": torch.zeros(2, 4),
+        "value_base_scale": torch.ones(2, 4),
         "value_down": torch.zeros(2, 8, 1, dtype=torch.bfloat16),
         "value_up": torch.zeros(2, 1, 4, dtype=torch.bfloat16),
         "value_bias": torch.zeros(2, 4),

@@ -387,8 +387,9 @@ Runtime behavior remains conservative:
 - Prefix token ids must match exactly; chunk alignment is required.
 - The production materializer consumes `[2, source_layers, chunk_tokens, kv_width]`
   Mooncake objects directly. It inverse-rotates cached Qwen3 keys, applies a learned
-  direction-specific KV map, reapplies target RoPE at absolute positions, and emits the
-  target layer layout without loading or prefilling either model.
+  direction-specific per-channel baseline plus joint low-rank KV map, reapplies target
+  RoPE at absolute positions, and emits the target layer layout without loading or
+  prefilling either model.
 - Measured artifact load, exact source read, transform, and target write time must be <=
   70% of the isolated native target prefill cost before target keys are published.
 - Any tokenizer, RoPE, model/config/weight identity, artifact, prompt binding, object

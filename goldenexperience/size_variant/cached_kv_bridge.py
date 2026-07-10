@@ -19,9 +19,11 @@ REQUIRED_WEIGHT_TENSORS = frozenset(
         "source_layer_ids",
         "source_layer_weights",
         "feature_mean",
+        "key_base_scale",
         "key_down",
         "key_up",
         "key_bias",
+        "value_base_scale",
         "value_down",
         "value_up",
         "value_bias",
@@ -176,7 +178,11 @@ class Qwen3CachedKVBridge:
         centered = features - self._tensors["feature_mean"].to(self.compute_dtype).unsqueeze(1)
 
         base_key = torch.einsum("ls,lstw->ltw", layer_weights, unrotated_key)
+        base_key = base_key * self._tensors["key_base_scale"].to(self.compute_dtype).unsqueeze(1)
         base_value = torch.einsum("ls,lstw->ltw", layer_weights, selected_value)
+        base_value = base_value * self._tensors["value_base_scale"].to(
+            self.compute_dtype
+        ).unsqueeze(1)
         key_delta = torch.bmm(
             torch.bmm(centered, self._tensors["key_down"].to(self.compute_dtype)),
             self._tensors["key_up"].to(self.compute_dtype),
@@ -287,9 +293,11 @@ class Qwen3CachedKVBridge:
             "source_layer_ids": (target_layers, source_window),
             "source_layer_weights": (target_layers, source_window),
             "feature_mean": (target_layers, feature_width),
+            "key_base_scale": (target_layers, width),
             "key_down": (target_layers, feature_width, rank),
             "key_up": (target_layers, rank, width),
             "key_bias": (target_layers, width),
+            "value_base_scale": (target_layers, width),
             "value_down": (target_layers, feature_width, rank),
             "value_up": (target_layers, rank, width),
             "value_bias": (target_layers, width),
