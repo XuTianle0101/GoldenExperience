@@ -27,6 +27,10 @@ production output-quality threshold.
 and compares the v3 linear map with the v4 SiLU correction. v4 improves generation in
 both directions, especially 8B to 14B, but neither direction is approved.
 
+`cka_layer_alignment_ab_20260710.json` compares fixed normalized-depth source windows
+with train-only monotonic linear-CKA alignment. CKA improves forward generation metrics
+but regresses reverse generation and tensor metrics, so it remains an opt-in experiment.
+
 Only a `CachedKVBridgeManifest` whose derived `approved` property is true may be used by
 the runtime materializer. Missing held-out accuracy or Mooncake cost evidence keeps a
 manifest fail closed.
