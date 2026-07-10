@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import sys
 import time
 from collections.abc import Callable
 from pathlib import Path
@@ -454,6 +455,43 @@ def materialize_cached_qwen3(
         return _cached_fallback(started, "materializer_runtime_failed", error=repr(exc))
 
 
+def preload_cached_qwen3_bridge(request: dict[str, Any]) -> dict[str, Any]:
+    """Warm an approved bridge in a resident worker without touching Mooncake."""
+
+    import torch
+
+    started = time.perf_counter()
+    try:
+        device = request.get("device", "cuda:0" if torch.cuda.is_available() else "cpu")
+        bridge, cache_hit = _RESIDENT_BRIDGE_CACHE.load(
+            _required_string(request, "bridge_manifest_path"),
+            source_model_path=_required_string(request, "source_model_path"),
+            target_model_path=_required_string(request, "target_model_path"),
+            device=device,
+        )
+        if request.get("direction") not in {None, bridge.manifest.direction}:
+            raise ValueError("requested direction does not match bridge artifact")
+        elapsed_ms = (time.perf_counter() - started) * 1000
+        return {
+            "success": True,
+            "fallback_reason": "none",
+            "fallback_safe": False,
+            "materialized": False,
+            "injected": False,
+            "bridge_id": bridge.manifest.bridge_id,
+            "direction": bridge.manifest.direction,
+            "artifact_cache": {"hit": cache_hit, "resident_loader": True},
+            "timings": {"artifact_load_ms": elapsed_ms, "overall_ms": elapsed_ms},
+            "elapsed_ms": elapsed_ms,
+        }
+    except (KeyError, TypeError, ValueError) as exc:
+        return _cached_fallback(started, "invalid_preload_request", error=str(exc))
+    except CachedKVBridgeError as exc:
+        return _cached_fallback(started, "bridge_artifact_invalid", error=str(exc))
+    except (OSError, RuntimeError) as exc:
+        return _cached_fallback(started, "preload_runtime_failed", error=repr(exc))
+
+
 def _cached_fallback(
     started: float,
     reason: str,
@@ -798,28 +836,75 @@ def materialize_qwen3_8b_to_14b(request: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser(description="Materialize cross-size Qwen3 cached KV objects.")
-    parser.add_argument("--request", required=True)
-    parser.add_argument("--output", required=True)
-    args = parser.parse_args()
-    request = json.loads(Path(args.request).read_text(encoding="utf-8"))
+def _dispatch_materializer_request(request: dict[str, Any]) -> dict[str, Any]:
     try:
         mode = request.get("mode", "cached_kv")
         if mode == "cached_kv":
-            result = materialize_cached_qwen3(request)
-        elif mode == "legacy_hidden_bridge_experiment":
-            result = materialize_qwen3_8b_to_14b(request)
-        else:
+            return materialize_cached_qwen3(request)
+        if mode == "preload_cached_kv_bridge":
+            return preload_cached_qwen3_bridge(request)
+        if mode == "legacy_hidden_bridge_experiment":
+            return materialize_qwen3_8b_to_14b(request)
+        return {
+            "success": False,
+            "fallback_reason": "invalid_materializer_mode",
+            "fallback_safe": True,
+            "materialized": False,
+            "injected": False,
+        }
+    except Exception as exc:  # noqa: BLE001 - request boundary.
+        return {
+            "success": False,
+            "fallback_reason": "materializer_error",
+            "fallback_safe": True,
+            "materialized": False,
+            "injected": False,
+            "error": repr(exc),
+        }
+
+
+def serve_materializer_jsonl(input_stream: Any, output_stream: Any) -> int:
+    """Serve one request and one compact response per line until EOF."""
+
+    for line_number, line in enumerate(input_stream, start=1):
+        if not line.strip():
+            continue
+        try:
+            request = json.loads(line)
+            if not isinstance(request, dict):
+                raise ValueError("request must be a JSON object")
+            result = _dispatch_materializer_request(request)
+        except (json.JSONDecodeError, ValueError) as exc:
             result = {
                 "success": False,
-                "fallback_reason": "invalid_materializer_mode",
+                "fallback_reason": "invalid_jsonl_request",
                 "fallback_safe": True,
                 "materialized": False,
                 "injected": False,
+                "line_number": line_number,
+                "error": str(exc),
             }
-    except Exception as exc:  # noqa: BLE001 - CLI boundary.
-        result = {"success": False, "fallback_reason": "materializer_error", "error": repr(exc)}
+        output_stream.write(json.dumps(result, sort_keys=True, separators=(",", ":")) + "\n")
+        output_stream.flush()
+    return 0
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="Materialize cross-size Qwen3 cached KV objects.")
+    parser.add_argument("--request")
+    parser.add_argument("--output")
+    parser.add_argument("--serve-jsonl", action="store_true")
+    args = parser.parse_args()
+    if args.serve_jsonl:
+        if args.request is not None or args.output is not None:
+            parser.error("--serve-jsonl cannot be combined with --request or --output")
+        return serve_materializer_jsonl(sys.stdin, sys.stdout)
+    if args.request is None or args.output is None:
+        parser.error("--request and --output are required outside --serve-jsonl mode")
+    request = json.loads(Path(args.request).read_text(encoding="utf-8"))
+    if not isinstance(request, dict):
+        parser.error("--request must contain a JSON object")
+    result = _dispatch_materializer_request(request)
     _write_json(Path(args.output), result)
     return 0 if result.get("success") or result.get("fallback_safe") else 1
 

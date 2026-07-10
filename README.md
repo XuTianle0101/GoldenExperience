@@ -419,6 +419,14 @@ test split and writes safetensors plus a content-addressed manifest. A separate 
 cost report with measured Mooncake P95 read-transform-write and native-prefill latency is
 required for approval. Without it, even perfect offline metrics remain fail closed.
 
+Run a resident materializer worker with one JSON request and compact JSON response per
+line. Send `mode=preload_cached_kv_bridge` first to load an already approved artifact
+without touching Mooncake, then send normal `mode=cached_kv` requests:
+
+```bash
+python3 -m goldenexperience.runtime.cross_model_materializer --serve-jsonl
+```
+
 ## Minimal Planner Example
 
 ```python

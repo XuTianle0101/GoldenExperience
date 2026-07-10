@@ -1,4 +1,5 @@
 import ctypes
+import io
 import json
 from pathlib import Path
 from types import SimpleNamespace
@@ -6,7 +7,12 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-from goldenexperience.runtime.cross_model_materializer import materialize_cached_qwen3
+from goldenexperience.runtime import cross_model_materializer
+from goldenexperience.runtime.cross_model_materializer import (
+    materialize_cached_qwen3,
+    preload_cached_qwen3_bridge,
+    serve_materializer_jsonl,
+)
 from goldenexperience.runtime.mooncake_objects import (
     ExactMooncakeStore,
     MooncakeObjectError,
@@ -345,3 +351,46 @@ def test_cached_materializer_rejects_layout_and_unknown_cost_before_store_io(
     )
     assert result["fallback_reason"] == "invalid_materializer_request"
     assert fake.closed is False
+
+
+def test_resident_preload_uses_strict_bridge_cache(monkeypatch: pytest.MonkeyPatch) -> None:
+    bridge = FakeBridge()
+
+    class _Cache:
+        def load(self, *args, **kwargs):
+            assert args == ("/artifacts/bridge.json",)
+            assert kwargs["source_model_path"] == "/models/Qwen3-8B"
+            assert kwargs["target_model_path"] == "/models/Qwen3-14B"
+            return bridge, True
+
+    monkeypatch.setattr(cross_model_materializer, "_RESIDENT_BRIDGE_CACHE", _Cache())
+    result = preload_cached_qwen3_bridge(
+        {
+            "bridge_manifest_path": "/artifacts/bridge.json",
+            "source_model_path": "/models/Qwen3-8B",
+            "target_model_path": "/models/Qwen3-14B",
+            "direction": "8b_to_14b",
+            "device": "cpu",
+        }
+    )
+
+    assert result["success"] is True
+    assert result["materialized"] is False
+    assert result["injected"] is False
+    assert result["artifact_cache"] == {"hit": True, "resident_loader": True}
+
+
+def test_jsonl_worker_isolates_invalid_requests_and_continues() -> None:
+    requests = io.StringIO('{"mode":"unknown"}\nnot-json\n[]\n')
+    responses = io.StringIO()
+
+    assert serve_materializer_jsonl(requests, responses) == 0
+
+    parsed = [json.loads(line) for line in responses.getvalue().splitlines()]
+    assert [item["fallback_reason"] for item in parsed] == [
+        "invalid_materializer_mode",
+        "invalid_jsonl_request",
+        "invalid_jsonl_request",
+    ]
+    assert parsed[1]["line_number"] == 2
+    assert parsed[2]["line_number"] == 3
