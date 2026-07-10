@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run quality-gated Qwen3 8B -> 14B hidden-bridge KV reuse against vLLM/LMCache."""
+"""Run quality-gated Qwen3 cached-KV translation against vLLM/LMCache."""
 
 from __future__ import annotations
 
@@ -58,6 +58,7 @@ def _default_run_id() -> str:
 
 def _set_default_run_env() -> None:
     run_id = os.environ.get("GE_RUN_ID") or _default_run_id()
+    direction = os.environ.get("GE_CACHED_KV_DIRECTION", "8b_to_14b")
     os.environ.setdefault("GE_RUN_ID", run_id)
     os.environ.setdefault(
         "GE_RUN_DIR",
@@ -65,7 +66,7 @@ def _set_default_run_env() -> None:
             REPO_ROOT
             / "artifacts"
             / "cross_model_runtime"
-            / f"qwen3_8b_to_14b_hidden_bridge_{run_id}"
+            / f"qwen3_cached_kv_{direction}_{run_id}"
         ),
     )
 
@@ -84,7 +85,7 @@ def _update_metadata(
         "source_model_name": source.model_name,
         "target_model_path": target.model_path,
         "target_model_name": target.model_name,
-        "materializer_mode": "hidden_bridge",
+        "materializer_mode": "cached_kv",
         "external_index_path": str(external_index_path),
         "quality_gate_required": True,
         "allow_unsafe": _env_bool("GE_ALLOW_UNSAFE_CROSS_MODEL_REUSE", "0"),
@@ -149,41 +150,34 @@ def _run_materializer(
     source_config: BaselineConfig,
     target_config: BaselineConfig,
     candidate: dict[str, Any],
-    token_ids: list[int],
     external_index_path: Path,
 ) -> dict[str, Any]:
     request_path = config.run_dir / "materializer_request.json"
     output_path = config.run_dir / "materializer_result.json"
+    native_target = _phase_request(config, "target_native")
+    native_target_prefill_ms = native_target.get("timing", {}).get("ttft_ms")
+    direction = os.environ.get("GE_CACHED_KV_DIRECTION", "8b_to_14b")
     request = {
+        "mode": "cached_kv",
         "source_model_path": source_config.model_path,
+        "source_model_name": source_config.model_name,
         "target_model_path": target_config.model_path,
         "target_model_name": target_config.model_name,
-        "token_ids": token_ids,
         "chunk_hashes": candidate["chunk_hashes"],
+        "source_lookup_record": candidate["record"],
+        "prompt_binding": candidate["binding"],
         "chunk_size": config.chunk_size,
         "max_chunks": int(os.environ.get("GE_MATERIALIZER_MAX_CHUNKS", "0")),
-        "output_dir": str(config.run_dir / "materialized_chunks"),
-        "bridge_summary_path": os.environ.get(
-            "GE_BRIDGE_SUMMARY_PATH",
-            str(
-                REPO_ROOT
-                / "artifacts"
-                / "hidden_bridge"
-                / "qwen3_hidden_bridge_qwen3_8b_to_14b_prefix32.json"
-            ),
+        "bridge_manifest_path": os.environ.get(
+            "GE_CACHED_KV_BRIDGE_MANIFEST",
+            str(REPO_ROOT / "artifacts" / "cached_kv" / f"qwen3_{direction}.json"),
         ),
-        "bridge_weights_path": os.environ.get(
-            "GE_BRIDGE_WEIGHTS_PATH",
-            str(
-                REPO_ROOT
-                / "artifacts"
-                / "hidden_bridge"
-                / "qwen3_hidden_bridge_qwen3_8b_to_14b_prefix32.pt"
-            ),
-        ),
+        "direction": direction,
         "allow_unsafe": _env_bool("GE_ALLOW_UNSAFE_CROSS_MODEL_REUSE", "0"),
         "device": os.environ.get("GE_MATERIALIZER_DEVICE", "cuda:0"),
-        "inject_to_mooncake": True,
+        "world_size": int(os.environ.get("GE_TENSOR_PARALLEL_SIZE", "1")),
+        "cache_salt": os.environ.get("GE_CACHE_SALT", os.environ.get("LMCACHE_CACHE_SALT", "")),
+        "native_target_prefill_ms": native_target_prefill_ms,
         "mooncake_setup_config": config.l2_adapter(),
         "external_index_path": str(external_index_path),
     }
@@ -255,12 +249,16 @@ def _summarize(
     )
     consumed_materialized = validation["consumed_materialized_kv"]
     fallback = target_phase == "target_fallback"
+    direction = str(
+        materializer.get("direction") or os.environ.get("GE_CACHED_KV_DIRECTION", "8b_to_14b")
+    )
     summary = {
-        "schema_version": "goldenexperience.cross_model_hidden_bridge_runtime.v2",
+        "schema_version": "goldenexperience.cross_model_cached_kv_runtime.v1",
         "generated_at_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "run_id": config.run_id,
         "run_dir": str(config.run_dir),
-        "scenario": "qwen3_8b_to_14b_cross_parameter_kv_reuse",
+        "scenario": f"qwen3_{direction}_cross_parameter_kv_reuse",
+        "direction": direction,
         "source": {
             "model_path": source_config.model_path,
             "model_name": source_config.model_name,
@@ -321,7 +319,7 @@ def _summarize(
             "target_native_e2e_ms": _timing(requests.get("target_native", {}), "e2e_ms"),
         },
     }
-    output = config.run_dir / "cross_model_hidden_bridge_summary.json"
+    output = config.run_dir / "cross_model_cached_kv_summary.json"
     _write_json(output, summary)
     manifest = (
         REPO_ROOT / "artifacts" / "cross_model_runtime" / "manifests" / f"{config.run_id}.json"
@@ -332,12 +330,17 @@ def _summarize(
 
 def main() -> int:
     _set_default_run_env()
-    source_model_path = os.environ.get(
-        "GE_SOURCE_MODEL_PATH", "/workspace/volume/softdata/models/Qwen3-8B"
-    )
-    target_model_path = os.environ.get(
-        "GE_TARGET_MODEL_PATH", "/workspace/volume/softdata/models/Qwen3-14B"
-    )
+    direction = os.environ.get("GE_CACHED_KV_DIRECTION", "8b_to_14b")
+    if direction == "8b_to_14b":
+        default_source = "/workspace/volume/softdata/models/Qwen3-8B"
+        default_target = "/workspace/volume/softdata/models/Qwen3-14B"
+    elif direction == "14b_to_8b":
+        default_source = "/workspace/volume/softdata/models/Qwen3-14B"
+        default_target = "/workspace/volume/softdata/models/Qwen3-8B"
+    else:
+        raise ValueError("GE_CACHED_KV_DIRECTION must be 8b_to_14b or 14b_to_8b")
+    source_model_path = os.environ.get("GE_SOURCE_MODEL_PATH", default_source)
+    target_model_path = os.environ.get("GE_TARGET_MODEL_PATH", default_target)
     source_model_name = os.environ.get("GE_SOURCE_MODEL_NAME", source_model_path)
     target_model_name = os.environ.get("GE_TARGET_MODEL_NAME", target_model_path)
 
@@ -359,7 +362,7 @@ def main() -> int:
     config.write_metadata()
     _update_metadata(config, source_config, target_config, external_index_path)
 
-    print(f"Cross-model hidden-bridge run directory: {config.run_dir}")
+    print(f"Cross-model cached-KV run directory: {config.run_dir}")
     print(f"Source: {source_model_path}")
     print(f"Target: {target_model_path}")
     print(f"External Mooncake index: {external_index_path}")
@@ -443,7 +446,6 @@ def main() -> int:
                     source_config=source_config,
                     target_config=target_config,
                     candidate=lookup,
-                    token_ids=token_ids,
                     external_index_path=external_index_path,
                 )
                 target_key_status_after_materializer = mooncake_key_exists(
@@ -494,7 +496,7 @@ def main() -> int:
         "requests/source_offload.json",
         "requests/target_native.json",
         f"requests/{target_phase}.json",
-        "cross_model_hidden_bridge_summary.json",
+        "cross_model_cached_kv_summary.json",
     ]:
         print(f"  {config.run_dir / relative}")
     if (

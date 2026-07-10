@@ -262,3 +262,16 @@ def test_materializer_quality_gate_falls_back_before_model_load(tmp_path: Path) 
     assert result["materialized"] is False
     assert result["injected"] is False
     assert not weights.exists()
+
+
+def test_legacy_materializer_can_never_inject_or_run_unsafe() -> None:
+    result = materialize_qwen3_8b_to_14b(
+        {
+            "inject_to_mooncake": True,
+            "allow_unsafe": True,
+        }
+    )
+
+    assert result["success"] is False
+    assert result["fallback_reason"] == "legacy_materializer_injection_disabled"
+    assert result["fallback_safe"] is True

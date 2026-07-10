@@ -1,13 +1,24 @@
-"""Qwen3 cross-size hidden-bridge KV materialization utilities."""
+"""Qwen3 cached-KV materialization and legacy experiment utilities."""
 
 from __future__ import annotations
 
 import argparse
 import json
-import os
+import math
 import time
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
+
+from goldenexperience.runtime.mooncake_objects import (
+    ExactMooncakeStore,
+    MooncakeObjectError,
+    publish_external_index,
+)
+from goldenexperience.size_variant.cached_kv_bridge import (
+    CachedKVBridgeError,
+    Qwen3CachedKVBridge,
+)
 
 
 def _write_json(path: Path, payload: dict[str, Any]) -> None:
@@ -32,7 +43,8 @@ def _gate(summary: dict[str, Any], thresholds: dict[str, float]) -> tuple[bool, 
         "hidden_cosine": values["hidden_cosine_mean"] >= thresholds.get("hidden_cosine", 0.90),
         "key_cosine": values["key_cosine_mean"] >= thresholds.get("key_cosine", 0.85),
         "value_cosine": values["value_cosine_mean"] >= thresholds.get("value_cosine", 0.85),
-        "decode_logit_cosine": values["decode_logit_cosine_mean"] >= thresholds.get("decode_logit_cosine", 0.90),
+        "decode_logit_cosine": values["decode_logit_cosine_mean"]
+        >= thresholds.get("decode_logit_cosine", 0.90),
     }
     return all(checks.values()), {"values": values, "checks": checks, "thresholds": thresholds}
 
@@ -108,7 +120,9 @@ def _make_hidden_projector(state: dict[str, Any], device: str):
     return projector
 
 
-def _build_layer_map(source_layers: int, target_layers: int) -> list[tuple[int, tuple[int, ...], tuple[float, ...]]]:
+def _build_layer_map(
+    source_layers: int, target_layers: int
+) -> list[tuple[int, tuple[int, ...], tuple[float, ...]]]:
     if target_layers == 1:
         return [(0, (0,), (1.0,))]
     entries = []
@@ -125,7 +139,9 @@ def _build_layer_map(source_layers: int, target_layers: int) -> list[tuple[int, 
     return entries
 
 
-def _project_target_kv(large_model: Any, hidden: Any, layer_id: int, position_ids: Any) -> tuple[Any, Any]:
+def _project_target_kv(
+    large_model: Any, hidden: Any, layer_id: int, position_ids: Any
+) -> tuple[Any, Any]:
     attn = large_model.model.layers[layer_id].self_attn
     batch, seq, _ = hidden.shape
     view_shape = (batch, seq, attn.config.num_key_value_heads, attn.head_dim)
@@ -143,7 +159,405 @@ def _flatten_layer_kv(key: Any, value: Any) -> tuple[Any, Any]:
     return key_flat, value_flat
 
 
+def materialize_cached_qwen3(
+    request: dict[str, Any],
+    *,
+    store_factory: Callable[[], Any] | None = None,
+    bridge_loader: Callable[..., Any] | None = None,
+    key_builder: Callable[..., str] | None = None,
+) -> dict[str, Any]:
+    """Read source KV objects, translate them, and publish target objects."""
+
+    import torch
+
+    from goldenexperience.runtime.cross_model_reuse import (
+        default_kv_rank,
+        mooncake_setup_config,
+        object_key_string,
+    )
+
+    started = time.perf_counter()
+    try:
+        if bool(request.get("allow_unsafe", False)):
+            raise ValueError("unsafe cached KV materialization is not supported")
+        if int(request.get("world_size", 1)) != 1:
+            raise ValueError("cached KV materialization currently requires world_size=1")
+        chunk_size = int(request["chunk_size"])
+        if chunk_size <= 0:
+            raise ValueError("chunk_size must be positive")
+        all_chunk_hashes = _chunk_hashes(request.get("chunk_hashes"))
+        max_chunks = int(request.get("max_chunks", 0))
+        if max_chunks < 0:
+            raise ValueError("max_chunks must be non-negative")
+        chunk_hashes = all_chunk_hashes[:max_chunks] if max_chunks else all_chunk_hashes
+        native_prefill_ms = float(request["native_target_prefill_ms"])
+        if not math.isfinite(native_prefill_ms) or native_prefill_ms <= 0:
+            raise ValueError("native_target_prefill_ms must be finite and positive")
+        source_model_name = _required_string(request, "source_model_name")
+        target_model_name = _required_string(request, "target_model_name")
+        if source_model_name == target_model_name:
+            raise ValueError("source and target Mooncake namespaces must differ")
+        lookup_record = request.get("source_lookup_record")
+        if not isinstance(lookup_record, dict):
+            raise ValueError("source_lookup_record is required")
+        prompt_binding = request.get("prompt_binding")
+        if not isinstance(prompt_binding, dict):
+            raise ValueError("prompt_binding is required")
+
+        load_started = time.perf_counter()
+        loader = bridge_loader or Qwen3CachedKVBridge.from_artifact
+        bridge = loader(
+            request["bridge_manifest_path"],
+            source_model_path=request["source_model_path"],
+            target_model_path=request["target_model_path"],
+            device=request.get("device", "cuda:0" if torch.cuda.is_available() else "cpu"),
+        )
+        load_ms = (time.perf_counter() - load_started) * 1000
+        if request.get("direction") not in {None, bridge.manifest.direction}:
+            raise ValueError("requested direction does not match bridge artifact")
+        _validate_lookup_record(
+            lookup_record,
+            source_model_name=source_model_name,
+            chunk_hashes=all_chunk_hashes,
+            chunk_size=chunk_size,
+            source_layers=bridge.manifest.source.num_layers,
+            source_width=bridge.manifest.source.kv_width,
+            source_dtype=bridge.manifest.source.dtype,
+        )
+        _validate_prompt_binding(prompt_binding, lookup_record)
+        requested_ratio = float(
+            request.get(
+                "max_materialization_ratio",
+                bridge.manifest.thresholds.max_materialization_to_prefill_ratio,
+            )
+        )
+        artifact_ratio = bridge.manifest.thresholds.max_materialization_to_prefill_ratio
+        if (
+            not math.isfinite(requested_ratio)
+            or requested_ratio <= 0
+            or requested_ratio > artifact_ratio
+        ):
+            raise ValueError("max_materialization_ratio may only tighten the artifact gate")
+
+        rank_value = request.get("kv_rank")
+        if rank_value is None:
+            rank = 0 if key_builder is not None else default_kv_rank()
+        else:
+            rank = int(rank_value)
+            if rank < 0:
+                raise ValueError("kv_rank must be non-negative")
+        cache_salt_value = request.get("cache_salt", "")
+        if not isinstance(cache_salt_value, str):
+            raise ValueError("cache_salt must be a string")
+        cache_salt = cache_salt_value
+        build_key = key_builder or object_key_string
+        source_keys = [
+            build_key(
+                model_name=source_model_name,
+                chunk_hash=chunk_hash,
+                kv_rank=rank,
+                cache_salt=cache_salt,
+            )
+            for chunk_hash in chunk_hashes
+        ]
+        target_keys = [
+            build_key(
+                model_name=target_model_name,
+                chunk_hash=chunk_hash,
+                kv_rank=rank,
+                cache_salt=cache_salt,
+            )
+            for chunk_hash in chunk_hashes
+        ]
+        source_shape = (
+            2,
+            bridge.manifest.source.num_layers,
+            chunk_size,
+            bridge.manifest.source.kv_width,
+        )
+        target_shape = (
+            2,
+            bridge.manifest.target.num_layers,
+            chunk_size,
+            bridge.manifest.target.kv_width,
+        )
+        source_dtype = _torch_dtype(bridge.manifest.source.dtype)
+        target_dtype = _torch_dtype(bridge.manifest.target.dtype)
+        source_bytes = math.prod(source_shape) * torch.empty((), dtype=source_dtype).element_size()
+        target_bytes = math.prod(target_shape) * torch.empty((), dtype=target_dtype).element_size()
+        setup_config = mooncake_setup_config(dict(request["mooncake_setup_config"]))
+
+        operation_started = time.perf_counter()
+        with ExactMooncakeStore(setup_config, store_factory=store_factory) as store:
+            read_started = time.perf_counter()
+            reads = store.read_many_exact(source_keys, [source_bytes] * len(source_keys))
+            read_ms = (time.perf_counter() - read_started) * 1000
+
+            transform_started = time.perf_counter()
+            target_payloads: list[bytearray] = []
+            for chunk_index, read in enumerate(reads):
+                source_object = (
+                    torch.frombuffer(read.data, dtype=source_dtype).reshape(source_shape).clone()
+                )
+                target_object = bridge.transform(
+                    source_object,
+                    position_start=chunk_index * chunk_size,
+                )
+                if (
+                    tuple(target_object.shape) != target_shape
+                    or target_object.dtype != target_dtype
+                ):
+                    raise CachedKVBridgeError("bridge output does not match target object layout")
+                target_cpu = target_object.detach().to("cpu").contiguous()
+                payload = bytearray(target_cpu.view(torch.uint8).numpy().tobytes())
+                if len(payload) != target_bytes:
+                    raise CachedKVBridgeError("serialized target object size mismatch")
+                target_payloads.append(payload)
+            if torch.cuda.is_available() and bridge.device.type == "cuda":
+                torch.cuda.synchronize(bridge.device)
+            transform_ms = (time.perf_counter() - transform_started) * 1000
+
+            write_started = time.perf_counter()
+            writes = store.write_many_exact(target_keys, target_payloads)
+            write_ms = (time.perf_counter() - write_started) * 1000
+            operation_ms = (time.perf_counter() - operation_started) * 1000
+            prepublish_overall_ms = (time.perf_counter() - started) * 1000
+            actual_ratio = prepublish_overall_ms / native_prefill_ms
+            if actual_ratio > requested_ratio:
+                rollback = store.rollback(target_keys)
+                return _cached_fallback(
+                    started,
+                    "cost_gate_failed",
+                    error=(
+                        f"materialization ratio {actual_ratio:.6f} exceeds "
+                        f"{requested_ratio:.6f}; rollback={rollback}"
+                    ),
+                    timings={
+                        "artifact_load_ms": load_ms,
+                        "source_read_ms": read_ms,
+                        "transform_ms": transform_ms,
+                        "target_write_ms": write_ms,
+                        "operation_ms": operation_ms,
+                        "prepublish_overall_ms": prepublish_overall_ms,
+                    },
+                )
+
+            created_at = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+            index_records = [
+                {
+                    "schema_version": "goldenexperience.mooncake_external_index.v2",
+                    "key": write.key,
+                    "bytes": write.bytes,
+                    "chunk_hash": chunk_hash,
+                    "chunk_index": chunk_index,
+                    "model_name": target_model_name,
+                    "kv_rank": rank,
+                    "cache_salt": cache_salt,
+                    "put_rc": write.put_rc,
+                    "created_at_utc": created_at,
+                    "provenance": {
+                        "source_key": source_keys[chunk_index],
+                        "bridge_id": bridge.manifest.bridge_id,
+                        "direction": bridge.manifest.direction,
+                    },
+                }
+                for chunk_index, (chunk_hash, write) in enumerate(
+                    zip(chunk_hashes, writes, strict=True)
+                )
+            ]
+            index_started = time.perf_counter()
+            try:
+                publish_external_index(request["external_index_path"], index_records)
+            except Exception:
+                store.rollback(target_keys)
+                raise
+            index_ms = (time.perf_counter() - index_started) * 1000
+
+        overall_ms = (time.perf_counter() - started) * 1000
+        return {
+            "success": True,
+            "fallback_reason": "none",
+            "fallback_safe": False,
+            "materialized": True,
+            "injected": True,
+            "allow_unsafe": False,
+            "bridge_id": bridge.manifest.bridge_id,
+            "direction": bridge.manifest.direction,
+            "offline_quality_gate": {
+                "checks": {
+                    "artifact_approved": bridge.manifest.approved,
+                    "global_scope": bridge.manifest.scope == "global",
+                    "model_identity_verified": True,
+                }
+            },
+            "runtime_quality_gate": {
+                "checks": {
+                    "source_exact_read": all(
+                        read.read_bytes == read.expected_bytes == read.remote_bytes
+                        for read in reads
+                    ),
+                    "target_exact_write": all(
+                        write.put_rc == 0 and write.bytes == write.remote_bytes for write in writes
+                    ),
+                    "cost_gate": actual_ratio <= requested_ratio,
+                }
+            },
+            "injection": {
+                "success": True,
+                "injected_count": len(writes),
+                "keys": target_keys,
+                "bytes": sum(write.bytes for write in writes),
+                "external_index_path": str(request["external_index_path"]),
+            },
+            "source_keys": source_keys,
+            "object_shape": list(target_shape),
+            "object_dtype": f"torch.{bridge.manifest.target.dtype}",
+            "cost": {
+                "native_target_prefill_ms": native_prefill_ms,
+                "actual_materialization_ratio": actual_ratio,
+                "max_materialization_ratio": requested_ratio,
+            },
+            "timings": {
+                "artifact_load_ms": load_ms,
+                "source_read_ms": read_ms,
+                "transform_ms": transform_ms,
+                "target_write_ms": write_ms,
+                "external_index_publish_ms": index_ms,
+                "operation_ms": operation_ms,
+                "prepublish_overall_ms": prepublish_overall_ms,
+                "overall_ms": overall_ms,
+            },
+            "elapsed_ms": overall_ms,
+        }
+    except (KeyError, TypeError, ValueError) as exc:
+        return _cached_fallback(started, "invalid_materializer_request", error=str(exc))
+    except CachedKVBridgeError as exc:
+        return _cached_fallback(started, "bridge_artifact_invalid", error=str(exc))
+    except MooncakeObjectError as exc:
+        return _cached_fallback(started, "mooncake_exact_io_failed", error=str(exc))
+    except (OSError, RuntimeError) as exc:
+        return _cached_fallback(started, "materializer_runtime_failed", error=repr(exc))
+
+
+def _cached_fallback(
+    started: float,
+    reason: str,
+    *,
+    error: str,
+    timings: dict[str, float] | None = None,
+) -> dict[str, Any]:
+    elapsed_ms = (time.perf_counter() - started) * 1000
+    return {
+        "success": False,
+        "fallback_reason": reason,
+        "fallback_safe": True,
+        "materialized": False,
+        "injected": False,
+        "allow_unsafe": False,
+        "error": error,
+        "timings": {**(timings or {}), "overall_ms": elapsed_ms},
+        "elapsed_ms": elapsed_ms,
+    }
+
+
+def _validate_lookup_record(
+    record: dict[str, Any],
+    *,
+    source_model_name: str,
+    chunk_hashes: list[str],
+    chunk_size: int,
+    source_layers: int,
+    source_width: int,
+    source_dtype: str,
+) -> None:
+    record_hashes = _chunk_hashes(record.get("chunk_hashes"))
+    if record.get("model_name") != source_model_name:
+        raise ValueError("source lookup model namespace mismatch")
+    if record_hashes != chunk_hashes:
+        raise ValueError("source lookup chunk hashes do not match the current prompt")
+    if int(record.get("chunk_size", -1)) != chunk_size:
+        raise ValueError("source lookup chunk_size mismatch")
+    seq_len = int(record.get("seq_len", -1))
+    if seq_len < 0 or len(record_hashes) != seq_len // chunk_size:
+        raise ValueError("source lookup chunk count does not match seq_len")
+    expected_shape = [[2, source_layers, chunk_size, source_width]]
+    if record.get("shapes") != expected_shape:
+        raise ValueError(
+            f"source lookup shape mismatch: expected={expected_shape}, got={record.get('shapes')}"
+        )
+    if record.get("dtypes") != [f"torch.{source_dtype}"]:
+        raise ValueError("source lookup dtype mismatch")
+
+
+def _validate_prompt_binding(binding: dict[str, Any], record: dict[str, Any]) -> None:
+    source_response_id = binding.get("source_response_id")
+    lookup_request_id = record.get("request_id")
+    if not isinstance(source_response_id, str) or not source_response_id:
+        raise ValueError("prompt binding source_response_id is required")
+    if not isinstance(lookup_request_id, str) or not (
+        lookup_request_id == source_response_id
+        or lookup_request_id.startswith(source_response_id + "-")
+    ):
+        raise ValueError("source lookup request_id does not match prompt binding")
+    if binding.get("lookup_request_id") != lookup_request_id:
+        raise ValueError("prompt binding lookup_request_id mismatch")
+    if int(binding.get("token_count", -1)) != int(record.get("seq_len", -2)):
+        raise ValueError("prompt binding token count mismatch")
+    if int(binding.get("chunk_size", -1)) != int(record.get("chunk_size", -2)):
+        raise ValueError("prompt binding chunk_size mismatch")
+    token_digest = binding.get("token_ids_sha256")
+    if not isinstance(token_digest, str) or len(token_digest) != 64:
+        raise ValueError("prompt binding token_ids_sha256 is required")
+    try:
+        int(token_digest, 16)
+    except ValueError as exc:
+        raise ValueError("prompt binding token_ids_sha256 is invalid") from exc
+
+
+def _chunk_hashes(value: Any) -> list[str]:
+    if not isinstance(value, list) or not value:
+        raise ValueError("chunk_hashes must be a non-empty list")
+    hashes = [str(item).lower() for item in value]
+    if len(set(hashes)) != len(hashes):
+        raise ValueError("chunk_hashes must be unique")
+    for item in hashes:
+        text = item[2:] if item.startswith("0x") else item
+        if not text:
+            raise ValueError("chunk hash is empty")
+        int(text, 16)
+    return [item if item.startswith("0x") else "0x" + item for item in hashes]
+
+
+def _required_string(request: dict[str, Any], name: str) -> str:
+    value = request.get(name)
+    if not isinstance(value, str) or not value:
+        raise ValueError(f"{name} is required")
+    return value
+
+
+def _torch_dtype(name: str) -> Any:
+    import torch
+
+    try:
+        return {"bfloat16": torch.bfloat16, "float16": torch.float16}[name]
+    except KeyError as exc:
+        raise ValueError(f"unsupported cached KV dtype: {name}") from exc
+
+
 def materialize_qwen3_8b_to_14b(request: dict[str, Any]) -> dict[str, Any]:
+    """Run the historical two-prefill experiment without production injection."""
+
+    if request.get("inject_to_mooncake") or request.get("allow_unsafe"):
+        return {
+            "success": False,
+            "fallback_reason": "legacy_materializer_injection_disabled",
+            "fallback_safe": True,
+            "materialized": False,
+            "injected": False,
+            "allow_unsafe": False,
+            "elapsed_ms": 0.0,
+        }
+
     import torch
     from transformers import AutoModelForCausalLM
 
@@ -189,8 +603,12 @@ def materialize_qwen3_8b_to_14b(request: dict[str, Any]) -> dict[str, Any]:
     large_path = request["target_model_path"]
     dtype = torch.bfloat16
 
-    weights = torch.load(bridge_weights_path, map_location="cpu", weights_only=False)["learned_states"]
-    projectors = {int(layer): _make_hidden_projector(state, device=device) for layer, state in weights.items()}
+    weights = torch.load(bridge_weights_path, map_location="cpu", weights_only=True)[
+        "learned_states"
+    ]
+    projectors = {
+        int(layer): _make_hidden_projector(state, device=device) for layer, state in weights.items()
+    }
     source_layer_overrides = {
         int(layer): tuple(int(item) for item in state.get("source_layer_ids", ()))
         for layer, state in weights.items()
@@ -231,7 +649,10 @@ def materialize_qwen3_8b_to_14b(request: dict[str, Any]) -> dict[str, Any]:
         override_layers = source_layer_overrides.get(target_layer)
         if override_layers:
             projector_input = torch.cat(
-                [small_capture.hidden_by_layer[source_layer].to(device) for source_layer in override_layers],
+                [
+                    small_capture.hidden_by_layer[source_layer].to(device)
+                    for source_layer in override_layers
+                ],
                 dim=-1,
             )
         else:
@@ -271,7 +692,11 @@ def materialize_qwen3_8b_to_14b(request: dict[str, Any]) -> dict[str, Any]:
             "success": False,
             "fallback_reason": "runtime_quality_gate_failed",
             "offline_quality_gate": offline_gate,
-            "runtime_quality_gate": {"values": runtime_quality, "checks": runtime_checks, "thresholds": thresholds},
+            "runtime_quality_gate": {
+                "values": runtime_quality,
+                "checks": runtime_checks,
+                "thresholds": thresholds,
+            },
             "materialized": False,
             "injected": False,
             "allow_unsafe": allow_unsafe,
@@ -279,7 +704,12 @@ def materialize_qwen3_8b_to_14b(request: dict[str, Any]) -> dict[str, Any]:
         }
 
     chunk_files = []
-    shape = [2, len(large_model.model.layers), chunk_size, large_model.config.num_key_value_heads * large_model.config.head_dim]
+    shape = [
+        2,
+        len(large_model.model.layers),
+        chunk_size,
+        large_model.config.num_key_value_heads * large_model.config.head_dim,
+    ]
     for chunk_index, chunk_hash in enumerate(chunk_hashes[:max_chunks]):
         start = chunk_index * chunk_size
         end = start + chunk_size
@@ -298,7 +728,14 @@ def materialize_qwen3_8b_to_14b(request: dict[str, Any]) -> dict[str, Any]:
                 )
         path = output_dir / f"chunk_{chunk_index:05d}_{chunk_hash.replace('0x', '')}.bin"
         path.write_bytes(obj.contiguous().view(torch.uint8).numpy().tobytes())
-        chunk_files.append({"chunk_index": chunk_index, "chunk_hash": chunk_hash, "path": str(path), "bytes": path.stat().st_size})
+        chunk_files.append(
+            {
+                "chunk_index": chunk_index,
+                "chunk_hash": chunk_hash,
+                "path": str(path),
+                "bytes": path.stat().st_size,
+            }
+        )
 
     small_capture.close()
     large_capture.close()
@@ -330,7 +767,11 @@ def materialize_qwen3_8b_to_14b(request: dict[str, Any]) -> dict[str, Any]:
         "success": True,
         "fallback_reason": "none",
         "offline_quality_gate": offline_gate,
-        "runtime_quality_gate": {"values": runtime_quality, "checks": runtime_checks, "thresholds": thresholds},
+        "runtime_quality_gate": {
+            "values": runtime_quality,
+            "checks": runtime_checks,
+            "thresholds": thresholds,
+        },
         "allow_unsafe": allow_unsafe,
         "materialized": True,
         "injected": bool(injection.get("success")),
@@ -343,17 +784,29 @@ def materialize_qwen3_8b_to_14b(request: dict[str, Any]) -> dict[str, Any]:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Materialize Qwen3 8B->14B KV chunks from hidden bridge weights.")
+    parser = argparse.ArgumentParser(description="Materialize cross-size Qwen3 cached KV objects.")
     parser.add_argument("--request", required=True)
     parser.add_argument("--output", required=True)
     args = parser.parse_args()
     request = json.loads(Path(args.request).read_text(encoding="utf-8"))
     try:
-        result = materialize_qwen3_8b_to_14b(request)
+        mode = request.get("mode", "cached_kv")
+        if mode == "cached_kv":
+            result = materialize_cached_qwen3(request)
+        elif mode == "legacy_hidden_bridge_experiment":
+            result = materialize_qwen3_8b_to_14b(request)
+        else:
+            result = {
+                "success": False,
+                "fallback_reason": "invalid_materializer_mode",
+                "fallback_safe": True,
+                "materialized": False,
+                "injected": False,
+            }
     except Exception as exc:  # noqa: BLE001 - CLI boundary.
         result = {"success": False, "fallback_reason": "materializer_error", "error": repr(exc)}
     _write_json(Path(args.output), result)
-    return 0 if result.get("success") or result.get("fallback_reason") in {"quality_gate_failed", "runtime_quality_gate_failed"} else 1
+    return 0 if result.get("success") or result.get("fallback_safe") else 1
 
 
 if __name__ == "__main__":
