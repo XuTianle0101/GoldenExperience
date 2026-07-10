@@ -79,6 +79,11 @@ def _extract_text_from_stream_chunk(chunk: dict[str, Any]) -> str:
     return "".join(pieces)
 
 
+def _extract_final_answer(text: str) -> str | None:
+    matches = re.findall(r"(?im)^\s*Final answer:\s*(.+?)\s*$", text)
+    return matches[-1].strip() if matches else None
+
+
 def wait_for_server(args: argparse.Namespace) -> int:
     deadline = time.monotonic() + args.timeout
     last_error = ""
@@ -192,6 +197,16 @@ def run_request(args: argparse.Namespace) -> int:
 
     ended_unix = time.time()
     expected = str(prompt.get("expected_final_answer", "")).strip()
+    extracted_final_answer = _extract_final_answer(response_text)
+    normalized_response = " ".join(response_text.split())
+    normalized_expected = " ".join(expected.split())
+    matches_expected = bool(
+        expected
+        and (
+            extracted_final_answer == expected
+            or normalized_response == normalized_expected
+        )
+    )
     result = {
         "phase": args.phase,
         "base_url": args.base_url,
@@ -216,6 +231,8 @@ def run_request(args: argparse.Namespace) -> int:
             "text": response_text,
             "chars": len(response_text),
             "contains_expected_final_answer": bool(expected and expected in response_text),
+            "extracted_final_answer": extracted_final_answer,
+            "matches_expected_final_answer": matches_expected,
         },
         "usage": usage,
         "timing": {

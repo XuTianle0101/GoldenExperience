@@ -11,12 +11,20 @@ from goldenexperience.runtime.kv_baseline.services import (
     ProcessGroup,
     validate_runtime_requirements,
 )
+from scripts.kv_baseline.kv_baseline_client import _extract_final_answer
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 BASELINE_SCRIPT = (
     REPO_ROOT / "scripts" / "kv_baseline" / "run_vllm_lmcache_mooncake_kv_baseline.sh"
 )
 CLIENT_SCRIPT = REPO_ROOT / "scripts" / "kv_baseline" / "kv_baseline_client.py"
+
+
+def test_extract_final_answer_uses_last_explicit_answer_line() -> None:
+    text = "Final answer: draft\nReasoning\nFinal answer: 72\n"
+
+    assert _extract_final_answer(text) == "72"
+    assert _extract_final_answer("The answer is 72") is None
 
 
 def _run_baseline_dry_run(tmp_path: Path, **env_overrides: str) -> Path:
@@ -81,6 +89,37 @@ def test_mooncake_master_defaults_follow_run_storage(
     assert command[command.index("--client_ttl") + 1] == "600"
     assert command[command.index("--root_fs_dir") + 1] == str(config.mooncake_storage_root)
     assert command[command.index("--cluster_id") + 1] == "moon-run"
+
+
+def test_native_engine_phase_disables_kv_transfer(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("GE_RUN_DIR", str(tmp_path / "run"))
+    monkeypatch.setenv("GE_MODEL_PATH", "test/model")
+    config = BaselineConfig.from_env([])
+    config.ensure_dirs()
+    config.write_metadata()
+    commands: list[list[str]] = []
+
+    class FakeProcess:
+        pid = 123
+
+    group = ProcessGroup(config)
+    monkeypatch.setattr(
+        group,
+        "_start",
+        lambda command, log_path, env=None: commands.append(command) or FakeProcess(),
+    )
+    monkeypatch.setattr(
+        "goldenexperience.runtime.kv_baseline.services.ensure_command",
+        lambda command: None,
+    )
+
+    group.start_engine_server("target_native", use_kv_transfer=False)
+
+    assert len(commands) == 1
+    assert "--kv-transfer-config" not in commands[0]
 
 
 def test_filesystem_adapter_override_disables_mooncake(tmp_path: Path) -> None:

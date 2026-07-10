@@ -17,6 +17,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from goldenexperience.runtime.cross_model_reuse import (
+    evaluate_runtime_reuse,
     load_lookup_hash_records,
     mooncake_key_exists,
     object_key_string,
@@ -198,14 +199,22 @@ def _summarize(
     target_external_tokens = metrics[target_phase].get("prompt_tokens_external_kv_transfer")
     target_local_tokens = metrics[target_phase].get("prompt_tokens_local_compute")
     materializer_injected = bool(materializer.get("injected"))
-    consumed_materialized = bool(
-        materializer_injected
-        and isinstance(target_external_tokens, (int, float))
-        and target_external_tokens > 0
+    target_keys = _candidate_keys(target_config.model_name, lookup.get("chunk_hashes", []))
+    validation = evaluate_runtime_reuse(
+        materializer=materializer,
+        target_key_strings=target_keys,
+        source_key_status=source_key_status,
+        target_key_status_before=target_key_status_before,
+        target_key_status_after=target_key_status_after_materializer,
+        target_external_tokens=target_external_tokens,
+        chunk_size=config.chunk_size,
+        native_request=requests.get("target_native", {}),
+        reuse_request=requests.get(target_phase, {}),
     )
-    fallback = not consumed_materialized
+    consumed_materialized = validation["consumed_materialized_kv"]
+    fallback = target_phase == "target_fallback"
     summary = {
-        "schema_version": "goldenexperience.cross_model_hidden_bridge_runtime.v1",
+        "schema_version": "goldenexperience.cross_model_hidden_bridge_runtime.v2",
         "generated_at_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "run_id": config.run_id,
         "run_dir": str(config.run_dir),
@@ -238,20 +247,15 @@ def _summarize(
         "policy": {
             "quality_gate_required": True,
             "allow_unsafe": _env_bool("GE_ALLOW_UNSAFE_CROSS_MODEL_REUSE", "0"),
-            "automatic_reuse_allowed": materializer_injected and not materializer.get("allow_unsafe", False),
+            "automatic_reuse_allowed": validation["success"],
         },
         "result": {
             "materializer_injected": materializer_injected,
             "vllm_consumed_materialized_kv": consumed_materialized,
             "fallback_used": fallback,
-            "success": consumed_materialized and not materializer.get("allow_unsafe", False),
-            "status": (
-                "cross_model_reuse_success"
-                if consumed_materialized and not materializer.get("allow_unsafe", False)
-                else "unsafe_shadow_reuse"
-                if consumed_materialized
-                else "fallback"
-            ),
+            "success": validation["success"],
+            "status": validation["status"],
+            "validation": validation,
         },
         "phases": phases,
         "requests": requests,
@@ -271,6 +275,8 @@ def _summarize(
             "source_offload_ttft_ms": _timing(requests.get("source_offload", {}), "ttft_ms"),
             "target_phase_ttft_ms": _timing(requests.get(target_phase, {}), "ttft_ms"),
             "target_phase_e2e_ms": _timing(requests.get(target_phase, {}), "e2e_ms"),
+            "target_native_ttft_ms": _timing(requests.get("target_native", {}), "ttft_ms"),
+            "target_native_e2e_ms": _timing(requests.get("target_native", {}), "e2e_ms"),
         },
     }
     output = config.run_dir / "cross_model_hidden_bridge_summary.json"
@@ -319,7 +325,7 @@ def main() -> int:
 
     validate_runtime_requirements(config)
     processes = ProcessGroup(config)
-    phases = ["source_offload"]
+    phases = ["source_offload", "target_native"]
     target_phase = "target_fallback"
     try:
         processes.start_mooncake_services()
@@ -332,6 +338,13 @@ def main() -> int:
         processes.wait_for_engine_ready("source_offload")
         _run_phase_request(source_config, "source_offload")
         processes.stop_server("source_offload")
+        time.sleep(float(os.environ.get("GE_AFTER_ENGINE_STOP_SLEEP_SEC", "10")))
+
+        processes.config = target_config
+        processes.start_engine_server("target_native", use_kv_transfer=False)
+        processes.wait_for_engine_ready("target_native")
+        _run_phase_request(target_config, "target_native")
+        processes.stop_server("target_native")
         time.sleep(float(os.environ.get("GE_AFTER_ENGINE_STOP_SLEEP_SEC", "10")))
 
         lookup = _lookup_source_candidate(config, source_config)
@@ -421,10 +434,17 @@ def main() -> int:
         "materializer_request.json",
         "materializer_result.json",
         "requests/source_offload.json",
+        "requests/target_native.json",
         f"requests/{target_phase}.json",
         "cross_model_hidden_bridge_summary.json",
     ]:
         print(f"  {config.run_dir / relative}")
+    if (
+        summary["result"]["materializer_injected"]
+        and not summary["result"]["success"]
+        and not _env_bool("GE_ALLOW_UNSAFE_CROSS_MODEL_REUSE", "0")
+    ):
+        return 1
     return 0
 
 

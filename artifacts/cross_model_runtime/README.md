@@ -15,14 +15,15 @@ Current proof modes:
   Strict policy only reuses when the quality gate passes; otherwise target vLLM falls
   back to local prefill.
 
-Latest recorded strict result:
+Latest recorded retrieval-only result (not a current strict semantic pass):
 
-- `manifests/prefix_specific_strict_20260709T0253Z.json`: prefix-specific
-  Qwen3-8B -> Qwen3-14B bridge passed strict offline and runtime gates. Source
+- `manifests/prefix_specific_strict_20260709T0253Z.json`: historical prefix-specific
+  Qwen3-8B -> Qwen3-14B bridge passed its earlier cosine/retrieval gates. Source
   lookup found `111/111` chunks, target was a direct miss before materialization
   (`0/111`), materializer injected `111` target-shaped chunks, and target vLLM
   consumed `1776` external KV-transfer prompt tokens with `111` Mooncake GET events.
-  This artifact is only valid for calibration prefixes represented during training.
+  It has no isolated native-target comparison and its task assertion is false, so schema
+  v2 rejects it as a strict semantic pass.
 - `manifests/prefix_specific_strict_20260709T0253Z_vs_qwen3_14b_same_model_restart_20260709T0223Z.json`:
   comparison against same-model Qwen3-14B offload -> restart -> reuse. Same-model
   reuse TTFT was `143.32 ms`; prefix-specific cross-model target TTFT was

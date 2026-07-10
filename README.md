@@ -337,12 +337,13 @@ The runtime now has two cross-size paths:
   lets a fresh target vLLM consume the injected keys only if quality gates pass.
 
 The general Qwen3-8B -> Qwen3-14B low-rank bridge artifact still does **not** pass the
-strict quality gate and correctly falls back. A prefix-specific calibration artifact now
-does pass strict offline and runtime gates for the recorded calibration prefix:
-`artifacts/cross_model_runtime/manifests/prefix_specific_strict_20260709T0253Z.json`.
+quality gate and correctly falls back. The historical prefix-specific artifact at
+`artifacts/cross_model_runtime/manifests/prefix_specific_strict_20260709T0253Z.json`
+proves retrieval only: it predates the isolated native-target phase and its recorded task
+assertion is false, so it does not satisfy the current strict semantic-success gate.
 The comparison against a same-model Qwen3-14B offload -> restart -> reuse baseline is
 `artifacts/cross_model_runtime/manifests/prefix_specific_strict_20260709T0253Z_vs_qwen3_14b_same_model_restart_20260709T0223Z.json`.
-This is a scoped calibration proof, not a general-purpose 8B -> 14B bridge.
+This remains historical retrieval evidence, not a general-purpose 8B -> 14B bridge.
 
 ## GoldenScale Reuse
 

@@ -118,6 +118,121 @@ def select_lookup_candidate(
     )
 
 
+def evaluate_runtime_reuse(
+    *,
+    materializer: dict[str, Any],
+    target_key_strings: list[str],
+    source_key_status: dict[str, Any],
+    target_key_status_before: dict[str, Any],
+    target_key_status_after: dict[str, Any] | None,
+    target_external_tokens: float | int | None,
+    chunk_size: int,
+    native_request: dict[str, Any],
+    reuse_request: dict[str, Any],
+) -> dict[str, Any]:
+    """Validate cache provenance, transfer accounting, and target output equivalence."""
+
+    injection = materializer.get("injection")
+    injection = injection if isinstance(injection, dict) else {}
+    injected_keys = {str(key) for key in injection.get("keys", [])}
+    target_keys = set(target_key_strings)
+    before_found = {str(key) for key in target_key_status_before.get("found", [])}
+    before_missing = {str(key) for key in target_key_status_before.get("missing", [])}
+    after = target_key_status_after or {}
+    after_found = {str(key) for key in after.get("found", [])}
+    after_missing = {str(key) for key in after.get("missing", [])}
+    injected_count = int(injection.get("injected_count") or 0)
+    expected_external_tokens = injected_count * chunk_size
+
+    offline_checks = materializer.get("offline_quality_gate", {}).get("checks", {})
+    runtime_checks = materializer.get("runtime_quality_gate", {}).get("checks", {})
+    checks = {
+        "materializer_completed": bool(
+            materializer.get("success")
+            and materializer.get("materialized")
+            and materializer.get("injected")
+        ),
+        "safe_policy": not bool(materializer.get("allow_unsafe")),
+        "offline_quality_gate": _all_checks_pass(offline_checks),
+        "runtime_quality_gate": _all_checks_pass(runtime_checks),
+        "source_keys_present": bool(
+            source_key_status.get("total", 0) > 0
+            and source_key_status.get("found_count") == source_key_status.get("total")
+            and source_key_status.get("missing_count") == 0
+        ),
+        "target_keys_absent_before": bool(
+            target_keys and not before_found and before_missing == target_keys
+        ),
+        "injection_keys_match": bool(
+            injected_keys
+            and injected_keys <= target_keys
+            and injected_count == len(injected_keys)
+        ),
+        "target_keys_present_after": bool(
+            injected_keys and after_found == injected_keys and not (after_missing & injected_keys)
+        ),
+        "external_token_count": bool(
+            isinstance(target_external_tokens, (int, float))
+            and target_external_tokens == expected_external_tokens
+            and expected_external_tokens > 0
+        ),
+        "native_task_assertion": _request_task_passed(native_request),
+        "reuse_task_assertion": _request_task_passed(reuse_request),
+        "native_output_match": _normalized_response(native_request)
+        == _normalized_response(reuse_request)
+        != "",
+    }
+    reasons = [name for name, passed in checks.items() if not passed]
+    infrastructure_checks = (
+        "materializer_completed",
+        "offline_quality_gate",
+        "runtime_quality_gate",
+        "source_keys_present",
+        "target_keys_absent_before",
+        "injection_keys_match",
+        "target_keys_present_after",
+        "external_token_count",
+    )
+    consumed = all(checks[name] for name in infrastructure_checks)
+    success = consumed and all(checks.values())
+    if success:
+        status = "cross_model_reuse_success"
+    elif materializer.get("allow_unsafe") and materializer.get("injected"):
+        status = "unsafe_shadow_reuse"
+    elif consumed:
+        status = "quality_validation_failed"
+    elif materializer.get("injected"):
+        status = "runtime_validation_failed"
+    else:
+        status = "fallback"
+    return {
+        "checks": checks,
+        "failure_reasons": reasons,
+        "expected_external_tokens": expected_external_tokens,
+        "consumed_materialized_kv": consumed,
+        "success": success,
+        "status": status,
+    }
+
+
+def _all_checks_pass(checks: Any) -> bool:
+    return isinstance(checks, dict) and bool(checks) and all(value is True for value in checks.values())
+
+
+def _request_task_passed(request: dict[str, Any]) -> bool:
+    expected = request.get("prompt", {}).get("expected_final_answer")
+    if not expected:
+        return False
+    return request.get("response", {}).get("matches_expected_final_answer") is True
+
+
+def _normalized_response(request: dict[str, Any]) -> str:
+    text = request.get("response", {}).get("text")
+    if not isinstance(text, str):
+        return ""
+    return " ".join(text.split())
+
+
 def token_ids_from_prompt(
     *,
     tokenizer_path: str,

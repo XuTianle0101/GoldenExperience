@@ -442,7 +442,7 @@ class ProcessGroup:
             f"{self.config.lmcache_mp_host}:{self.config.lmcache_mp_port}"
         )
 
-    def start_engine_server(self, phase: str) -> None:
+    def start_engine_server(self, phase: str, *, use_kv_transfer: bool = True) -> None:
         log_path = self.config.log_dir / f"{phase}_server.log"
         print(
             f"Starting {phase} {self.config.engine} server on "
@@ -462,10 +462,12 @@ class ProcessGroup:
             self.config.port,
             "--served-model-name",
             self.config.model_name,
-            "--kv-transfer-config",
-            self.config.vllm_kv_transfer_config_json(),
-            *self.config.engine_args,
         ]
+        if use_kv_transfer:
+            command.extend(
+                ["--kv-transfer-config", self.config.vllm_kv_transfer_config_json()]
+            )
+        command.extend(self.config.engine_args)
         self.server = self._start(command, log_path, env)
         (self.config.run_dir / f"{phase}.pid").write_text(
             f"{self.server.pid}\n", encoding="utf-8"
