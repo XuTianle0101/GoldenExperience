@@ -18,6 +18,11 @@ unopened and no candidate weights are checked in.
 v2 learned per-channel baseline under identical rank, data, and prompt settings. v2
 improves both directions, but still fails the end-to-end accuracy gates.
 
+`regularization_capacity_sweep_20260710.json` records the validation-only ridge and rank
+sweep after the v2 scaled baseline. Stronger regularization and more supervised positions
+substantially improve both directions, but the best candidates remain below every
+production output-quality threshold.
+
 Only a `CachedKVBridgeManifest` whose derived `approved` property is true may be used by
 the runtime materializer. Missing held-out accuracy or Mooncake cost evidence keeps a
 manifest fail closed.

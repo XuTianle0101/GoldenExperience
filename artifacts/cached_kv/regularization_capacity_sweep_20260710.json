@@ -1,0 +1,92 @@
+{
+  "automatic_reuse_approved": false,
+  "best_validation_candidates": {
+    "14b_to_8b": {
+      "bridge_task_score": 0.8125,
+      "greedy_continuation_match_rate": 0.609375,
+      "key_cosine": 0.9405711255967617,
+      "next_token_top1_agreement": 0.68359375,
+      "perplexity_drift_pct": 7.679931310596699,
+      "rank": 512,
+      "ridge_lambda": 1000.0,
+      "training_samples": 1790,
+      "value_cosine": 0.822261668741703
+    },
+    "8b_to_14b": {
+      "bridge_task_score": 0.9375,
+      "greedy_continuation_match_rate": 0.828125,
+      "key_cosine": 0.9434420131146908,
+      "next_token_top1_agreement": 0.76953125,
+      "perplexity_drift_pct": 22.70806037406839,
+      "rank": 512,
+      "ridge_lambda": 1000.0,
+      "training_samples": 1790,
+      "value_cosine": 0.8271610774099827
+    }
+  },
+  "dataset_split_hashes": {
+    "test": "136f6c1c357f5f31246a5ac455c46ec8f17d6604cf9d8d901f802983ec956908",
+    "train": "d38b8509c793475513207595be43722a6d92073b1c9efffc2fea5b03ceead4e0",
+    "validation": "386bc5df4af6382325b9a4f802352aace5ab9ef2b7d6441e5420ad6c31000a8f"
+  },
+  "fixed_experiment": {
+    "greedy_tokens": 16,
+    "source_window": 3,
+    "suffix_tokens": 16,
+    "validation_prompts": 16
+  },
+  "forward_ridge_sweep_rank256": [
+    {
+      "bridge_task_score": 0.6875,
+      "greedy_continuation_match_rate": 0.48828125,
+      "next_token_top1_agreement": 0.48046875,
+      "perplexity_drift_pct": 209.55038486749618,
+      "ridge_lambda": 1.0
+    },
+    {
+      "bridge_task_score": 0.75,
+      "greedy_continuation_match_rate": 0.5703125,
+      "next_token_top1_agreement": 0.5234375,
+      "perplexity_drift_pct": 199.95458617826466,
+      "ridge_lambda": 10.0
+    },
+    {
+      "bridge_task_score": 0.875,
+      "greedy_continuation_match_rate": 0.65625,
+      "next_token_top1_agreement": 0.546875,
+      "perplexity_drift_pct": 163.5144470358226,
+      "ridge_lambda": 100.0
+    },
+    {
+      "bridge_task_score": 0.8125,
+      "greedy_continuation_match_rate": 0.61328125,
+      "next_token_top1_agreement": 0.6328125,
+      "perplexity_drift_pct": 75.87530518624196,
+      "ridge_lambda": 1000.0
+    },
+    {
+      "bridge_task_score": 0.4375,
+      "greedy_continuation_match_rate": 0.3515625,
+      "next_token_top1_agreement": 0.68359375,
+      "perplexity_drift_pct": 65.77444903951343,
+      "ridge_lambda": 10000.0
+    }
+  ],
+  "generated_at_utc": "2026-07-10T07:56:47Z",
+  "model_identities": {
+    "qwen3_14b_weights_sha256": "cb0d7f0a0bec1ee514630fefd9d2468fe4f61a684cb154f3f288bf42eec70661",
+    "qwen3_8b_weights_sha256": "ee9fc280e4d520ded7fea3db8f0eb6f8c596b0babe95b081b6bcb60544f98b38",
+    "tokenizer_sha256": "7dc5ac23a90090f6b3f3545fdd8a1da2d262a7916ec4649e660f03180cbb403c"
+  },
+  "rejection_reasons": [
+    "best validation candidates remain below key and value cosine thresholds",
+    "best validation candidates remain below next-token and greedy continuation thresholds",
+    "best validation candidates remain above perplexity drift and task-drop thresholds",
+    "training and validation prompt diversity is too small for final selection",
+    "sealed test split remains unopened",
+    "runtime Mooncake cost evidence is unavailable because the local ABI is incompatible"
+  ],
+  "runtime_cost_measured": false,
+  "schema_version": "goldenexperience.cached_kv_regularization_capacity_sweep.v1",
+  "sealed_test_opened": false
+}
