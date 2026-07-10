@@ -5,10 +5,12 @@ from pathlib import Path
 from goldenexperience.runtime.cross_model_materializer import materialize_qwen3_8b_to_14b
 from goldenexperience.runtime.cross_model_reuse import (
     chunk_hash_hex_to_bytes,
+    common_chunk_hash_prefix,
     evaluate_runtime_reuse,
     mooncake_setup_config,
     object_key_string,
     select_lookup_candidate,
+    token_ids_sha256,
 )
 
 
@@ -90,19 +92,77 @@ def test_mooncake_setup_config_strips_lmcache_only_keys() -> None:
     }
 
 
-def test_select_lookup_candidate_prefers_long_source_record() -> None:
+def test_select_lookup_candidate_requires_current_request_identity() -> None:
     record = select_lookup_candidate(
         [
-            {"model_name": "target", "seq_len": 100, "chunk_hashes": ["0x1"]},
-            {"model_name": "source", "seq_len": 24, "chunk_hashes": ["0x2"]},
-            {"model_name": "source", "seq_len": 1790, "chunk_hashes": ["0x3", "0x4"]},
+            {
+                "request_id": "request-a-worker",
+                "model_name": "source",
+                "seq_len": 32,
+                "chunk_size": 16,
+                "chunk_hashes": ["0xaa", "0xab"],
+            },
+            {
+                "request_id": "request-b-worker",
+                "model_name": "source",
+                "seq_len": 32,
+                "chunk_size": 16,
+                "chunk_hashes": ["0xba", "0xbb"],
+            },
         ],
         model_name="source",
+        request_id="request-b",
+        expected_seq_len=32,
+        expected_chunk_size=16,
     )
 
     assert record is not None
-    assert record["seq_len"] == 1790
-    assert record["chunk_hashes"] == ["0x3", "0x4"]
+    assert record["request_id"] == "request-b-worker"
+    assert record["chunk_hashes"] == ["0xba", "0xbb"]
+
+
+def test_select_lookup_candidate_fails_closed_without_prompt_binding() -> None:
+    records = [{"model_name": "source", "chunk_hashes": ["0xaa"]}]
+
+    assert select_lookup_candidate(records, model_name="source") is None
+    assert (
+        select_lookup_candidate(
+            records,
+            model_name="source",
+            expected_chunk_hashes=["0xbb"],
+        )
+        is None
+    )
+    partial_record = {
+        "request_id": "request-a-worker",
+        "model_name": "source",
+        "seq_len": 32,
+        "chunk_size": 16,
+        "chunk_hashes": ["0xaa"],
+    }
+    assert (
+        select_lookup_candidate(
+            [partial_record],
+            model_name="source",
+            request_id="request-a",
+            expected_seq_len=32,
+            expected_chunk_size=16,
+        )
+        is None
+    )
+
+
+def test_cross_prompt_hashes_only_share_exact_complete_prefix_chunks() -> None:
+    prompt_a = ["0x11", "0x22", "0x33"]
+    equal_length_prompt_b = ["0xaa", "0xbb", "0xcc"]
+    prompt_c = ["0x11", "0x22", "0x44"]
+
+    assert common_chunk_hash_prefix(prompt_a, equal_length_prompt_b) == []
+    assert common_chunk_hash_prefix(prompt_a, prompt_c) == ["0x11", "0x22"]
+
+
+def test_token_id_digest_distinguishes_equal_length_prompts() -> None:
+    assert token_ids_sha256([1, 2, 3, 4]) != token_ids_sha256([4, 3, 2, 1])
 
 
 def test_runtime_reuse_requires_complete_provenance_and_matching_output() -> None:

@@ -22,6 +22,7 @@ from goldenexperience.runtime.cross_model_reuse import (
     mooncake_key_exists,
     object_key_string,
     select_lookup_candidate,
+    token_ids_sha256,
     token_ids_from_prompt,
 )
 from goldenexperience.runtime.kv_baseline.config import BaselineConfig
@@ -60,7 +61,12 @@ def _set_default_run_env() -> None:
     os.environ.setdefault("GE_RUN_ID", run_id)
     os.environ.setdefault(
         "GE_RUN_DIR",
-        str(REPO_ROOT / "artifacts" / "cross_model_runtime" / f"qwen3_8b_to_14b_hidden_bridge_{run_id}"),
+        str(
+            REPO_ROOT
+            / "artifacts"
+            / "cross_model_runtime"
+            / f"qwen3_8b_to_14b_hidden_bridge_{run_id}"
+        ),
     )
 
 
@@ -90,14 +96,34 @@ def _candidate_keys(model_name: str, chunk_hashes: list[str]) -> list[str]:
     return [object_key_string(model_name=model_name, chunk_hash=item) for item in chunk_hashes]
 
 
-def _lookup_source_candidate(config: BaselineConfig, source_config: BaselineConfig) -> dict[str, Any]:
+def _lookup_source_candidate(
+    config: BaselineConfig,
+    source_config: BaselineConfig,
+    token_ids: list[int],
+) -> dict[str, Any]:
     records = load_lookup_hash_records(config.lmcache_mp_lookup_hash_log_dir)
-    candidate = select_lookup_candidate(records, model_name=source_config.model_name)
+    source_request = _phase_request(config, "source_offload")
+    source_response_id = source_request.get("response", {}).get("id")
+    if not isinstance(source_response_id, str) or not source_response_id:
+        return {
+            "success": False,
+            "fallback_reason": "source_request_identity_missing",
+            "records_scanned": len(records),
+        }
+    candidate = select_lookup_candidate(
+        records,
+        model_name=source_config.model_name,
+        request_id=source_response_id,
+        expected_seq_len=len(token_ids),
+        expected_chunk_size=config.chunk_size,
+    )
     if candidate is None:
         return {
             "success": False,
-            "fallback_reason": "source_candidate_not_found",
+            "fallback_reason": "prompt_bound_source_candidate_not_found",
             "records_scanned": len(records),
+            "source_response_id": source_response_id,
+            "token_ids_sha256": token_ids_sha256(token_ids),
         }
     chunk_hashes = [str(item) for item in candidate.get("chunk_hashes", [])]
     source_keys = _candidate_keys(source_config.model_name, chunk_hashes)
@@ -107,6 +133,13 @@ def _lookup_source_candidate(config: BaselineConfig, source_config: BaselineConf
         "record": candidate,
         "chunk_hashes": chunk_hashes,
         "source_key_strings": source_keys,
+        "binding": {
+            "source_response_id": source_response_id,
+            "lookup_request_id": candidate.get("request_id"),
+            "token_count": len(token_ids),
+            "token_ids_sha256": token_ids_sha256(token_ids),
+            "chunk_size": config.chunk_size,
+        },
     }
 
 
@@ -132,11 +165,21 @@ def _run_materializer(
         "output_dir": str(config.run_dir / "materialized_chunks"),
         "bridge_summary_path": os.environ.get(
             "GE_BRIDGE_SUMMARY_PATH",
-            str(REPO_ROOT / "artifacts" / "hidden_bridge" / "qwen3_hidden_bridge_qwen3_8b_to_14b_prefix32.json"),
+            str(
+                REPO_ROOT
+                / "artifacts"
+                / "hidden_bridge"
+                / "qwen3_hidden_bridge_qwen3_8b_to_14b_prefix32.json"
+            ),
         ),
         "bridge_weights_path": os.environ.get(
             "GE_BRIDGE_WEIGHTS_PATH",
-            str(REPO_ROOT / "artifacts" / "hidden_bridge" / "qwen3_hidden_bridge_qwen3_8b_to_14b_prefix32.pt"),
+            str(
+                REPO_ROOT
+                / "artifacts"
+                / "hidden_bridge"
+                / "qwen3_hidden_bridge_qwen3_8b_to_14b_prefix32.pt"
+            ),
         ),
         "allow_unsafe": _env_bool("GE_ALLOW_UNSAFE_CROSS_MODEL_REUSE", "0"),
         "device": os.environ.get("GE_MATERIALIZER_DEVICE", "cuda:0"),
@@ -191,8 +234,7 @@ def _summarize(
     requests = {phase: _phase_request(config, phase) for phase in phases}
     metrics = {phase: _metrics(config.metrics_dir / f"{phase}.prom") for phase in phases}
     logs = {
-        phase: _log_evidence(config.log_dir / f"{phase}_lmcache_mp_server.log")
-        for phase in phases
+        phase: _log_evidence(config.log_dir / f"{phase}_lmcache_mp_server.log") for phase in phases
     }
     target_phase = phases[-1]
     target_hits = metrics[target_phase].get("external_prefix_cache_hits_total")
@@ -281,7 +323,9 @@ def _summarize(
     }
     output = config.run_dir / "cross_model_hidden_bridge_summary.json"
     _write_json(output, summary)
-    manifest = REPO_ROOT / "artifacts" / "cross_model_runtime" / "manifests" / f"{config.run_id}.json"
+    manifest = (
+        REPO_ROOT / "artifacts" / "cross_model_runtime" / "manifests" / f"{config.run_id}.json"
+    )
     _write_json(manifest, summary)
     return summary
 
@@ -303,7 +347,9 @@ def main() -> int:
     source_config = replace(config, model_path=source_model_path, model_name=source_model_name)
     target_config = replace(config, model_path=target_model_path, model_name=target_model_name)
     external_index_path = Path(
-        os.environ.get("GE_MOONCAKE_EXTERNAL_INDEX", str(config.run_dir / "mooncake_external_index.jsonl"))
+        os.environ.get(
+            "GE_MOONCAKE_EXTERNAL_INDEX", str(config.run_dir / "mooncake_external_index.jsonl")
+        )
     )
     os.environ["GE_MOONCAKE_EXTERNAL_INDEX"] = str(external_index_path)
 
@@ -347,11 +393,31 @@ def main() -> int:
         processes.stop_server("target_native")
         time.sleep(float(os.environ.get("GE_AFTER_ENGINE_STOP_SLEEP_SEC", "10")))
 
-        lookup = _lookup_source_candidate(config, source_config)
+        try:
+            token_ids = token_ids_from_prompt(
+                tokenizer_path=target_config.model_path,
+                prompt_file=config.prompt_file,
+                prompt_id=config.prompt_id,
+            )
+            tokenization: dict[str, Any] = {
+                "success": True,
+                "token_count": len(token_ids),
+                "token_ids_sha256": token_ids_sha256(token_ids),
+            }
+        except Exception as exc:  # noqa: BLE001 - runtime fallback boundary.
+            token_ids = []
+            tokenization = {
+                "success": False,
+                "error": repr(exc),
+            }
+        lookup = (
+            _lookup_source_candidate(config, source_config, token_ids)
+            if tokenization["success"]
+            else {"success": False, "fallback_reason": "tokenization_failed"}
+        )
         source_key_status = {"skipped": True}
         target_key_status_before = {"skipped": True}
         target_key_status_after_materializer = None
-        tokenization: dict[str, Any] = {"success": False}
         materializer: dict[str, Any] = {
             "success": False,
             "fallback_reason": lookup.get("fallback_reason", "not_started"),
@@ -368,18 +434,10 @@ def main() -> int:
                 setup_config=config.l2_adapter(),
                 key_strings=target_keys,
             )
-            token_ids = token_ids_from_prompt(
-                tokenizer_path=target_config.model_path,
-                prompt_file=config.prompt_file,
-                prompt_id=config.prompt_id,
-            )
             seq_len = int(lookup["record"].get("seq_len") or 0)
-            tokenization = {
-                "success": len(token_ids) == seq_len,
-                "token_count": len(token_ids),
-                "lookup_seq_len": seq_len,
-            }
-            if len(token_ids) == seq_len:
+            tokenization["lookup_seq_len"] = seq_len
+            tokenization["success"] = len(token_ids) == seq_len
+            if tokenization["success"]:
                 materializer = _run_materializer(
                     config=config,
                     source_config=source_config,

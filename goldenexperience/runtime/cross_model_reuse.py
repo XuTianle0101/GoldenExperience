@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import ctypes
+import hashlib
 import json
 import os
+import struct
 import time
 from pathlib import Path
 from typing import Any
@@ -98,24 +100,117 @@ def select_lookup_candidate(
     records: list[dict[str, Any]],
     *,
     model_name: str,
+    request_id: str | None = None,
+    expected_chunk_hashes: list[str] | None = None,
+    expected_seq_len: int | None = None,
+    expected_chunk_size: int | None = None,
     min_chunks: int = 1,
 ) -> dict[str, Any] | None:
+    """Select only a lookup record bound to the current prompt request."""
+
+    if min_chunks <= 0 or (not request_id and expected_chunk_hashes is None):
+        return None
+    normalized_expected = (
+        [_normalize_chunk_hash(item) for item in expected_chunk_hashes]
+        if expected_chunk_hashes is not None
+        else None
+    )
     candidates = [
         record
         for record in records
-        if record.get("model_name") == model_name
-        and len(record.get("chunk_hashes") or []) >= min_chunks
+        if _lookup_record_matches(
+            record,
+            model_name=model_name,
+            request_id=request_id,
+            expected_chunk_hashes=normalized_expected,
+            expected_seq_len=expected_seq_len,
+            expected_chunk_size=expected_chunk_size,
+            min_chunks=min_chunks,
+        )
     ]
     if not candidates:
         return None
     return max(
         candidates,
-        key=lambda record: (
-            int(record.get("seq_len") or 0),
-            len(record.get("chunk_hashes") or []),
-            float(record.get("timestamp") or 0.0),
-        ),
+        key=_lookup_record_timestamp,
     )
+
+
+def common_chunk_hash_prefix(left: list[str], right: list[str]) -> list[str]:
+    """Return only the exact rolling-hash prefix shared by two prompts."""
+
+    matched: list[str] = []
+    for left_item, right_item in zip(left, right, strict=False):
+        normalized_left = _normalize_chunk_hash(left_item)
+        if normalized_left != _normalize_chunk_hash(right_item):
+            break
+        matched.append(normalized_left)
+    return matched
+
+
+def token_ids_sha256(token_ids: list[int]) -> str:
+    """Create a stable prompt identity without storing prompt token contents."""
+
+    digest = hashlib.sha256()
+    digest.update(len(token_ids).to_bytes(8, "big"))
+    for token_id in token_ids:
+        if token_id < 0 or token_id > 0xFFFFFFFF:
+            raise ValueError("token ids must fit in an unsigned 32-bit integer")
+        digest.update(struct.pack(">I", token_id))
+    return digest.hexdigest()
+
+
+def _request_ids_match(record_id: str, expected_id: str) -> bool:
+    return record_id == expected_id or record_id.startswith(expected_id + "-")
+
+
+def _lookup_record_matches(
+    record: dict[str, Any],
+    *,
+    model_name: str,
+    request_id: str | None,
+    expected_chunk_hashes: list[str] | None,
+    expected_seq_len: int | None,
+    expected_chunk_size: int | None,
+    min_chunks: int,
+) -> bool:
+    try:
+        hashes = record.get("chunk_hashes")
+        if not isinstance(hashes, list) or len(hashes) < min_chunks:
+            return False
+        if record.get("model_name") != model_name:
+            return False
+        if request_id is not None and not _request_ids_match(
+            str(record.get("request_id") or ""), request_id
+        ):
+            return False
+        if expected_seq_len is not None and int(record.get("seq_len")) != expected_seq_len:
+            return False
+        if expected_chunk_size is not None and int(record.get("chunk_size")) != expected_chunk_size:
+            return False
+        if expected_seq_len is not None and expected_chunk_size is not None:
+            if len(hashes) != expected_seq_len // expected_chunk_size:
+                return False
+        if expected_chunk_hashes is not None:
+            return [_normalize_chunk_hash(item) for item in hashes] == expected_chunk_hashes
+        float(record.get("timestamp") or 0.0)
+        return True
+    except (TypeError, ValueError):
+        return False
+
+
+def _lookup_record_timestamp(record: dict[str, Any]) -> float:
+    return float(record.get("timestamp") or 0.0)
+
+
+def _normalize_chunk_hash(value: str) -> str:
+    text = str(value).lower()
+    if text.startswith("0x"):
+        text = text[2:]
+    if not text:
+        raise ValueError("chunk hash is empty")
+    int(text, 16)
+    return "0x" + text
 
 
 def evaluate_runtime_reuse(
@@ -164,9 +259,7 @@ def evaluate_runtime_reuse(
             target_keys and not before_found and before_missing == target_keys
         ),
         "injection_keys_match": bool(
-            injected_keys
-            and injected_keys <= target_keys
-            and injected_count == len(injected_keys)
+            injected_keys and injected_keys <= target_keys and injected_count == len(injected_keys)
         ),
         "target_keys_present_after": bool(
             injected_keys and after_found == injected_keys and not (after_missing & injected_keys)
@@ -216,7 +309,11 @@ def evaluate_runtime_reuse(
 
 
 def _all_checks_pass(checks: Any) -> bool:
-    return isinstance(checks, dict) and bool(checks) and all(value is True for value in checks.values())
+    return (
+        isinstance(checks, dict)
+        and bool(checks)
+        and all(value is True for value in checks.values())
+    )
 
 
 def _request_task_passed(request: dict[str, Any]) -> bool:
