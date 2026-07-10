@@ -439,6 +439,11 @@ python3 scripts/benchmark_qwen3_cached_kv_cost.py \
   --output artifacts/cached_kv/qwen3_8b_to_14b.cost.json
 ```
 
+Finalization recomputes the report P95 values and accepts them only when the report binds
+the exact bridge weights, candidate manifest, direction, validation split, source/target
+model weights, real Mooncake backend, and a 20-sample native vLLM prefill report. Both
+report SHA values become part of the content-addressed final manifest.
+
 Run a resident materializer worker with one JSON request and compact JSON response per
 line. Send `mode=preload_cached_kv_bridge` first to load an already approved artifact
 without touching Mooncake, then send normal `mode=cached_kv` requests:

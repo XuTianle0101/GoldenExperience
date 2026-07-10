@@ -8,7 +8,9 @@ import pytest
 import torch
 
 from goldenexperience.benchmarks.cached_kv_cost import (
+    CACHED_KV_COST_SCHEMA_VERSION,
     NATIVE_PREFILL_COST_SCHEMA_VERSION,
+    load_cached_kv_cost_evidence,
     load_native_prefill_evidence,
     run_cached_kv_cost_benchmark,
 )
@@ -470,4 +472,62 @@ def test_native_prefill_evidence_binds_target_identity_and_runtime(tmp_path: Pat
             report_path,
             bridge=bridge,
             expected_tokens=256,
+        )
+
+
+def test_cost_evidence_recomputes_p95_and_binds_exact_weights(tmp_path: Path) -> None:
+    report_path = tmp_path / "cost.json"
+    report = {
+        "schema_version": CACHED_KV_COST_SCHEMA_VERSION,
+        "direction": "8b_to_14b",
+        "weights_sha256": "a" * 64,
+        "source_model_weights_sha256": "b" * 64,
+        "target_model_weights_sha256": "c" * 64,
+        "validation_dataset_sha256": "d" * 64,
+        "store_backend": "mooncake_store",
+        "native_prefill_backend": "vllm_native_target",
+        "eligible_for_approval": True,
+        "non_publishing": True,
+        "all_temporary_targets_rolled_back": True,
+        "external_index_published": False,
+        "candidate_manifest_sha256": "e" * 64,
+        "native_prefill_report_sha256": "f" * 64,
+        "source_keys_sha256": "1" * 64,
+        "setup_config_sha256": "2" * 64,
+        "iterations": 20,
+        "native_prefill_samples": 20,
+        "p95_source_read_transform_put_ms": 10.0,
+        "p95_target_prefill_ms": 100.0,
+        "p95_materialization_to_prefill_ratio": 0.1,
+        "measurements_ms": {
+            "read_transform_put": [10.0] * 20,
+            "native_target_prefill": [100.0] * 20,
+        },
+    }
+    report_path.write_text(json.dumps(report), encoding="utf-8")
+
+    evidence = load_cached_kv_cost_evidence(
+        report_path,
+        direction="8b_to_14b",
+        weights_sha256="a" * 64,
+        source_model_weights_sha256="b" * 64,
+        target_model_weights_sha256="c" * 64,
+        validation_dataset_sha256="d" * 64,
+    )
+
+    assert evidence["p95_source_read_transform_put_ms"] == 10.0
+    assert evidence["p95_target_prefill_ms"] == 100.0
+    assert evidence["cost_candidate_manifest_sha256"] == "e" * 64
+    assert len(evidence["cost_report_sha256"]) == 64
+
+    report["p95_source_read_transform_put_ms"] = 9.0
+    report_path.write_text(json.dumps(report), encoding="utf-8")
+    with pytest.raises(ValueError, match="materialization P95 is inconsistent"):
+        load_cached_kv_cost_evidence(
+            report_path,
+            direction="8b_to_14b",
+            weights_sha256="a" * 64,
+            source_model_weights_sha256="b" * 64,
+            target_model_weights_sha256="c" * 64,
+            validation_dataset_sha256="d" * 64,
         )

@@ -370,6 +370,8 @@ def test_quality_evidence_fails_closed_without_runtime_cost_measurement() -> Non
         bridge_task_score=0.99,
         task_score_drop_pct=0.5,
         greedy_continuation_match_rate=0.99,
+        cost_report_sha256=None,
+        cost_candidate_manifest_sha256=None,
         p95_source_read_transform_put_ms=None,
         p95_target_prefill_ms=None,
     )
@@ -378,6 +380,8 @@ def test_quality_evidence_fails_closed_without_runtime_cost_measurement() -> Non
 
     assert "p95_source_read_transform_put_ms is required" in errors
     assert "p95_target_prefill_ms is required" in errors
+    assert "cost_report_sha256 must be a SHA-256 digest" in errors
+    assert "cost_candidate_manifest_sha256 must be a SHA-256 digest" in errors
 
 
 def test_quality_evidence_rejects_an_invalid_native_task_baseline() -> None:
@@ -395,6 +399,8 @@ def test_quality_evidence_rejects_an_invalid_native_task_baseline() -> None:
         bridge_task_score=0.0,
         task_score_drop_pct=0.0,
         greedy_continuation_match_rate=0.99,
+        cost_report_sha256="b" * 64,
+        cost_candidate_manifest_sha256="c" * 64,
         p95_source_read_transform_put_ms=10.0,
         p95_target_prefill_ms=20.0,
     )

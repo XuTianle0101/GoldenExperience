@@ -10,7 +10,7 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
-CACHED_KV_SCHEMA_VERSION = "goldenexperience.qwen3_cached_kv_bridge.v2"
+CACHED_KV_SCHEMA_VERSION = "goldenexperience.qwen3_cached_kv_bridge.v3"
 _SHA256_LENGTH = 64
 _TOKENIZER_FILES = (
     "tokenizer.json",
@@ -173,6 +173,8 @@ class CachedKVQualityEvidence:
     bridge_task_score: float
     task_score_drop_pct: float
     greedy_continuation_match_rate: float
+    cost_report_sha256: str | None
+    cost_candidate_manifest_sha256: str | None
     p95_source_read_transform_put_ms: float | None
     p95_target_prefill_ms: float | None
 
@@ -216,6 +218,10 @@ class CachedKVQualityEvidence:
             errors.append("p95_target_prefill_ms is required")
         elif not math.isfinite(self.p95_target_prefill_ms) or self.p95_target_prefill_ms <= 0:
             errors.append("p95_target_prefill_ms must be finite and positive")
+        if not _is_sha256(self.cost_report_sha256):
+            errors.append("cost_report_sha256 must be a SHA-256 digest")
+        if not _is_sha256(self.cost_candidate_manifest_sha256):
+            errors.append("cost_candidate_manifest_sha256 must be a SHA-256 digest")
         return errors
 
     def gate_errors(self, thresholds: CachedKVQualityThresholds) -> list[str]:

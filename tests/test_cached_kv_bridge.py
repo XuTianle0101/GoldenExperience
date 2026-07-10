@@ -77,6 +77,8 @@ def _quality(test_hash: str) -> CachedKVQualityEvidence:
         bridge_task_score=0.99,
         task_score_drop_pct=0.5,
         greedy_continuation_match_rate=0.99,
+        cost_report_sha256="b" * 64,
+        cost_candidate_manifest_sha256="c" * 64,
         p95_source_read_transform_put_ms=10.0,
         p95_target_prefill_ms=20.0,
     )

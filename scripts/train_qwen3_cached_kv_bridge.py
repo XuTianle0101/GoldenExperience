@@ -19,6 +19,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
+from goldenexperience.benchmarks.cached_kv_cost import load_cached_kv_cost_evidence
 from goldenexperience.size_variant.cached_kv_bridge import safetensors_metadata
 from goldenexperience.size_variant.cached_kv_dataset import (
     CachedKVPrompt,
@@ -441,28 +442,13 @@ def evaluate_split(
     }
 
 
-def _cost_evidence(path: Path | None, direction: str) -> tuple[float | None, float | None]:
-    if path is None:
-        return None, None
-    payload = json.loads(path.read_text(encoding="utf-8"))
-    if "directions" in payload:
-        payload = payload["directions"].get(direction, {})
-    read_transform_put = payload.get("p95_source_read_transform_put_ms")
-    target_prefill = payload.get("p95_target_prefill_ms")
-    return (
-        float(read_transform_put) if read_transform_put is not None else None,
-        float(target_prefill) if target_prefill is not None else None,
-    )
-
-
 def _quality_evidence(
     metrics: dict[str, Any],
     *,
     test_hash: str,
-    cost_report: Path | None,
-    direction: str,
+    cost_evidence: dict[str, Any] | None,
 ) -> CachedKVQualityEvidence:
-    read_transform_put, target_prefill = _cost_evidence(cost_report, direction)
+    cost = cost_evidence or {}
     return CachedKVQualityEvidence(
         evaluation_dataset_sha256=test_hash,
         held_out_prompts=int(metrics["prompt_count"]),
@@ -481,8 +467,10 @@ def _quality_evidence(
             else 100.0
         ),
         greedy_continuation_match_rate=float(metrics["greedy_continuation_match_rate"]),
-        p95_source_read_transform_put_ms=read_transform_put,
-        p95_target_prefill_ms=target_prefill,
+        cost_report_sha256=cost.get("cost_report_sha256"),
+        cost_candidate_manifest_sha256=cost.get("cost_candidate_manifest_sha256"),
+        p95_source_read_transform_put_ms=cost.get("p95_source_read_transform_put_ms"),
+        p95_target_prefill_ms=cost.get("p95_target_prefill_ms"),
     )
 
 
@@ -670,8 +658,7 @@ def main() -> int:
         quality = _quality_evidence(
             validation,
             test_hash=dataset.split_sha256("validation"),
-            cost_report=None,
-            direction=args.direction,
+            cost_evidence=None,
         )
         weights_path = args.output.with_suffix(".safetensors")
         provisional = _provisional_manifest(
@@ -714,13 +701,40 @@ def main() -> int:
         suffix_tokens=args.suffix_tokens,
         greedy_tokens=args.greedy_tokens,
     )
+    metadata_quality = _quality_evidence(
+        test_metrics,
+        test_hash=dataset.split_sha256("test"),
+        cost_evidence=None,
+    )
+    weights_path = args.output.with_suffix(".safetensors")
+    metadata_manifest = _provisional_manifest(
+        direction=args.direction,
+        source_spec=source_spec,
+        target_spec=target_spec,
+        weights_name=weights_path.name,
+        rank=effective_rank,
+        source_window=args.source_window,
+        dataset=dataset,
+        quality=metadata_quality,
+    )
+    weights_path.parent.mkdir(parents=True, exist_ok=True)
+    save_file(state, weights_path, metadata=safetensors_metadata(metadata_manifest))
+    weights_sha256 = sha256_file(weights_path)
+    cost_evidence = None
+    if args.cost_report is not None:
+        cost_evidence = load_cached_kv_cost_evidence(
+            args.cost_report,
+            direction=args.direction,
+            weights_sha256=weights_sha256,
+            source_model_weights_sha256=source_spec.weights_sha256,
+            target_model_weights_sha256=target_spec.weights_sha256,
+            validation_dataset_sha256=dataset.split_sha256("validation"),
+        )
     quality = _quality_evidence(
         test_metrics,
         test_hash=dataset.split_sha256("test"),
-        cost_report=args.cost_report,
-        direction=args.direction,
+        cost_evidence=cost_evidence,
     )
-    weights_path = args.output.with_suffix(".safetensors")
     provisional = _provisional_manifest(
         direction=args.direction,
         source_spec=source_spec,
@@ -731,9 +745,7 @@ def main() -> int:
         dataset=dataset,
         quality=quality,
     )
-    weights_path.parent.mkdir(parents=True, exist_ok=True)
-    save_file(state, weights_path, metadata=safetensors_metadata(provisional))
-    manifest = replace(provisional, weights_sha256=sha256_file(weights_path))
+    manifest = replace(provisional, weights_sha256=weights_sha256)
     manifest = replace(manifest, bridge_id=artifact_id_for(manifest))
     manifest.save(args.output)
     candidate_summary.update(

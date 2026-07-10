@@ -234,6 +234,90 @@ def load_native_prefill_evidence(
     )
 
 
+def load_cached_kv_cost_evidence(
+    path: str | Path,
+    *,
+    direction: str,
+    weights_sha256: str,
+    source_model_weights_sha256: str,
+    target_model_weights_sha256: str,
+    validation_dataset_sha256: str,
+) -> dict[str, Any]:
+    """Validate a complete cost report against the exact artifact it measured."""
+
+    report_path = Path(path)
+    payload = json.loads(report_path.read_text(encoding="utf-8"))
+    required_equal = {
+        "schema_version": CACHED_KV_COST_SCHEMA_VERSION,
+        "direction": direction,
+        "weights_sha256": weights_sha256,
+        "source_model_weights_sha256": source_model_weights_sha256,
+        "target_model_weights_sha256": target_model_weights_sha256,
+        "validation_dataset_sha256": validation_dataset_sha256,
+        "store_backend": "mooncake_store",
+        "native_prefill_backend": "vllm_native_target",
+    }
+    for name, expected in required_equal.items():
+        if payload.get(name) != expected:
+            raise ValueError(f"cached-KV cost report {name} mismatch")
+    for name in (
+        "eligible_for_approval",
+        "non_publishing",
+        "all_temporary_targets_rolled_back",
+    ):
+        if payload.get(name) is not True:
+            raise ValueError(f"cached-KV cost report requires {name}=true")
+    if payload.get("external_index_published") is not False:
+        raise ValueError("cached-KV cost benchmark must not publish an external index")
+    for name in (
+        "candidate_manifest_sha256",
+        "native_prefill_report_sha256",
+        "source_keys_sha256",
+        "setup_config_sha256",
+    ):
+        if not _is_sha256(payload.get(name)):
+            raise ValueError(f"cached-KV cost report {name} is invalid")
+    iterations = int(payload.get("iterations", 0))
+    native_count = int(payload.get("native_prefill_samples", 0))
+    if iterations < MIN_COST_SAMPLES or native_count < MIN_COST_SAMPLES:
+        raise ValueError("cached-KV cost report has too few samples")
+    measurements = payload.get("measurements_ms")
+    if not isinstance(measurements, dict):
+        raise ValueError("cached-KV cost report measurements_ms is required")
+    operation_samples = _positive_finite_samples(
+        measurements.get("read_transform_put", ()),
+        "read-transform-put",
+    )
+    native_samples = _positive_finite_samples(
+        measurements.get("native_target_prefill", ()),
+        "native prefill",
+    )
+    if len(operation_samples) != iterations or len(native_samples) != native_count:
+        raise ValueError("cached-KV cost report sample counts are inconsistent")
+    p95_operation = _percentile(operation_samples, 0.95)
+    p95_native = _percentile(native_samples, 0.95)
+    reported_operation = float(payload.get("p95_source_read_transform_put_ms", float("nan")))
+    reported_native = float(payload.get("p95_target_prefill_ms", float("nan")))
+    reported_ratio = float(payload.get("p95_materialization_to_prefill_ratio", float("nan")))
+    if not math.isclose(reported_operation, p95_operation, rel_tol=1e-12, abs_tol=1e-12):
+        raise ValueError("cached-KV cost report materialization P95 is inconsistent")
+    if not math.isclose(reported_native, p95_native, rel_tol=1e-12, abs_tol=1e-12):
+        raise ValueError("cached-KV cost report native prefill P95 is inconsistent")
+    if not math.isclose(
+        reported_ratio,
+        p95_operation / p95_native,
+        rel_tol=1e-12,
+        abs_tol=1e-12,
+    ):
+        raise ValueError("cached-KV cost report P95 ratio is inconsistent")
+    return {
+        "p95_source_read_transform_put_ms": p95_operation,
+        "p95_target_prefill_ms": p95_native,
+        "cost_report_sha256": sha256_file(report_path),
+        "cost_candidate_manifest_sha256": payload["candidate_manifest_sha256"],
+    }
+
+
 def _positive_finite_samples(values: Sequence[float], name: str) -> list[float]:
     samples = [float(value) for value in values]
     if not samples or any(not math.isfinite(value) or value <= 0 for value in samples):
