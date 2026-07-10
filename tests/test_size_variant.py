@@ -43,6 +43,9 @@ def model_ref(model_id: str, size_b: float, layers: int, kv_heads: int, head_dim
 def calibrated_manifest(*args, **kwargs):
     kwargs.setdefault("prompts_count", 3)
     kwargs.setdefault("bridge_method", "identity_pad_truncate")
+    kwargs.setdefault("scope", "global")
+    kwargs.setdefault("evaluation_dataset_hash", "c" * 64)
+    kwargs.setdefault("held_out_prompts_count", 3)
     kwargs.setdefault(
         "quality",
         QualityGateResult.from_metrics(
@@ -98,6 +101,9 @@ def test_low_rank_manifest_verifies_weight_checksum(tmp_path: Path) -> None:
         artifact_root=str(tmp_path),
         bridge_weight_uri=weights.name,
         bridge_weight_sha256=digest,
+        scope="global",
+        evaluation_dataset_hash="c" * 64,
+        held_out_prompts_count=3,
     )
 
     assert manifest.validate() == []

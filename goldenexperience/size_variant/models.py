@@ -266,6 +266,10 @@ class CalibrationManifest:
     created_by: str = "golden-scale-fit"
     references: tuple[str, ...] = ()
     metadata: dict[str, str | int | float | bool] = field(default_factory=dict)
+    scope: str = "unscoped"
+    prefix_hash_allowlist: tuple[str, ...] = ()
+    evaluation_dataset_hash: str | None = None
+    held_out_prompts_count: int = 0
 
     @property
     def layer_map_id(self) -> str:
@@ -341,6 +345,14 @@ class CalibrationManifest:
         errors.extend(self.projection.validate())
         if include_quality and self.prompts_count <= 0:
             errors.append("calibration prompt count must be positive")
+        if include_quality and self.scope not in {"global", "prefix_allowlist"}:
+            errors.append("calibration scope must be global or prefix_allowlist")
+        if include_quality and self.scope == "prefix_allowlist" and not self.prefix_hash_allowlist:
+            errors.append("prefix-scoped calibration requires a prefix hash allowlist")
+        if include_quality and self.held_out_prompts_count <= 0:
+            errors.append("held-out prompt count must be positive")
+        if include_quality and not _is_sha256(self.evaluation_dataset_hash):
+            errors.append("evaluation dataset SHA-256 is required")
         if include_quality and self.hidden_bridge is not None:
             errors.extend(self._validate_bridge_weight())
         if include_quality and not self.quality.passed:
@@ -472,6 +484,10 @@ class CalibrationManifest:
             created_by=payload.get("created_by", "golden-scale-fit"),
             references=tuple(payload.get("references", ())),
             metadata=dict(payload.get("metadata", {})),
+            scope=payload.get("scope", "unscoped"),
+            prefix_hash_allowlist=tuple(payload.get("prefix_hash_allowlist", ())),
+            evaluation_dataset_hash=payload.get("evaluation_dataset_hash"),
+            held_out_prompts_count=int(payload.get("held_out_prompts_count", 0)),
         )
 
     def save(self, path: str | Path) -> None:
@@ -508,6 +524,14 @@ def pair_id_for(source: ModelRef, target: ModelRef) -> str:
 def stable_artifact_id(prefix: str, *parts: object) -> str:
     raw = "|".join(str(part) for part in parts)
     return f"{prefix}-" + hashlib.sha256(raw.encode("utf-8")).hexdigest()[:16]
+
+
+def _is_sha256(value: str | None) -> bool:
+    return bool(
+        value
+        and len(value) == 64
+        and all(character in "0123456789abcdef" for character in value.lower())
+    )
 
 
 @lru_cache(maxsize=32)

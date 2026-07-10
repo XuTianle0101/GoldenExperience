@@ -123,6 +123,7 @@ class ReuseRequest:
     estimated_materialization_ms: float | None = None
     allow_cross_base: bool = False
     quality_floor: float = 0.95
+    lora_quality_score: float | None = None
     metadata: dict[str, str | int | float | bool] = field(default_factory=dict)
 
 

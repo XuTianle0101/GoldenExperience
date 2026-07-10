@@ -81,6 +81,10 @@ def build_calibration_manifest(
     bridge_method: str = "low_rank_linear",
     bridge_weight_uri: str | None = None,
     bridge_weight_sha256: str | None = None,
+    scope: str = "unscoped",
+    prefix_hash_allowlist: tuple[str, ...] = (),
+    evaluation_dataset_hash: str | None = None,
+    held_out_prompts_count: int = 0,
 ) -> CalibrationManifest:
     direction = infer_direction(source, target)
     pair_id = pair_id_for(source, target)
@@ -154,6 +158,10 @@ def build_calibration_manifest(
             "source_kv_width": kv_width(source.kv_shape),
             "target_kv_width": kv_width(target.kv_shape),
         },
+        scope=scope,
+        prefix_hash_allowlist=prefix_hash_allowlist,
+        evaluation_dataset_hash=evaluation_dataset_hash,
+        held_out_prompts_count=held_out_prompts_count,
     )
 
 

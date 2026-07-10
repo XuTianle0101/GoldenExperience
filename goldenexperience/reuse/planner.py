@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import math
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -120,24 +121,36 @@ class CrossModelReusePlanner:
             "same_kv_shape",
             "lora_delta_quality_gate",
         ]
-        status = PlanStatus.READY
+        has_quality_evidence = (
+            request.calibration_id is not None and request.lora_quality_score is not None
+        )
+        status = PlanStatus.READY if has_quality_evidence else PlanStatus.NEEDS_CALIBRATION
+        confidence = float(request.lora_quality_score or 0.0)
+        fallback_reason = None if has_quality_evidence else FallbackReason.MISSING_CALIBRATION.value
         notes = [
             "LoRA pair detected; inference remains owned by vLLM and shared KV by LMCache MP."
         ]
         if not request.source.shares_tokenizer_with(request.target):
             status = PlanStatus.BLOCKED
+            confidence = 0.0
+            fallback_reason = FallbackReason.TOKENIZER_MISMATCH.value
             notes.append("Tokenizers differ, so direct KV aliasing is unsafe.")
         if not request.source.kv_shape.same_layout(request.target.kv_shape):
             status = PlanStatus.BLOCKED
+            confidence = 0.0
+            fallback_reason = FallbackReason.PROJECTION_SHAPE_MISMATCH.value
             notes.append("KV layout differs for the base/LoRA pair.")
+        if not has_quality_evidence:
+            notes.append("LoRA reuse requires measured adapter-drift or probe quality evidence.")
         return self._make_plan(
             request=request,
             scenario=ReuseScenario.LORA_ADAPTER,
             strategy=ReuseStrategy.ADAPTER_DELTA_GATED_ALIAS,
             status=status,
-            confidence=self.lora_confidence if status == PlanStatus.READY else 0.0,
+            confidence=confidence,
             required_gates=tuple(gates),
             notes=tuple(notes),
+            fallback_reason=fallback_reason,
         )
 
     def _plan_size_variant(self, request: ReuseRequest) -> ReusePlan:
@@ -145,19 +158,18 @@ class CrossModelReusePlanner:
         manifest = self._load_size_variant_manifest(request)
         manifest_errors: list[str] = []
         has_hidden_bridge = manifest is not None and manifest.hidden_bridge is not None
-        strategy = ReuseStrategy.DIRECT_SHAPE_ALIAS if same_layout else ReuseStrategy.HIDDEN_STATE_BRIDGE
-        if manifest is not None and not has_hidden_bridge and not same_layout:
+        strategy = ReuseStrategy.HIDDEN_STATE_BRIDGE
+        if manifest is not None and not has_hidden_bridge:
             strategy = ReuseStrategy.KV_PROJECTION_BASELINE
-        status = PlanStatus.READY if same_layout else PlanStatus.NEEDS_CALIBRATION
-        confidence = self.same_shape_confidence if same_layout else self.projection_confidence
+        status = PlanStatus.NEEDS_CALIBRATION
+        confidence = 0.0
         fallback_reason: str | None = None
         gates = [
             "same_family_architecture",
             "tokenizer_alignment",
             "layer_mapping",
         ]
-        if not same_layout:
-            gates.extend(("hidden_bridge_calibration", "target_kv_restore"))
+        gates.extend(("hidden_bridge_calibration", "target_kv_restore"))
         notes = [
             "Same model line with a parameter-size change; reuse is limited to mapped prefix state.",
         ]
@@ -171,7 +183,7 @@ class CrossModelReusePlanner:
             confidence = 0.0
             fallback_reason = FallbackReason.ROPE_MISMATCH.value
             notes.append("Runtime KV contract differs; dtype, RoPE, or sliding-window settings are incompatible.")
-        elif not same_layout and manifest is None:
+        elif manifest is None:
             fallback_reason = FallbackReason.MISSING_CALIBRATION.value
             notes.append("Hidden-state bridge path needs a validated calibration artifact before execution.")
         elif not validate_projection_cost(
@@ -195,12 +207,12 @@ class CrossModelReusePlanner:
                 if has_hidden_bridge:
                     status = PlanStatus.READY if status != PlanStatus.WARM_START_RECOMPUTE else status
                     gates.append("pre_kv_hidden_contract")
-                    confidence = min(confidence, manifest.quality.hidden_cosine or manifest.quality.kv_cosine)
+                    confidence = self._manifest_confidence(manifest)
                     notes.append("Using hidden-state bridge: h_small -> h_large_hat -> target W_K/W_V/RoPE -> KV.")
-                elif not same_layout:
+                else:
                     status = PlanStatus.READY if status != PlanStatus.WARM_START_RECOMPUTE else status
                     gates.append("kv_projection_baseline")
-                    confidence = min(confidence, manifest.quality.kv_cosine)
+                    confidence = self._manifest_confidence(manifest)
                     notes.append("Using legacy KV projection baseline because artifact has no hidden bridge spec.")
 
         direction = infer_direction(request.source, request.target).value
@@ -254,8 +266,8 @@ class CrossModelReusePlanner:
         )
 
     def _plan_cross_base(self, request: ReuseRequest) -> ReusePlan:
-        status = PlanStatus.READY if request.allow_cross_base and request.calibration_id else PlanStatus.NEEDS_CALIBRATION
-        confidence = self.cross_base_confidence if status == PlanStatus.READY else 0.0
+        status = PlanStatus.NEEDS_CALIBRATION
+        confidence = 0.0
         notes = [
             "Different base model detected; default behavior is conservative and must fallback cleanly.",
         ]
@@ -263,6 +275,11 @@ class CrossModelReusePlanner:
             notes.append("Set allow_cross_base only for experiments with an explicit task allowlist.")
         if request.calibration_id is None:
             notes.append("A calibration_id is required before the LMCache patch executes cross-base reuse.")
+        else:
+            notes.append(
+                "Cross-base execution remains disabled until translator, tokenizer bridge, "
+                "probe, and task-allowlist artifacts have a verifiable schema."
+            )
         return self._make_plan(
             request=request,
             scenario=ReuseScenario.CROSS_BASE_MODEL,
@@ -302,6 +319,26 @@ class CrossModelReusePlanner:
         estimated_materialization_ms: float | None = None,
         fallback_reason: str | None = None,
     ) -> ReusePlan:
+        if status == PlanStatus.READY and (
+            not math.isfinite(confidence) or not 0.0 <= confidence <= 1.0
+        ):
+            status = PlanStatus.BLOCKED
+            confidence = 0.0
+            fallback_reason = FallbackReason.QUALITY_GATE_FAILED.value
+            notes = (*notes, "measured confidence must be finite and between 0 and 1")
+        elif status == PlanStatus.READY and not 0.0 <= request.quality_floor <= 1.0:
+            status = PlanStatus.BLOCKED
+            confidence = 0.0
+            fallback_reason = FallbackReason.QUALITY_GATE_FAILED.value
+            notes = (*notes, "quality_floor must be between 0 and 1")
+        elif status == PlanStatus.READY and confidence < request.quality_floor:
+            status = PlanStatus.BLOCKED
+            fallback_reason = FallbackReason.QUALITY_GATE_FAILED.value
+            notes = (
+                *notes,
+                f"Measured confidence {confidence:.4f} is below quality floor "
+                f"{request.quality_floor:.4f}.",
+            )
         transform_id = hidden_bridge_id or projection_id or self._transform_id(request, scenario, strategy)
         return ReusePlan(
             request=request,
@@ -340,7 +377,10 @@ class CrossModelReusePlanner:
         path = Path(request.artifact_uri)
         if not path.exists():
             return None
-        return CalibrationManifest.load(path)
+        try:
+            return CalibrationManifest.load(path)
+        except (KeyError, TypeError, ValueError, OSError):
+            return None
 
     def _manifest_errors(
         self,
@@ -354,6 +394,11 @@ class CrossModelReusePlanner:
             errors.append("source model differs from artifact")
         if manifest.target.model_id != request.target.model_id:
             errors.append("target model differs from artifact")
+        if (
+            manifest.scope == "prefix_allowlist"
+            and request.prefix_hash not in manifest.prefix_hash_allowlist
+        ):
+            errors.append("request prefix hash is outside artifact allowlist")
         source_hash = request.source.kv_shape.model_config_hash
         target_hash = request.target.kv_shape.model_config_hash
         if source_hash and manifest.source.kv_shape.model_config_hash and source_hash != manifest.source.kv_shape.model_config_hash:
@@ -361,6 +406,13 @@ class CrossModelReusePlanner:
         if target_hash and manifest.target.kv_shape.model_config_hash and target_hash != manifest.target.kv_shape.model_config_hash:
             errors.append("target model_config_hash differs from artifact")
         return errors
+
+    def _manifest_confidence(self, manifest: CalibrationManifest) -> float:
+        values = [manifest.quality.kv_cosine, manifest.quality.attention_proxy_cosine]
+        if manifest.hidden_bridge is not None:
+            values.append(manifest.quality.hidden_cosine)
+        positive = [value for value in values if value > 0.0]
+        return min(positive) if positive else 0.0
 
     def _is_lora_pair(self, source: ModelRef, target: ModelRef) -> bool:
         same_base = source.canonical_base_model_id == target.canonical_base_model_id

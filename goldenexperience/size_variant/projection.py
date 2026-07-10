@@ -527,8 +527,8 @@ def validate_projection_cost(
     max_materialization_ratio: float = 0.70,
 ) -> bool:
     if estimated_materialization_ms is None or estimated_target_prefill_ms is None:
-        return True
-    if estimated_target_prefill_ms <= 0:
+        return False
+    if estimated_materialization_ms < 0 or estimated_target_prefill_ms <= 0:
         return False
     return estimated_materialization_ms <= max_materialization_ratio * estimated_target_prefill_ms
 
