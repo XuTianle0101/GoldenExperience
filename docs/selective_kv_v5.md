@@ -61,7 +61,8 @@ before decode.
   license/source provenance, four-direction validation receipts, one-shot sealed access, and
   immutable content-addressed sealed reports.
 - `selective_runtime.py` recomputes P50/P95/P99 and the 0.70x materialization, 30% accepted
-  TTFT, and 5% rejected-overhead gates from at least 20 warmups and 100 measurements.
+  TTFT, and 5% rejected-overhead gates from at least 20 warmups and 100 measurements. Its
+  evidence records the fixed isolated paired-request protocol and cannot claim arrival replay.
 - `real_model_smoke.py` executes a bounded Qwen3 source/target prefill, target-attention
   capture, DynamicCache conversion, and five-term transport objective. Its schema hard-codes
   `diagnostic_only`, `evidence_eligible=false`, and `sealed_split_accessed=false`.
@@ -86,6 +87,9 @@ before decode.
 - `v5_semantic.py` evaluates that snapshot independently for each direction, resumes from
   token-identity-bound checkpoints, replays every probability/history/decision/aggregate on
   load, and grants only `semantic_approved` authority.
+- `v5_runtime.py` runs the fixed 512-row paired latency audit, verifies every checkpoint and
+  aggregate on reload, binds the pinned runtime source identity and failure-recovery probe, and
+  grants `approved` authority only when both accepted and rejected paths meet their gates.
 
 Run the implementation smoke independently of every benchmark split:
 
@@ -181,6 +185,15 @@ transform, scatter, synchronization, or publication failure returns the invalid 
 vLLM's `get_block_ids_with_load_errors`. vLLM then discards that step's output and natively
 recomputes from the first invalid block. This recovery behavior is measured again in the final
 runtime audit rather than inferred only from source inspection.
+
+The 512-request approval audit is an isolated paired latency experiment in lexicographic sample-id
+order. For every accepted row it compares native target prefill/TTFT with direct reuse; for every
+rejected row it compares native TTFT with fail-closed fallback, with at least 100 measurements on
+both paths. BurstGPT timestamps remain bound through the raw-store and trace hashes, but this audit
+does not sleep, queue, or issue concurrent requests according to those timestamps. It therefore
+supports request-latency and fallback-cost claims only, not serving throughput, queueing, or burst
+scalability claims. Any timestamp-scaled concurrent replay is separate workload evidence and must
+be reported separately rather than inferred from an `approved` artifact.
 
 `tokenizer_sha256` identifies token-ID semantics: tokenizer model/vocabulary files, merges,
 special tokens, and semantic tokenizer configuration. Prompt serialization is separate;

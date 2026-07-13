@@ -821,12 +821,12 @@ def test_runtime_report_enforces_p95_cost_ttft_and_fallback_gates() -> None:
         runtime_audit_dataset_sha256=_digest("runtime-audit"),
         audit_requests=512,
         warmup_iterations=20,
-        materialization_ms=[50.0] * 100,
-        native_prefill_ms=[100.0] * 100,
-        accepted_native_ttft_ms=[200.0] * 100,
-        accepted_reuse_ttft_ms=[130.0] * 100,
-        rejected_native_ttft_ms=[100.0] * 100,
-        rejected_fallback_ttft_ms=[104.0] * 100,
+        materialization_ms=[50.0] * 256,
+        native_prefill_ms=[100.0] * 256,
+        accepted_native_ttft_ms=[200.0] * 256,
+        accepted_reuse_ttft_ms=[130.0] * 256,
+        rejected_native_ttft_ms=[100.0] * 256,
+        rejected_fallback_ttft_ms=[104.0] * 256,
         accepted_target_mooncake_puts=0,
         backing_files_remaining=0,
     )
@@ -836,6 +836,13 @@ def test_runtime_report_enforces_p95_cost_ttft_and_fallback_gates() -> None:
     assert evidence.p95_materialization_to_prefill_ratio == 0.5
     assert evidence.accepted_p95_ttft_reduction_pct == 35.0
     assert evidence.rejected_p95_fallback_overhead_pct == 4.0
+    assert evidence.measurement_protocol == "isolated_paired_request_latency_v1"
+    assert evidence.request_order == "lexicographic_sample_id"
+    assert evidence.arrival_timestamps_replayed is False
+    assert "isolated runtime evidence cannot claim arrival replay" in replace(
+        evidence,
+        arrival_timestamps_replayed=True,
+    ).validate(_digest("runtime-audit"))
 
 
 def _quality(dataset_hash: str, *, total: int, accepted: int) -> AcceptedSubsetQualityEvidence:

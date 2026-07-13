@@ -10,9 +10,15 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
-from goldenexperience.size_variant.selective_manifest import RuntimeCostEvidence
+from goldenexperience.benchmarks.publication import SPLIT_COUNTS
+from goldenexperience.size_variant.selective_manifest import (
+    SELECTIVE_RUNTIME_ARRIVAL_TIMESTAMPS_REPLAYED,
+    SELECTIVE_RUNTIME_MEASUREMENT_PROTOCOL,
+    SELECTIVE_RUNTIME_REQUEST_ORDER,
+    RuntimeCostEvidence,
+)
 
-SELECTIVE_RUNTIME_REPORT_SCHEMA = "goldenexperience.selective_runtime_report.v1"
+SELECTIVE_RUNTIME_REPORT_SCHEMA = "goldenexperience.selective_runtime_report.v2"
 
 
 @dataclass(frozen=True)
@@ -59,12 +65,37 @@ def build_selective_runtime_report(
         "rejected_native_ttft": rejected_native_ttft_ms,
         "rejected_fallback_ttft": rejected_fallback_ttft_ms,
     }
-    if warmup_iterations < 20:
+    if type(warmup_iterations) is not int or warmup_iterations < 20:
         raise ValueError("runtime report requires at least 20 warmup iterations")
-    if audit_requests != 512:
+    if type(audit_requests) is not int or audit_requests != SPLIT_COUNTS["runtime_audit"]:
         raise ValueError("runtime report requires exactly 512 audit requests")
+    if (
+        type(accepted_target_mooncake_puts) is not int
+        or accepted_target_mooncake_puts < 0
+        or type(backing_files_remaining) is not int
+        or backing_files_remaining < 0
+    ):
+        raise ValueError("runtime storage counters must be non-negative integers")
     if any(len(values) < 100 for values in series.values()):
         raise ValueError("every runtime configuration requires at least 100 measurements")
+    accepted_count = len(accepted_native_ttft_ms)
+    rejected_count = len(rejected_native_ttft_ms)
+    if (
+        len(
+            {
+                len(materialization_ms),
+                len(native_prefill_ms),
+                accepted_count,
+                len(accepted_reuse_ttft_ms),
+            }
+        )
+        != 1
+    ):
+        raise ValueError("accepted runtime series must contain paired measurements")
+    if rejected_count != len(rejected_fallback_ttft_ms):
+        raise ValueError("rejected runtime series must contain paired measurements")
+    if accepted_count + rejected_count != audit_requests:
+        raise ValueError("accepted and rejected runtime measurements must cover the audit split")
     percentiles = {name: latency_percentiles(values) for name, values in series.items()}
     materialization_p95 = percentiles["materialization"].p95_ms
     prefill_p95 = percentiles["native_prefill"].p95_ms
@@ -85,6 +116,11 @@ def build_selective_runtime_report(
         "audit_requests": audit_requests,
         "warmup_iterations": warmup_iterations,
         "measured_iterations": min(len(values) for values in series.values()),
+        "accepted_requests": accepted_count,
+        "rejected_requests": rejected_count,
+        "measurement_protocol": SELECTIVE_RUNTIME_MEASUREMENT_PROTOCOL,
+        "request_order": SELECTIVE_RUNTIME_REQUEST_ORDER,
+        "arrival_timestamps_replayed": SELECTIVE_RUNTIME_ARRIVAL_TIMESTAMPS_REPLAYED,
         "percentiles_ms": {name: asdict(value) for name, value in percentiles.items()},
         "p95_materialization_to_prefill_ratio": materialization_p95 / prefill_p95,
         "accepted_p95_ttft_reduction_pct": (
@@ -118,18 +154,25 @@ def runtime_cost_evidence_from_report(
 ) -> RuntimeCostEvidence:
     if report.get("schema_version") != SELECTIVE_RUNTIME_REPORT_SCHEMA:
         raise ValueError("unsupported selective runtime report schema")
-    if not report.get("eligible_for_approval"):
+    if report.get("eligible_for_approval") is not True:
         raise ValueError("runtime report is not eligible for approval")
     percentiles = report["percentiles_ms"]
-    return RuntimeCostEvidence(
+    evidence = RuntimeCostEvidence(
         report_sha256=report_sha256,
         runtime_audit_dataset_sha256=report["runtime_audit_dataset_sha256"],
-        audit_requests=int(report["audit_requests"]),
-        warmup_iterations=int(report["warmup_iterations"]),
-        measured_iterations=int(report["measured_iterations"]),
-        p95_materialization_ms=float(percentiles["materialization"]["p95_ms"]),
-        p95_native_prefill_ms=float(percentiles["native_prefill"]["p95_ms"]),
-        p95_materialization_to_prefill_ratio=float(report["p95_materialization_to_prefill_ratio"]),
-        accepted_p95_ttft_reduction_pct=float(report["accepted_p95_ttft_reduction_pct"]),
-        rejected_p95_fallback_overhead_pct=float(report["rejected_p95_fallback_overhead_pct"]),
+        audit_requests=report["audit_requests"],
+        warmup_iterations=report["warmup_iterations"],
+        measured_iterations=report["measured_iterations"],
+        p95_materialization_ms=percentiles["materialization"]["p95_ms"],
+        p95_native_prefill_ms=percentiles["native_prefill"]["p95_ms"],
+        p95_materialization_to_prefill_ratio=report["p95_materialization_to_prefill_ratio"],
+        accepted_p95_ttft_reduction_pct=report["accepted_p95_ttft_reduction_pct"],
+        rejected_p95_fallback_overhead_pct=report["rejected_p95_fallback_overhead_pct"],
+        measurement_protocol=str(report["measurement_protocol"]),
+        request_order=str(report["request_order"]),
+        arrival_timestamps_replayed=report["arrival_timestamps_replayed"],
     )
+    errors = evidence.validate(evidence.runtime_audit_dataset_sha256)
+    if errors:
+        raise ValueError("; ".join(errors))
+    return evidence

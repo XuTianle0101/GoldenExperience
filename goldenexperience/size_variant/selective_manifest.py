@@ -19,6 +19,9 @@ from goldenexperience.size_variant.cached_kv_manifest import (
 V5_LAYOUT = "kv_layer_head_token_head_dim"
 V5_METHOD = "head_aware_attention_preserving_transport"
 V5_FEATURE_SCHEMA = "goldenexperience.source_kv_risk_features.v1"
+SELECTIVE_RUNTIME_MEASUREMENT_PROTOCOL = "isolated_paired_request_latency_v1"
+SELECTIVE_RUNTIME_REQUEST_ORDER = "lexicographic_sample_id"
+SELECTIVE_RUNTIME_ARRIVAL_TIMESTAMPS_REPLAYED = False
 
 
 class ArtifactState(str, Enum):
@@ -397,17 +400,41 @@ class RuntimeCostEvidence:
     p95_materialization_to_prefill_ratio: float
     accepted_p95_ttft_reduction_pct: float
     rejected_p95_fallback_overhead_pct: float
+    measurement_protocol: str = SELECTIVE_RUNTIME_MEASUREMENT_PROTOCOL
+    request_order: str = SELECTIVE_RUNTIME_REQUEST_ORDER
+    arrival_timestamps_replayed: bool = SELECTIVE_RUNTIME_ARRIVAL_TIMESTAMPS_REPLAYED
 
     def validate(self, expected_audit_sha256: str) -> list[str]:
+        from goldenexperience.benchmarks.publication import SPLIT_COUNTS
+
         errors: list[str] = []
         if not _is_sha256(self.report_sha256):
             errors.append("runtime report_sha256 must be a SHA-256 digest")
+        if not _is_sha256(self.runtime_audit_dataset_sha256):
+            errors.append("runtime audit dataset identity must be a SHA-256 digest")
         if self.runtime_audit_dataset_sha256 != expected_audit_sha256:
             errors.append("runtime evidence refers to the wrong audit dataset")
-        if self.audit_requests != 512:
+        if (
+            type(self.audit_requests) is not int
+            or self.audit_requests != SPLIT_COUNTS["runtime_audit"]
+        ):
             errors.append("runtime audit must contain exactly 512 requests")
-        if self.warmup_iterations < 20 or self.measured_iterations < 100:
+        if (
+            type(self.warmup_iterations) is not int
+            or self.warmup_iterations < 20
+            or type(self.measured_iterations) is not int
+            or self.measured_iterations < 100
+        ):
             errors.append("runtime latency evidence has too few iterations")
+        if self.measurement_protocol != SELECTIVE_RUNTIME_MEASUREMENT_PROTOCOL:
+            errors.append("runtime measurement protocol is unsupported")
+        if self.request_order != SELECTIVE_RUNTIME_REQUEST_ORDER:
+            errors.append("runtime request order is unsupported")
+        if (
+            type(self.arrival_timestamps_replayed) is not bool
+            or self.arrival_timestamps_replayed is not SELECTIVE_RUNTIME_ARRIVAL_TIMESTAMPS_REPLAYED
+        ):
+            errors.append("isolated runtime evidence cannot claim arrival replay")
         values = (
             self.p95_materialization_ms,
             self.p95_native_prefill_ms,
@@ -415,7 +442,7 @@ class RuntimeCostEvidence:
             self.accepted_p95_ttft_reduction_pct,
             self.rejected_p95_fallback_overhead_pct,
         )
-        if any(not math.isfinite(value) or value < 0 for value in values):
+        if any(not _finite_number(value) or value < 0 for value in values):
             errors.append("runtime measurements must be finite and non-negative")
             return errors
         if self.p95_native_prefill_ms <= 0:
