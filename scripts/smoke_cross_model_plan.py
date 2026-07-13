@@ -14,9 +14,14 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from goldenexperience.reuse import CrossModelReusePlanner, KVShape, ModelRef, ReuseRequest
-from goldenexperience.runtime import RuntimeConfig, check_runtime
-from goldenexperience.size_variant import build_calibration_manifest
+from goldenexperience.reuse import (  # noqa: E402
+    CrossModelReusePlanner,
+    KVShape,
+    ModelRef,
+    ReuseRequest,
+)
+from goldenexperience.runtime import RuntimeConfig, check_runtime  # noqa: E402
+from goldenexperience.size_variant import build_calibration_manifest  # noqa: E402
 
 
 def make_model(
@@ -73,7 +78,9 @@ def build_plans() -> list[dict[str, object]]:
     )
 
     with tempfile.TemporaryDirectory(prefix="ge-smoke-") as temp_dir:
-        manifest = build_calibration_manifest(base, large, calibration_id="qwen3_8b_to_14b_hidden_bridge_v0")
+        manifest = build_calibration_manifest(
+            base, large, calibration_id="qwen3_8b_to_14b_hidden_bridge_v0"
+        )
         artifact_path = Path(temp_dir) / "qwen3_8b_to_14b_hidden_bridge_v0.json"
         manifest.save(artifact_path)
         requests = [

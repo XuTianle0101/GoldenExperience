@@ -9,9 +9,9 @@ import time
 from dataclasses import asdict
 from pathlib import Path
 
-from goldenexperience.cache_core import CacheBlock, CacheQuery, DeviceTier, KVPayload
-from goldenexperience.tiered_store import PrefetchPlan, TieredKVStore
 from goldenexperience.benchmarks.metrics import BenchmarkRecord, summarize
+from goldenexperience.cache_core import CacheBlock, DeviceTier, KVPayload
+from goldenexperience.tiered_store import PrefetchPlan, TieredKVStore
 
 
 def run_synthetic_benchmark(
@@ -57,7 +57,9 @@ def run_synthetic_benchmark(
 
     prefetch_ids = block_ids[: min(8, len(block_ids))]
     start = time.perf_counter()
-    futures = store.prefetch(PrefetchPlan(prefetch_ids, target_tier=DeviceTier.HBM, asynchronous=True))
+    futures = store.prefetch(
+        PrefetchPlan(prefetch_ids, target_tier=DeviceTier.HBM, asynchronous=True)
+    )
     for future in futures:
         future.result()
     records.append(BenchmarkRecord("prefetch_batch", (time.perf_counter() - start) * 1000.0))
@@ -67,10 +69,7 @@ def run_synthetic_benchmark(
             name: asdict(summarize(name, [record for record in records if record.name == name]))
             for name in sorted({record.name for record in records})
         },
-        "tier_states": {
-            tier.value: asdict(state)
-            for tier, state in store.tier_states().items()
-        },
+        "tier_states": {tier.value: asdict(state) for tier, state in store.tier_states().items()},
     }
     store.shutdown()
     return result
@@ -117,4 +116,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

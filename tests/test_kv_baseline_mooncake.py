@@ -14,9 +14,7 @@ from goldenexperience.runtime.kv_baseline.services import (
 from scripts.kv_baseline.kv_baseline_client import _extract_final_answer
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-BASELINE_SCRIPT = (
-    REPO_ROOT / "scripts" / "kv_baseline" / "run_vllm_lmcache_mooncake_kv_baseline.sh"
-)
+BASELINE_SCRIPT = REPO_ROOT / "scripts" / "kv_baseline" / "run_vllm_lmcache_mooncake_kv_baseline.sh"
 CLIENT_SCRIPT = REPO_ROOT / "scripts" / "kv_baseline" / "kv_baseline_client.py"
 
 

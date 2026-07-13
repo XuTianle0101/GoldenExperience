@@ -21,6 +21,7 @@ import os
 import re
 import sys
 import time
+from contextlib import suppress
 from dataclasses import replace
 from pathlib import Path
 from typing import Any
@@ -29,12 +30,14 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from goldenexperience.runtime.kv_baseline.config import BaselineConfig
-from goldenexperience.runtime.kv_baseline.prompts import write_generated_disk_prompt
-from goldenexperience.runtime.kv_baseline.runner import (
+from goldenexperience.runtime.kv_baseline.config import BaselineConfig  # noqa: E402
+from goldenexperience.runtime.kv_baseline.prompts import (  # noqa: E402
+    write_generated_disk_prompt,
+)
+from goldenexperience.runtime.kv_baseline.runner import (  # noqa: E402
     _run_phase_request,
 )
-from goldenexperience.runtime.kv_baseline.services import (
+from goldenexperience.runtime.kv_baseline.services import (  # noqa: E402
     ProcessGroup,
     validate_runtime_requirements,
 )
@@ -56,10 +59,8 @@ def _metric_values(text: str, metric_name: str) -> list[float]:
     )
     values: list[float] = []
     for match in pattern.finditer(text):
-        try:
+        with suppress(ValueError):
             values.append(float(match.group(1)))
-        except ValueError:
-            pass
     return values
 
 
@@ -79,10 +80,8 @@ def _metrics(path: Path) -> dict[str, Any]:
         )
         total = 0.0
         for match in pattern.finditer(text):
-            try:
+            with suppress(ValueError):
                 total += float(match.group(1))
-            except ValueError:
-                pass
         return total
 
     return {
@@ -91,9 +90,7 @@ def _metrics(path: Path) -> dict[str, Any]:
         "external_prefix_cache_hits_total": max(
             _metric_values(text, "vllm:external_prefix_cache_hits_total") or [0.0]
         ),
-        "prompt_tokens_external_kv_transfer": prompt_tokens_by_source(
-            "external_kv_transfer"
-        ),
+        "prompt_tokens_external_kv_transfer": prompt_tokens_by_source("external_kv_transfer"),
         "prompt_tokens_local_compute": prompt_tokens_by_source("local_compute"),
         "cache_hit_rate_max": max(_metric_values(text, "vllm:cache_hit_rate") or [0.0]),
         "prompt_tokens_histogram_sum": sum(
@@ -119,8 +116,12 @@ def _log_evidence(path: Path) -> dict[str, Any]:
         "bytes": path.stat().st_size,
         "mooncake_store_set": _count(r"\bSET\b|\bmooncake[_ -]?store\b.*\bset\b", text),
         "mooncake_store_get": _count(r"\bGET\b|\bmooncake[_ -]?store\b.*\bget\b", text),
-        "l2_prefetch_load_completed": _count(r"L2.*prefetch.*complete|prefetch.*load.*complete", text),
-        "retrieve_mentions": _count(r"\b(retrieve|retrieved|prefetch|prefetched|loaded|hit)\b", text),
+        "l2_prefetch_load_completed": _count(
+            r"L2.*prefetch.*complete|prefetch.*load.*complete", text
+        ),
+        "retrieve_mentions": _count(
+            r"\b(retrieve|retrieved|prefetch|prefetched|loaded|hit)\b", text
+        ),
         "store_mentions": _count(r"\b(store|stored|offload|saved|SET)\b", text),
     }
 
@@ -156,8 +157,7 @@ def _write_cross_summary(
     requests = {phase: _phase_request(config, phase) for phase in phases}
     metrics = {phase: _metrics(config.metrics_dir / f"{phase}.prom") for phase in phases}
     logs = {
-        phase: _log_evidence(config.log_dir / f"{phase}_lmcache_mp_server.log")
-        for phase in phases
+        phase: _log_evidence(config.log_dir / f"{phase}_lmcache_mp_server.log") for phase in phases
     }
     cache = _cache_dir_summary(config.kv_cache_dir)
     mooncake = _cache_dir_summary(config.mooncake_storage_root)
@@ -166,16 +166,11 @@ def _write_cross_summary(
     target_reuse_ttft = _timing(requests["target_reuse"], "ttft_ms")
     target_reuse_gets = int(logs["target_reuse"].get("mooncake_store_get") or 0)
     target_reuse_retrieves = int(logs["target_reuse"].get("retrieve_mentions") or 0)
-    target_reuse_external_hits = metrics["target_reuse"].get(
-        "external_prefix_cache_hits_total"
-    )
+    target_reuse_external_hits = metrics["target_reuse"].get("external_prefix_cache_hits_total")
     target_reuse_has_cache_evidence = bool(
         target_reuse_gets > 0
         or target_reuse_retrieves > 0
-        or (
-            isinstance(target_reuse_external_hits, (int, float))
-            and target_reuse_external_hits > 0
-        )
+        or (isinstance(target_reuse_external_hits, (int, float)) and target_reuse_external_hits > 0)
     )
 
     summary = {
@@ -252,7 +247,9 @@ def _write_cross_summary(
     return summary
 
 
-def _update_metadata(config: BaselineConfig, source: BaselineConfig, target: BaselineConfig) -> None:
+def _update_metadata(
+    config: BaselineConfig, source: BaselineConfig, target: BaselineConfig
+) -> None:
     path = config.run_dir / "metadata.json"
     metadata = _json(path)
     metadata["cross_model_runtime"] = {
@@ -293,7 +290,7 @@ def main() -> int:
     print(f"Cross-model runtime run directory: {config.run_dir}")
     print(f"Source: {source_model_path}")
     print(f"Target: {target_model_path}")
-    print(f"Materializer mode: native_target_seed")
+    print("Materializer mode: native_target_seed")
     print(f"LMCache config: {config.config_file}")
 
     if config.dry_run:

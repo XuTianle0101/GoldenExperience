@@ -59,7 +59,9 @@ class TransformersAdapter(ModelAdapter):
             blocks.append(block)
         return blocks
 
-    def inject_kv(self, blocks: list[CacheBlock], engine_state: Any | None = None, **kwargs: Any) -> Any:
+    def inject_kv(
+        self, blocks: list[CacheBlock], engine_state: Any | None = None, **kwargs: Any
+    ) -> Any:
         ordered = sorted(blocks, key=lambda block: block.metadata.layer_id)
         return tuple((block.payload.key, block.payload.value) for block in ordered)
 
@@ -71,10 +73,12 @@ class TransformersAdapter(ModelAdapter):
         family: str | None,
     ) -> ArchitectureSignature:
         config = getattr(model, "config", model)
-        resolved_model_id = model_id or getattr(config, "_name_or_path", None) or config.__class__.__name__
+        resolved_model_id = (
+            model_id or getattr(config, "_name_or_path", None) or config.__class__.__name__
+        )
         architecture = (getattr(config, "architectures", None) or [config.__class__.__name__])[0]
-        hidden_size = int(getattr(config, "hidden_size"))
-        num_attention_heads = int(getattr(config, "num_attention_heads"))
+        hidden_size = int(config.hidden_size)
+        num_attention_heads = int(config.num_attention_heads)
         num_key_value_heads = int(getattr(config, "num_key_value_heads", num_attention_heads))
         head_dim = int(getattr(config, "head_dim", hidden_size // num_attention_heads))
         tokenizer_id = getattr(tokenizer, "name_or_path", None) if tokenizer is not None else None
@@ -87,7 +91,7 @@ class TransformersAdapter(ModelAdapter):
             model_id=str(resolved_model_id),
             family=family or str(resolved_model_id).split("-")[0].lower(),
             architecture=str(architecture),
-            num_layers=int(getattr(config, "num_hidden_layers")),
+            num_layers=int(config.num_hidden_layers),
             hidden_size=hidden_size,
             num_attention_heads=num_attention_heads,
             num_key_value_heads=num_key_value_heads,

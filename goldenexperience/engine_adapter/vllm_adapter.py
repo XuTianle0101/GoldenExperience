@@ -6,7 +6,8 @@ packing and unpacking cache blocks without making GoldenExperience depend on vLL
 
 from __future__ import annotations
 
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 from goldenexperience.cache_core.block import CacheBlock
 from goldenexperience.engine_adapter.base import ModelAdapter
@@ -37,10 +38,11 @@ class VLLMAdapter(ModelAdapter):
             )
         return self._extractor(engine_state)
 
-    def inject_kv(self, blocks: list[CacheBlock], engine_state: Any | None = None, **kwargs: Any) -> Any:
+    def inject_kv(
+        self, blocks: list[CacheBlock], engine_state: Any | None = None, **kwargs: Any
+    ) -> Any:
         if self._injector is None:
             raise NotImplementedError(
                 "Provide a vLLM injector callable for the installed vLLM version."
             )
         return self._injector(blocks, engine_state)
-

@@ -5,8 +5,8 @@ from goldenexperience.tiered_store import (
     CapacityExceededError,
     CostAwareEvictionPolicy,
     DecodeWindowPrefetchPolicy,
-    LFUEvictionPolicy,
     LayerwiseOffloadPlan,
+    LFUEvictionPolicy,
     PrefetchContext,
     PrefetchPlan,
     TieredKVStore,
@@ -42,7 +42,9 @@ def test_tiered_store_demotes_and_promotes(tmp_path: Path) -> None:
     states = store.tier_states()
     assert states[DeviceTier.HBM].used_bytes <= 300 or states[DeviceTier.CPU].used_bytes > 0
 
-    recovered = store.get(CacheQuery(model_id="llama-family", prefix_hash="shared"), promote_to=DeviceTier.HBM)
+    recovered = store.get(
+        CacheQuery(model_id="llama-family", prefix_hash="shared"), promote_to=DeviceTier.HBM
+    )
     assert recovered is not None
     assert recovered.metadata.model_id == "llama-family"
 
@@ -61,7 +63,9 @@ def test_pin_release_prevents_regular_evict(tmp_path: Path) -> None:
     assert store.pin(block.metadata.block_id)
     assert store.evict(CacheQuery(model_id="llama-family"), required_bytes=1) == []
     assert store.release(block.metadata.block_id)
-    assert store.evict(CacheQuery(model_id="llama-family"), required_bytes=1) == [block.metadata.block_id]
+    assert store.evict(CacheQuery(model_id="llama-family"), required_bytes=1) == [
+        block.metadata.block_id
+    ]
     store.shutdown()
 
 
@@ -94,7 +98,11 @@ def test_put_layers_retrieve_layers_and_layer_groups(tmp_path: Path) -> None:
 
     assert [result.layer_id for result in retrieved] == [0, 1, 2]
     assert all(result.hit for result in retrieved)
-    assert all(block.metadata.device_tier == DeviceTier.HBM for result in retrieved for block in result.blocks)
+    assert all(
+        block.metadata.device_tier == DeviceTier.HBM
+        for result in retrieved
+        for block in result.blocks
+    )
     store.shutdown()
 
 
@@ -116,10 +124,22 @@ def test_layerwise_offload_moves_selected_layers(tmp_path: Path) -> None:
 
     assert [result.layer_id for result in results] == [1, 2]
     assert all(result.success for result in results)
-    assert store.get_layer(CacheQuery(model_id="llama-family"), 0)[0].metadata.device_tier == DeviceTier.HBM
-    assert store.get_layer(CacheQuery(model_id="llama-family"), 1)[0].metadata.device_tier == DeviceTier.NVME
-    assert store.get_layer(CacheQuery(model_id="llama-family"), 2)[0].metadata.device_tier == DeviceTier.NVME
-    assert store.get_layer(CacheQuery(model_id="llama-family"), 3)[0].metadata.device_tier == DeviceTier.HBM
+    assert (
+        store.get_layer(CacheQuery(model_id="llama-family"), 0)[0].metadata.device_tier
+        == DeviceTier.HBM
+    )
+    assert (
+        store.get_layer(CacheQuery(model_id="llama-family"), 1)[0].metadata.device_tier
+        == DeviceTier.NVME
+    )
+    assert (
+        store.get_layer(CacheQuery(model_id="llama-family"), 2)[0].metadata.device_tier
+        == DeviceTier.NVME
+    )
+    assert (
+        store.get_layer(CacheQuery(model_id="llama-family"), 3)[0].metadata.device_tier
+        == DeviceTier.HBM
+    )
     store.shutdown()
 
 
@@ -219,8 +239,14 @@ def test_decode_window_prefetch_policy_selects_upcoming_layers(tmp_path: Path) -
     ]
     assert planned_layers == [2, 3]
     assert store.prefetch(plan) == [True, True]
-    assert store.get_layer(CacheQuery(model_id="llama-family"), 2)[0].metadata.device_tier == DeviceTier.HBM
-    assert store.get_layer(CacheQuery(model_id="llama-family"), 3)[0].metadata.device_tier == DeviceTier.HBM
+    assert (
+        store.get_layer(CacheQuery(model_id="llama-family"), 2)[0].metadata.device_tier
+        == DeviceTier.HBM
+    )
+    assert (
+        store.get_layer(CacheQuery(model_id="llama-family"), 3)[0].metadata.device_tier
+        == DeviceTier.HBM
+    )
     store.shutdown()
 
 
@@ -237,7 +263,9 @@ def test_lfu_eviction_policy_removes_least_accessed_block(tmp_path: Path) -> Non
     store.get_by_id(hot.metadata.block_id)
     store.get_by_id(hot.metadata.block_id)
 
-    victims = store.evict(CacheQuery(model_id="llama-family"), required_bytes=cold.metadata.bytes_size)
+    victims = store.evict(
+        CacheQuery(model_id="llama-family"), required_bytes=cold.metadata.bytes_size
+    )
 
     assert victims == [cold.metadata.block_id]
     assert store.get_by_id(cold.metadata.block_id) is None
@@ -259,7 +287,9 @@ def test_cost_aware_eviction_policy_keeps_high_quality_hot_block(tmp_path: Path)
     store.put(high_quality)
     store.get_by_id(high_quality.metadata.block_id)
 
-    victims = store.evict(CacheQuery(model_id="llama-family"), required_bytes=low_quality.metadata.bytes_size)
+    victims = store.evict(
+        CacheQuery(model_id="llama-family"), required_bytes=low_quality.metadata.bytes_size
+    )
 
     assert victims == [low_quality.metadata.block_id]
     assert store.get_by_id(low_quality.metadata.block_id) is None

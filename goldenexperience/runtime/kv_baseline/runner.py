@@ -7,10 +7,12 @@ import subprocess
 import time
 from pathlib import Path
 
-from goldenexperience.runtime.kv_baseline.config import BaselineConfig, REPO_ROOT
+from goldenexperience.runtime.kv_baseline.config import REPO_ROOT, BaselineConfig
 from goldenexperience.runtime.kv_baseline.prompts import write_generated_disk_prompt
-from goldenexperience.runtime.kv_baseline.services import ProcessGroup, validate_runtime_requirements
-
+from goldenexperience.runtime.kv_baseline.services import (
+    ProcessGroup,
+    validate_runtime_requirements,
+)
 
 CLIENT = REPO_ROOT / "scripts" / "kv_baseline" / "kv_baseline_client.py"
 
@@ -24,9 +26,7 @@ def _mark_lmcache_log_start(config: BaselineConfig, phase: str) -> None:
         return
     source = config.log_dir / "lmcache_mp_server.log"
     offset = source.stat().st_size if source.exists() else 0
-    (config.run_dir / f"{phase}_lmcache_log_offset.txt").write_text(
-        f"{offset}\n", encoding="utf-8"
-    )
+    (config.run_dir / f"{phase}_lmcache_log_offset.txt").write_text(f"{offset}\n", encoding="utf-8")
 
 
 def _capture_lmcache_log_delta(config: BaselineConfig, phase: str) -> None:

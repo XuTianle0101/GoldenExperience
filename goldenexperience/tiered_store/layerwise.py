@@ -54,4 +54,3 @@ class LayerGroup:
     shape: tuple[object, ...]
     dtype: str
     bytes_per_layer: int
-

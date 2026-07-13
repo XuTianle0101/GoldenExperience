@@ -283,9 +283,12 @@ def _lookup_record_matches(
             return False
         if expected_chunk_size is not None and int(record.get("chunk_size")) != expected_chunk_size:
             return False
-        if expected_seq_len is not None and expected_chunk_size is not None:
-            if len(hashes) != expected_seq_len // expected_chunk_size:
-                return False
+        if (
+            expected_seq_len is not None
+            and expected_chunk_size is not None
+            and len(hashes) != expected_seq_len // expected_chunk_size
+        ):
+            return False
         if expected_chunk_hashes is not None:
             return [_normalize_chunk_hash(item) for item in hashes] == expected_chunk_hashes
         float(record.get("timestamp") or 0.0)
@@ -477,15 +480,12 @@ def token_ids_from_prompt(
     if prompt is None:
         raise ValueError(f"Prompt id {prompt_id!r} not found in {prompt_file}")
     tokenizer = AutoTokenizer.from_pretrained(tokenizer_path, trust_remote_code=True)
-    encoded = tokenizer.apply_chat_template(
+    encoded: Any = tokenizer.apply_chat_template(
         prompt["messages"],
         tokenize=True,
         add_generation_prompt=True,
     )
-    if hasattr(encoded, "keys") and "input_ids" in encoded:
-        ids = encoded["input_ids"]
-    else:
-        ids = encoded
+    ids = encoded["input_ids"] if hasattr(encoded, "keys") and "input_ids" in encoded else encoded
     return [int(item) for item in ids]
 
 

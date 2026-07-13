@@ -4,7 +4,13 @@ from pathlib import Path
 import torch
 
 from goldenexperience.lmcache_patch import CrossModelCacheKey
-from goldenexperience.reuse import CrossModelReusePlanner, KVShape, ModelRef, PlanStatus, ReuseRequest
+from goldenexperience.reuse import (
+    CrossModelReusePlanner,
+    KVShape,
+    ModelRef,
+    PlanStatus,
+    ReuseRequest,
+)
 from goldenexperience.size_variant import (
     HiddenBridgeMaterializer,
     HiddenStateChunk,
@@ -149,7 +155,9 @@ def test_calibration_manifest_round_trip_and_materializer(tmp_path: Path) -> Non
 def test_hidden_bridge_materializer_and_target_kv_restore(tmp_path: Path) -> None:
     source = model_ref("qwen-small", 7, layers=2, kv_heads=1, head_dim=2)
     target = model_ref("qwen-large", 14, layers=3, kv_heads=1, head_dim=3)
-    manifest = calibrated_manifest(source, target, calibration_id="hidden_bridge_v0", artifact_root=str(tmp_path))
+    manifest = calibrated_manifest(
+        source, target, calibration_id="hidden_bridge_v0", artifact_root=str(tmp_path)
+    )
 
     source_chunks = {
         0: HiddenStateChunk(layer_id=0, hidden=[[[1.0, 2.0, 3.0, 4.0]]], token_end=1),
@@ -159,7 +167,9 @@ def test_hidden_bridge_materializer_and_target_kv_restore(tmp_path: Path) -> Non
 
     assert hidden_result.success
     assert [chunk.layer_id for chunk in hidden_result.chunks] == [0, 1, 2]
-    assert hidden_result.chunks[0].hidden == [[[1.0, 2.0, 3.0, 4.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]]]
+    assert hidden_result.chunks[0].hidden == [
+        [[1.0, 2.0, 3.0, 4.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]]
+    ]
     kv_result = TargetKVRestorer(manifest).restore_chunk(hidden_result.chunks[0])
     assert kv_result.success
     assert kv_result.chunks[0].key == [[[1.0, 2.0, 3.0]]]
@@ -193,7 +203,9 @@ def test_hidden_bridge_materializer_and_target_kv_restore(tmp_path: Path) -> Non
         },
     ).materialize(source_chunks)
     assert hidden_per_layer.success
-    assert hidden_per_layer.chunks[2].hidden == [[[8.0, 8.0, 8.0, 8.0, 8.0, 8.0, 8.0, 8.0, 8.0, 8.0, 8.0, 8.0]]]
+    assert hidden_per_layer.chunks[2].hidden == [
+        [[8.0, 8.0, 8.0, 8.0, 8.0, 8.0, 8.0, 8.0, 8.0, 8.0, 8.0, 8.0]]
+    ]
 
     restored_per_layer = TargetKVRestorer(
         manifest,
@@ -210,7 +222,9 @@ def test_hidden_bridge_materializer_and_target_kv_restore(tmp_path: Path) -> Non
         calibration_id="hidden_bridge_layout_v0",
         artifact_root=str(tmp_path),
     )
-    target_layout_hidden = HiddenBridgeMaterializer(target_layout_manifest).materialize(source_chunks)
+    target_layout_hidden = HiddenBridgeMaterializer(target_layout_manifest).materialize(
+        source_chunks
+    )
     target_layout_restored = TargetKVRestorer(
         target_layout_manifest,
         layer_key_projectors={0: lambda hidden: [[[[1.0, 2.0, 3.0]], [[4.0, 5.0, 6.0]]]]},
@@ -236,7 +250,9 @@ def test_linear_layer_map_uses_fractional_interpolation() -> None:
 def test_hidden_bridge_materializer_blends_tensor_source_layers(tmp_path: Path) -> None:
     source = model_ref("qwen-small", 7, layers=2, kv_heads=1, head_dim=2)
     target = model_ref("qwen-large", 14, layers=3, kv_heads=1, head_dim=3)
-    manifest = calibrated_manifest(source, target, calibration_id="tensor_blend_v0", artifact_root=str(tmp_path))
+    manifest = calibrated_manifest(
+        source, target, calibration_id="tensor_blend_v0", artifact_root=str(tmp_path)
+    )
     source_chunks = {
         0: HiddenStateChunk(layer_id=0, hidden=torch.ones(1, 1, 8), token_end=1),
         1: HiddenStateChunk(layer_id=1, hidden=torch.full((1, 1, 8), 5.0), token_end=1),
@@ -326,11 +342,19 @@ def test_planner_blocks_artifact_hash_mismatch(tmp_path: Path) -> None:
 def test_qwen3_bidirectional_presets_are_valid() -> None:
     for direction in ("8b_to_14b", "14b_to_8b"):
         source, target = qwen3_model_pair(direction)
-        manifest = calibrated_manifest(source, target, calibration_id=f"qwen3_{direction}_hidden_bridge_v0")
+        manifest = calibrated_manifest(
+            source, target, calibration_id=f"qwen3_{direction}_hidden_bridge_v0"
+        )
         assert manifest.validate() == []
         assert manifest.state_kind == "hidden"
         assert manifest.hidden_bridge is not None
         assert manifest.hidden_bridge.source_hidden_size == source.kv_shape.hidden_size
         assert manifest.hidden_bridge.target_hidden_size == target.kv_shape.hidden_size
-        assert manifest.projection.source_width == source.kv_shape.num_key_value_heads * source.kv_shape.head_dim
-        assert manifest.projection.target_width == target.kv_shape.num_key_value_heads * target.kv_shape.head_dim
+        assert (
+            manifest.projection.source_width
+            == source.kv_shape.num_key_value_heads * source.kv_shape.head_dim
+        )
+        assert (
+            manifest.projection.target_width
+            == target.kv_shape.num_key_value_heads * target.kv_shape.head_dim
+        )

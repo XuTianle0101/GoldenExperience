@@ -21,7 +21,6 @@ from goldenexperience.size_variant.projection import (
     build_projection_spec,
 )
 
-
 QWEN3_8B = ModelRef(
     model_id="Qwen/Qwen3-8B",
     family="qwen",
@@ -165,7 +164,9 @@ def build_calibration_manifest(
     )
 
 
-def save_prompt_manifest(path: str | Path, prompts: list[str], source: ModelRef, target: ModelRef) -> None:
+def save_prompt_manifest(
+    path: str | Path, prompts: list[str], source: ModelRef, target: ModelRef
+) -> None:
     output_path = Path(path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     payload = {

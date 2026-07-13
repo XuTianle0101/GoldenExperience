@@ -43,7 +43,9 @@ class TierCostModel:
         bandwidth = min(self.bandwidth_gbps(source), self.bandwidth_gbps(target))
         if bandwidth <= 0:
             return float("inf")
-        return (bytes_size / (bandwidth * 1_000_000_000.0)) * 1000.0 + self.latency_us(target) / 1000.0
+        return (bytes_size / (bandwidth * 1_000_000_000.0)) * 1000.0 + self.latency_us(
+            target
+        ) / 1000.0
 
     def bandwidth_gbps(self, tier: DeviceTier) -> float:
         return {
@@ -58,4 +60,3 @@ class TierCostModel:
             DeviceTier.CPU: self.cpu_latency_us,
             DeviceTier.NVME: self.nvme_latency_us,
         }[tier]
-

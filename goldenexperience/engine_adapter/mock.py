@@ -44,21 +44,27 @@ class MockModelAdapter(ModelAdapter):
             blocks.append(block)
         return blocks
 
-    def inject_kv(self, blocks: list[CacheBlock], engine_state: Any | None = None, **kwargs: Any) -> Any:
+    def inject_kv(
+        self, blocks: list[CacheBlock], engine_state: Any | None = None, **kwargs: Any
+    ) -> Any:
         return {
             "model_id": self._signature.model_id,
             "blocks": blocks,
             "engine_state": engine_state,
         }
 
-    def _make_tensor(self, layer_id: int, token_ids: list[int], scale: float) -> list[list[list[float]]]:
+    def _make_tensor(
+        self, layer_id: int, token_ids: list[int], scale: float
+    ) -> list[list[list[float]]]:
         result = []
         for _head in range(self._signature.num_key_value_heads):
             head_rows = []
             for token in token_ids:
-                head_rows.append([
-                    scale * float(layer_id + token + dim + 1)
-                    for dim in range(self._signature.head_dim)
-                ])
+                head_rows.append(
+                    [
+                        scale * float(layer_id + token + dim + 1)
+                        for dim in range(self._signature.head_dim)
+                    ]
+                )
             result.append(head_rows)
         return result

@@ -36,7 +36,10 @@ def tensor_nbytes(value: Any) -> int:
     if torch is not None and hasattr(value, "numel") and hasattr(value, "element_size"):
         return int(value.numel() * value.element_size())
     if is_dataclass(value):
-        return sum(tensor_nbytes(getattr(value, field.name)) for field in value.__dataclass_fields__.values())
+        return sum(
+            tensor_nbytes(getattr(value, field.name))
+            for field in value.__dataclass_fields__.values()
+        )
     if isinstance(value, dict):
         return sum(tensor_nbytes(item) for item in value.values())
     if isinstance(value, (list, tuple)):
@@ -100,10 +103,16 @@ def move_to_tier(value: Any, tier_name: str, pin_cpu: bool = False) -> Any:
 def move_payload_to_tier(payload: Any, tier_name: str, pin_cpu: bool = False) -> Any:
     if is_dataclass(payload):
         for field in payload.__dataclass_fields__.values():
-            setattr(payload, field.name, move_payload_to_tier(getattr(payload, field.name), tier_name, pin_cpu))
+            setattr(
+                payload,
+                field.name,
+                move_payload_to_tier(getattr(payload, field.name), tier_name, pin_cpu),
+            )
         return payload
     if isinstance(payload, dict):
-        return {key: move_payload_to_tier(item, tier_name, pin_cpu) for key, item in payload.items()}
+        return {
+            key: move_payload_to_tier(item, tier_name, pin_cpu) for key, item in payload.items()
+        }
     if isinstance(payload, tuple):
         return tuple(move_payload_to_tier(item, tier_name, pin_cpu) for item in payload)
     if isinstance(payload, list):
@@ -134,7 +143,11 @@ def project_last_dim(value: Any, weight: Any, bias: Any | None = None) -> Any:
             tensor_weight = torch.tensor(weight, dtype=value.dtype, device=value.device)
         result = value.matmul(tensor_weight)
         if bias is not None:
-            tensor_bias = bias if hasattr(bias, "to") else torch.tensor(bias, dtype=value.dtype, device=value.device)
+            tensor_bias = (
+                bias
+                if hasattr(bias, "to")
+                else torch.tensor(bias, dtype=value.dtype, device=value.device)
+            )
             result = result + tensor_bias
         return result
     if np is not None and hasattr(value, "dot"):
@@ -153,7 +166,9 @@ def project_last_dim(value: Any, weight: Any, bias: Any | None = None) -> Any:
     return value
 
 
-def _project_vector(vector: list[float], weight: list[list[float]], bias: list[float] | None) -> list[float]:
+def _project_vector(
+    vector: list[float], weight: list[list[float]], bias: list[float] | None
+) -> list[float]:
     if not weight:
         return []
     target_dim = len(weight[0])
@@ -167,4 +182,3 @@ def _project_vector(vector: list[float], weight: list[list[float]], bias: list[f
             value += float(bias[target_idx])
         result.append(value)
     return result
-

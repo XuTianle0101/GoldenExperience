@@ -20,4 +20,3 @@ def test_cache_block_metadata_and_query_match() -> None:
     assert len(block.metadata.checksum) == 64
     assert CacheQuery(model_id="qwen3-8b", token_range=(10, 20)).matches(block.metadata)
     assert not CacheQuery(model_id="qwen3-14b").matches(block.metadata)
-

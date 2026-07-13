@@ -230,7 +230,7 @@ class QualityGateResult:
         min_attention_proxy_cosine: float = 0.95,
         max_perplexity_drift_pct: float = 5.0,
         max_task_score_drop_pct: float = 2.0,
-    ) -> "QualityGateResult":
+    ) -> QualityGateResult:
         reasons: list[str] = []
         if min_hidden_cosine is not None and hidden_cosine < min_hidden_cosine:
             reasons.append("hidden_cosine_below_threshold")
@@ -317,7 +317,10 @@ class CalibrationManifest:
             errors.append("layer map target depth does not match target model")
         if self.layer_map.pair_id != self.pair_id or self.projection.pair_id != self.pair_id:
             errors.append("layer map/projection pair_id must match manifest pair_id")
-        if self.layer_map.direction != self.direction or self.projection.direction != self.direction:
+        if (
+            self.layer_map.direction != self.direction
+            or self.projection.direction != self.direction
+        ):
             errors.append("layer map/projection direction must match manifest direction")
         if self.hidden_bridge is not None:
             errors.extend(self.hidden_bridge.validate(require_weights=include_quality))
@@ -329,9 +332,15 @@ class CalibrationManifest:
                 errors.append("hidden bridge source depth does not match source model")
             if self.hidden_bridge.target_num_layers != self.target.kv_shape.num_layers:
                 errors.append("hidden bridge target depth does not match target model")
-            if self.source.kv_shape.hidden_size and self.hidden_bridge.source_hidden_size != self.source.kv_shape.hidden_size:
+            if (
+                self.source.kv_shape.hidden_size
+                and self.hidden_bridge.source_hidden_size != self.source.kv_shape.hidden_size
+            ):
                 errors.append("hidden bridge source width does not match source model")
-            if self.target.kv_shape.hidden_size and self.hidden_bridge.target_hidden_size != self.target.kv_shape.hidden_size:
+            if (
+                self.target.kv_shape.hidden_size
+                and self.hidden_bridge.target_hidden_size != self.target.kv_shape.hidden_size
+            ):
                 errors.append("hidden bridge target width does not match target model")
         if self.kv_restore is not None:
             errors.extend(self.kv_restore.validate())
@@ -341,7 +350,10 @@ class CalibrationManifest:
                 errors.append("KV restore direction must match manifest direction")
             if self.kv_restore.target_model_id != self.target.model_id:
                 errors.append("KV restore target model differs from manifest target")
-            if self.target.kv_shape.hidden_size and self.kv_restore.target_hidden_size != self.target.kv_shape.hidden_size:
+            if (
+                self.target.kv_shape.hidden_size
+                and self.kv_restore.target_hidden_size != self.target.kv_shape.hidden_size
+            ):
                 errors.append("KV restore hidden width does not match target model")
             if self.kv_restore.target_kv_width != kv_width(self.target.kv_shape):
                 errors.append("KV restore target width does not match target KV shape")
@@ -394,7 +406,7 @@ class CalibrationManifest:
         return payload
 
     @classmethod
-    def from_dict(cls, payload: dict[str, Any]) -> "CalibrationManifest":
+    def from_dict(cls, payload: dict[str, Any]) -> CalibrationManifest:
         source = model_ref_from_dict(payload["source"])
         target = model_ref_from_dict(payload["target"])
         layer_map_payload = payload["layer_map"]
@@ -499,10 +511,12 @@ class CalibrationManifest:
     def save(self, path: str | Path) -> None:
         output_path = Path(path)
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        output_path.write_text(json.dumps(self.to_dict(), indent=2, sort_keys=True), encoding="utf-8")
+        output_path.write_text(
+            json.dumps(self.to_dict(), indent=2, sort_keys=True), encoding="utf-8"
+        )
 
     @classmethod
-    def load(cls, path: str | Path) -> "CalibrationManifest":
+    def load(cls, path: str | Path) -> CalibrationManifest:
         return cls.from_dict(json.loads(Path(path).read_text(encoding="utf-8")))
 
 

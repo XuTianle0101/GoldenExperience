@@ -49,8 +49,7 @@ def _python_mooncake_adapter_available() -> bool:
     if mooncake_spec is None or mooncake_spec.submodule_search_locations is None:
         return False
     return any(
-        (Path(location) / "libmooncake_store.so").exists()
-        or (Path(location) / "store.so").exists()
+        (Path(location) / "libmooncake_store.so").exists() or (Path(location) / "store.so").exists()
         for location in mooncake_spec.submodule_search_locations
     )
 
@@ -244,11 +243,7 @@ class ProcessGroup:
             ("--cluster_id", self.config.run_id),
         ]
         for flag, value in defaults:
-            if (
-                value
-                and not _args_have_flag(command, flag)
-                and not _args_have_flag(extra, flag)
-            ):
+            if value and not _args_have_flag(command, flag) and not _args_have_flag(extra, flag):
                 command.extend([flag, value])
         command.extend(extra)
 
@@ -271,9 +266,7 @@ class ProcessGroup:
         (self.config.run_dir / "mooncake_master.pid").write_text(
             f"{self.mooncake_master.pid}\n", encoding="utf-8"
         )
-        record_service_pid(
-            self.config, "mooncake_master", self.mooncake_master.pid, log_path
-        )
+        record_service_pid(self.config, "mooncake_master", self.mooncake_master.pid, log_path)
 
     def _start_mooncake_master_plain(self) -> None:
         ensure_command(self.config.mooncake_master_bin)
@@ -289,9 +282,7 @@ class ProcessGroup:
         (self.config.run_dir / "mooncake_master.pid").write_text(
             f"{self.mooncake_master.pid}\n", encoding="utf-8"
         )
-        record_service_pid(
-            self.config, "mooncake_master", self.mooncake_master.pid, log_path
-        )
+        record_service_pid(self.config, "mooncake_master", self.mooncake_master.pid, log_path)
 
     def _start_mooncake_metadata_server(self) -> None:
         ensure_command(self.config.mooncake_http_metadata_server_bin)
@@ -314,9 +305,7 @@ class ProcessGroup:
         (self.config.run_dir / "mooncake_metadata.pid").write_text(
             f"{self.mooncake_metadata.pid}\n", encoding="utf-8"
         )
-        record_service_pid(
-            self.config, "mooncake_metadata", self.mooncake_metadata.pid, log_path
-        )
+        record_service_pid(self.config, "mooncake_metadata", self.mooncake_metadata.pid, log_path)
 
     def wait_for_mooncake_ready(self) -> None:
         if not self.config.use_mooncake_store:
@@ -329,8 +318,7 @@ class ProcessGroup:
             self.config.start_timeout,
         ):
             raise RuntimeError(
-                "Timed out waiting for Mooncake master; last log lines:\n"
-                + tail_lines(master_log)
+                "Timed out waiting for Mooncake master; last log lines:\n" + tail_lines(master_log)
             )
         if self.mooncake_master and self.mooncake_master.poll() is not None:
             raise RuntimeError(
@@ -429,8 +417,7 @@ class ProcessGroup:
             self.config.start_timeout,
         ):
             raise RuntimeError(
-                "Timed out waiting for LMCache MP server; last log lines:\n"
-                + tail_lines(log_path)
+                "Timed out waiting for LMCache MP server; last log lines:\n" + tail_lines(log_path)
             )
         if self.lmcache_mp and self.lmcache_mp.poll() is not None:
             raise RuntimeError(
@@ -464,14 +451,10 @@ class ProcessGroup:
             self.config.model_name,
         ]
         if use_kv_transfer:
-            command.extend(
-                ["--kv-transfer-config", self.config.vllm_kv_transfer_config_json()]
-            )
+            command.extend(["--kv-transfer-config", self.config.vllm_kv_transfer_config_json()])
         command.extend(self.config.engine_args)
         self.server = self._start(command, log_path, env)
-        (self.config.run_dir / f"{phase}.pid").write_text(
-            f"{self.server.pid}\n", encoding="utf-8"
-        )
+        (self.config.run_dir / f"{phase}.pid").write_text(f"{self.server.pid}\n", encoding="utf-8")
 
     def wait_for_engine_ready(self, phase: str) -> None:
         log_path = self.config.log_dir / f"{phase}_server.log"
@@ -505,8 +488,7 @@ class ProcessGroup:
                 return
             time.sleep(2)
         raise RuntimeError(
-            f"Timed out waiting for {phase} server; last log lines:\n"
-            + tail_lines(log_path, 80)
+            f"Timed out waiting for {phase} server; last log lines:\n" + tail_lines(log_path, 80)
         )
 
     def _wait_for_ready_log(self, phase: str) -> None:
@@ -530,8 +512,7 @@ class ProcessGroup:
                 )
             time.sleep(1)
         raise RuntimeError(
-            f"Timed out waiting for {phase} ready log; last log lines:\n"
-            + tail_lines(log_path, 80)
+            f"Timed out waiting for {phase} ready log; last log lines:\n" + tail_lines(log_path, 80)
         )
 
     def stop_server(self, label: str = "server") -> None:

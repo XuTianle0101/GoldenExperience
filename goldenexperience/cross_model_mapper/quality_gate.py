@@ -15,11 +15,8 @@ class QualityGate:
     def accepts(self, quality_score: float, perplexity_drift: float | None = None) -> bool:
         if quality_score < self.min_quality_score:
             return False
-        if (
+        return not (
             self.max_perplexity_drift is not None
             and perplexity_drift is not None
             and perplexity_drift > self.max_perplexity_drift
-        ):
-            return False
-        return True
-
+        )

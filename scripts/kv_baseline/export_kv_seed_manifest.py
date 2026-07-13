@@ -67,7 +67,7 @@ def parse_labels(raw: str | None) -> dict[str, str]:
         return {}
     labels: dict[str, str] = {}
     for part in re.finditer(r'([^=,]+)="((?:\\.|[^"])*)"', raw):
-        labels[part.group(1)] = part.group(2).replace(r'\"', '"')
+        labels[part.group(1)] = part.group(2).replace(r"\"", '"')
     return labels
 
 
@@ -245,9 +245,7 @@ def build_manifest(
             "log_counts": {
                 "mooncake_store_set": count_in_file(lmcache_log, "MooncakeStore SET"),
                 "mooncake_store_get": count_in_file(lmcache_log, "MooncakeStore GET"),
-                "reuse_mooncake_store_get": count_in_file(
-                    reuse_lmcache_log, "MooncakeStore GET"
-                ),
+                "reuse_mooncake_store_get": count_in_file(reuse_lmcache_log, "MooncakeStore GET"),
                 "reuse_l2_prefetch_load_completed": count_in_file(
                     reuse_lmcache_log, "L2 prefetch load completed"
                 ),

@@ -37,7 +37,7 @@ class KVMapper(ABC):
         source_signature: ArchitectureSignature,
         target_signature: ArchitectureSignature,
         calibration_data: list[CalibrationPair] | None = None,
-    ) -> "KVMapper":
+    ) -> KVMapper:
         raise NotImplementedError
 
     @abstractmethod
@@ -64,7 +64,7 @@ class IdentityKVMapper(KVMapper):
         source_signature: ArchitectureSignature,
         target_signature: ArchitectureSignature,
         calibration_data: list[CalibrationPair] | None = None,
-    ) -> "IdentityKVMapper":
+    ) -> IdentityKVMapper:
         self.source_signature = source_signature
         self.target_signature = target_signature
         self.compatibility = source_signature.compatibility_with(target_signature)
@@ -124,7 +124,7 @@ class LinearProjectionKVMapper(KVMapper):
         source_signature: ArchitectureSignature,
         target_signature: ArchitectureSignature,
         calibration_data: list[CalibrationPair] | None = None,
-    ) -> "LinearProjectionKVMapper":
+    ) -> LinearProjectionKVMapper:
         self.source_signature = source_signature
         self.target_signature = target_signature
         self.compatibility = source_signature.compatibility_with(target_signature)
@@ -133,7 +133,9 @@ class LinearProjectionKVMapper(KVMapper):
             return self
 
         self.key_weight = identity_projection(source_signature.head_dim, target_signature.head_dim)
-        self.value_weight = identity_projection(source_signature.head_dim, target_signature.head_dim)
+        self.value_weight = identity_projection(
+            source_signature.head_dim, target_signature.head_dim
+        )
         if not calibration_data:
             self.confidence = 0.0
             self.calibrated = False

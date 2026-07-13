@@ -53,7 +53,7 @@ class KVShape:
     model_config_hash: str | None = None
     tokenizer_hash: str | None = None
 
-    def same_layout(self, other: "KVShape") -> bool:
+    def same_layout(self, other: KVShape) -> bool:
         return (
             self.num_layers == other.num_layers
             and self.num_key_value_heads == other.num_key_value_heads
@@ -64,7 +64,7 @@ class KVShape:
             and self.sliding_window == other.sliding_window
         )
 
-    def same_runtime_contract(self, other: "KVShape") -> bool:
+    def same_runtime_contract(self, other: KVShape) -> bool:
         return (
             self.dtype == other.dtype
             and self.rope_theta == other.rope_theta
@@ -77,7 +77,7 @@ class KVShape:
             )
         )
 
-    def projection_required(self, other: "KVShape") -> bool:
+    def projection_required(self, other: KVShape) -> bool:
         return not self.same_layout(other)
 
 
@@ -104,10 +104,10 @@ class ModelRef:
     def canonical_base_model_id(self) -> str:
         return self.base_model_id or self.model_id
 
-    def shares_tokenizer_with(self, other: "ModelRef") -> bool:
+    def shares_tokenizer_with(self, other: ModelRef) -> bool:
         return self.tokenizer_id == other.tokenizer_id
 
-    def same_family_architecture(self, other: "ModelRef") -> bool:
+    def same_family_architecture(self, other: ModelRef) -> bool:
         return self.family == other.family and self.architecture == other.architecture
 
 

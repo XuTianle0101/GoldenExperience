@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import time
+from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Any, Mapping
+from typing import Any
 
 from goldenexperience.size_variant.models import (
     CalibrationManifest,
@@ -16,7 +17,7 @@ from goldenexperience.size_variant.models import (
     kv_width,
     stable_artifact_id,
 )
-from goldenexperience.utils.tensors import infer_shape, identity_projection, project_last_dim
+from goldenexperience.utils.tensors import identity_projection, infer_shape, project_last_dim
 
 
 @dataclass(frozen=True)
@@ -249,7 +250,10 @@ class HiddenBridgeMaterializer:
             )
         output: list[MaterializedHiddenChunk] = []
         for entry in self.manifest.layer_map.entries:
-            if self.timeout_ms is not None and (time.perf_counter() - start) * 1000.0 > self.timeout_ms:
+            if (
+                self.timeout_ms is not None
+                and (time.perf_counter() - start) * 1000.0 > self.timeout_ms
+            ):
                 return MaterializationResult(
                     success=False,
                     chunks=tuple(output),
@@ -257,7 +261,9 @@ class HiddenBridgeMaterializer:
                     fallback_reason=FallbackReason.MATERIALIZATION_TIMEOUT,
                     error="hidden bridge timeout",
                 )
-            missing = [layer_id for layer_id in entry.source_layer_ids if layer_id not in source_chunks]
+            missing = [
+                layer_id for layer_id in entry.source_layer_ids if layer_id not in source_chunks
+            ]
             if missing:
                 return MaterializationResult(
                     success=False,
@@ -266,7 +272,9 @@ class HiddenBridgeMaterializer:
                     fallback_reason=FallbackReason.SOURCE_LAYER_MISSING,
                     error=f"missing source layer(s): {missing}",
                 )
-            source = self._blend_source_chunks([source_chunks[layer_id] for layer_id in entry.source_layer_ids], entry.weights)
+            source = self._blend_source_chunks(
+                [source_chunks[layer_id] for layer_id in entry.source_layer_ids], entry.weights
+            )
             if source.capture_point != self.manifest.hidden_bridge.capture_point:
                 return MaterializationResult(
                     success=False,
@@ -304,7 +312,9 @@ class HiddenBridgeMaterializer:
             elapsed_ms=(time.perf_counter() - start) * 1000.0,
         )
 
-    def _blend_source_chunks(self, chunks: list[HiddenStateChunk], weights: tuple[float, ...]) -> HiddenStateChunk:
+    def _blend_source_chunks(
+        self, chunks: list[HiddenStateChunk], weights: tuple[float, ...]
+    ) -> HiddenStateChunk:
         if len(chunks) == 1:
             return chunks[0]
         hidden = _weighted_sum([chunk.hidden for chunk in chunks], weights)
@@ -375,7 +385,9 @@ class TargetKVRestorer:
     def restore_chunk(self, hidden_chunk: MaterializedHiddenChunk) -> MaterializationResult:
         start = time.perf_counter()
         key_projector = self.layer_key_projectors.get(hidden_chunk.layer_id, self.key_projector)
-        value_projector = self.layer_value_projectors.get(hidden_chunk.layer_id, self.value_projector)
+        value_projector = self.layer_value_projectors.get(
+            hidden_chunk.layer_id, self.value_projector
+        )
         rope_fn = self.layer_rope_fns.get(hidden_chunk.layer_id, self.rope_fn)
         key = (
             key_projector(hidden_chunk.hidden)
@@ -391,12 +403,15 @@ class TargetKVRestorer:
             key, value = rope_fn(key, value, hidden_chunk.position_ids)
         key_shape = infer_shape(key)
         value_shape = infer_shape(value)
-        if (key_shape and not _matches_target_kv_layout(
-            key_shape,
-            self.restore.target_kv_heads,
-            self.restore.target_head_dim,
-            self.restore.target_kv_width,
-        )) or (
+        if (
+            key_shape
+            and not _matches_target_kv_layout(
+                key_shape,
+                self.restore.target_kv_heads,
+                self.restore.target_head_dim,
+                self.restore.target_kv_width,
+            )
+        ) or (
             value_shape
             and not _matches_target_kv_layout(
                 value_shape,
@@ -454,7 +469,10 @@ class SizeVariantMaterializer:
 
         output: list[MaterializedKVChunk] = []
         for entry in self.manifest.layer_map.entries:
-            if self.timeout_ms is not None and (time.perf_counter() - start) * 1000.0 > self.timeout_ms:
+            if (
+                self.timeout_ms is not None
+                and (time.perf_counter() - start) * 1000.0 > self.timeout_ms
+            ):
                 return MaterializationResult(
                     success=False,
                     chunks=tuple(output),
@@ -462,7 +480,9 @@ class SizeVariantMaterializer:
                     fallback_reason=FallbackReason.MATERIALIZATION_TIMEOUT,
                     error="projection timeout",
                 )
-            missing = [layer_id for layer_id in entry.source_layer_ids if layer_id not in source_chunks]
+            missing = [
+                layer_id for layer_id in entry.source_layer_ids if layer_id not in source_chunks
+            ]
             if missing:
                 return MaterializationResult(
                     success=False,
@@ -471,7 +491,9 @@ class SizeVariantMaterializer:
                     fallback_reason=FallbackReason.SOURCE_LAYER_MISSING,
                     error=f"missing source layer(s): {missing}",
                 )
-            source = self._blend_source_chunks([source_chunks[layer_id] for layer_id in entry.source_layer_ids], entry.weights)
+            source = self._blend_source_chunks(
+                [source_chunks[layer_id] for layer_id in entry.source_layer_ids], entry.weights
+            )
             key = project_last_dim(source.key, self._weight)
             value = project_last_dim(source.value, self._weight)
             key_shape = infer_shape(key)
@@ -541,14 +563,14 @@ def width_from_manifest(manifest: CalibrationManifest) -> tuple[int, int]:
     return kv_width(manifest.source.kv_shape), kv_width(manifest.target.kv_shape)
 
 
-def _matches_target_kv_layout(shape: tuple[int, ...], target_kv_heads: int, target_head_dim: int, target_kv_width: int) -> bool:
+def _matches_target_kv_layout(
+    shape: tuple[int, ...], target_kv_heads: int, target_head_dim: int, target_kv_width: int
+) -> bool:
     if not shape:
         return True
     if shape[-1] == target_kv_width:
         return True
-    if len(shape) >= 4 and shape[1] == target_kv_heads and shape[-1] == target_head_dim:
-        return True
-    return False
+    return len(shape) >= 4 and shape[1] == target_kv_heads and shape[-1] == target_head_dim
 
 
 def _weighted_sum(values: list[Any], weights: tuple[float, ...]) -> Any:
@@ -558,16 +580,14 @@ def _weighted_sum(values: list[Any], weights: tuple[float, ...]) -> Any:
         raise ValueError("values and weights must have the same length")
     first = values[0]
     if isinstance(first, (int, float)):
-        return sum(float(value) * weight for value, weight in zip(values, weights))
+        return sum(float(value) * weight for value, weight in zip(values, weights, strict=True))
     if isinstance(first, list):
         return [
-            _weighted_sum([value[idx] for value in values], weights)
-            for idx in range(len(first))
+            _weighted_sum([value[idx] for value in values], weights) for idx in range(len(first))
         ]
     if isinstance(first, tuple):
         return tuple(
-            _weighted_sum([value[idx] for value in values], weights)
-            for idx in range(len(first))
+            _weighted_sum([value[idx] for value in values], weights) for idx in range(len(first))
         )
     if hasattr(first, "__mul__") and hasattr(first, "__add__"):
         total = first * weights[0]

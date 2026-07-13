@@ -1,8 +1,8 @@
 """Plan cross-model KV reuse without launching vLLM or LMCache MP."""
 
-from pathlib import Path
 import sys
 import tempfile
+from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -48,7 +48,9 @@ def main() -> None:
     large = model("qwen3-14b", size_b=14, layers=40, head_dim=128)
 
     with tempfile.TemporaryDirectory(prefix="ge-example-") as temp_dir:
-        manifest = build_calibration_manifest(base, large, calibration_id="qwen3_8b_to_14b_hidden_bridge_v0")
+        manifest = build_calibration_manifest(
+            base, large, calibration_id="qwen3_8b_to_14b_hidden_bridge_v0"
+        )
         artifact_path = Path(temp_dir) / "qwen3_8b_to_14b_hidden_bridge_v0.json"
         manifest.save(artifact_path)
         for target in (lora, large):

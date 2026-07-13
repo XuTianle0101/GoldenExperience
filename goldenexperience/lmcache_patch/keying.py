@@ -34,7 +34,7 @@ class CrossModelCacheKey:
     risk_feature_schema: str | None = None
 
     @classmethod
-    def from_plan(cls, plan: ReusePlan) -> "CrossModelCacheKey":
+    def from_plan(cls, plan: ReusePlan) -> CrossModelCacheKey:
         return cls(
             source_model_id=plan.request.source.model_id,
             target_model_id=plan.request.target.model_id,

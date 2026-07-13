@@ -106,4 +106,3 @@ class NvmeTierBackend(TierBackend):
 
     def _path(self, block_id: str) -> Path:
         return self.root / f"{block_id}.pkl"
-

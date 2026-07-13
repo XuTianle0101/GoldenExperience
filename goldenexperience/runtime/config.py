@@ -112,14 +112,10 @@ def check_runtime(config: RuntimeConfig) -> RuntimeStatus:
     missing_hints: list[str] = []
     for dependency in config.dependencies:
         import_found = (
-            True
-            if dependency.import_name is None
-            else _import_exists(dependency.import_name)
+            True if dependency.import_name is None else _import_exists(dependency.import_name)
         )
         command_found = (
-            True
-            if dependency.command_name is None
-            else _command_exists(dependency.command_name)
+            True if dependency.command_name is None else _command_exists(dependency.command_name)
         )
         found = import_found and command_found
         available[dependency.name] = found

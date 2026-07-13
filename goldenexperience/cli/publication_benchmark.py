@@ -56,9 +56,7 @@ def freeze_manifest(args: argparse.Namespace) -> PublicationBenchmarkManifest:
     )
     manifest = replace(
         provisional,
-        split_sha256={
-            split: provisional.compute_split_sha256(split) for split in SPLIT_COUNTS
-        },
+        split_sha256={split: provisional.compute_split_sha256(split) for split in SPLIT_COUNTS},
     )
     manifest.save(args.output)
     return manifest

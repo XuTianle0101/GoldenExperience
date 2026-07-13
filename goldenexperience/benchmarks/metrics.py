@@ -56,4 +56,3 @@ def percentile(sorted_values: list[float], pct: float) -> float:
     upper = min(lower + 1, len(sorted_values) - 1)
     weight = rank - lower
     return sorted_values[lower] * (1 - weight) + sorted_values[upper] * weight
-

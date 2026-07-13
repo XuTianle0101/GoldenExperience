@@ -514,8 +514,10 @@ def main() -> int:
         "materialized": False,
         "injected": False,
     }
-    if reuse_plan is not None and reuse_plan.executable and _env_bool(
-        "GE_RESIDENT_MATERIALIZER", "1"
+    if (
+        reuse_plan is not None
+        and reuse_plan.executable
+        and _env_bool("GE_RESIDENT_MATERIALIZER", "1")
     ):
         materializer_client = ResidentMaterializerClient(
             python_bin=config.python_bin,
@@ -616,8 +618,7 @@ def main() -> int:
             tokenization["lookup_seq_len"] = seq_len
             tokenization["shared_prefix_tokens"] = shared_prefix_tokens
             tokenization["success"] = (
-                len(source_token_ids) == seq_len
-                and len(target_token_ids) >= shared_prefix_tokens
+                len(source_token_ids) == seq_len and len(target_token_ids) >= shared_prefix_tokens
             )
             if tokenization["success"] and reuse_plan is not None and reuse_plan.executable:
                 materializer = _run_materializer(

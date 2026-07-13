@@ -121,9 +121,7 @@ def build_cka_source_layer_plan(
     )
     depth_ids = depth_ids.to(score_device)
     depth_weights = depth_weights.to(score_device)
-    depth_score = (
-        combined_scores.gather(1, depth_ids) * depth_weights
-    ).sum(dim=1).mean()
+    depth_score = (combined_scores.gather(1, depth_ids) * depth_weights).sum(dim=1).mean()
     evidence = {
         "method": "monotonic_linear_cka",
         "sample_count": int(source_kv.shape[2]),

@@ -116,7 +116,7 @@ register_l2_adapter_factory("mooncake_store", _create_mooncake_store_l2_adapter)
 '''
 
 
-NATIVE_ADAPTER_ORIGINAL = '''# SPDX-License-Identifier: Apache-2.0
+NATIVE_ADAPTER_ORIGINAL = """# SPDX-License-Identifier: Apache-2.0
 from __future__ import annotations
 
 from collections import defaultdict
@@ -163,7 +163,7 @@ class NativeConnectorL2Adapter:
     def query_lookup_and_lock_result(self, task_id: L2TaskId) -> Bitmap | None:
         with self._lock:
             return self._completed_lookups.pop(task_id, None)
-'''
+"""
 
 
 def _write_fake_site_packages(tmp_path: Path) -> Path:
@@ -254,14 +254,18 @@ def test_mooncake_runtime_patch_upgrades_previous_adapter_block(tmp_path: Path) 
         / "l2_adapters"
         / "mooncake_store_l2_adapter.py"
     )
-    text = adapter.read_text(encoding="utf-8").replace(
-        "GOLDENEXPERIENCE_MOONCAKE_ADAPTER_VERSION = 2\n\n\n",
-        "",
-        1,
-    ).replace(
-        "if bytes_read == requested_size == indexed_size:",
-        "if bytes_read > 0:",
-        1,
+    text = (
+        adapter.read_text(encoding="utf-8")
+        .replace(
+            "GOLDENEXPERIENCE_MOONCAKE_ADAPTER_VERSION = 2\n\n\n",
+            "",
+            1,
+        )
+        .replace(
+            "if bytes_read == requested_size == indexed_size:",
+            "if bytes_read > 0:",
+            1,
+        )
     )
     adapter.write_text(text, encoding="utf-8")
 

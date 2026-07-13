@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import json
 import time
+from collections.abc import Callable
 from dataclasses import asdict
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 from goldenexperience.benchmarks.metrics import BenchmarkRecord, BenchmarkSummary, summarize
 
@@ -48,10 +49,7 @@ class BenchmarkHarness:
     def export_json(self, path: str | Path, extra: dict[str, Any] | None = None) -> None:
         output = {
             "experiment": self.experiment_name,
-            "summaries": {
-                name: asdict(summary)
-                for name, summary in self.summary().items()
-            },
+            "summaries": {name: asdict(summary) for name, summary in self.summary().items()},
             "records": [asdict(record) for record in self.records],
             "extra": extra or {},
         }
@@ -61,4 +59,3 @@ class BenchmarkHarness:
 
     def reset(self) -> None:
         self.records.clear()
-

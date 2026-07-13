@@ -22,9 +22,10 @@ class ModelAdapter(ABC):
         """Export engine-owned KV state into engine-neutral cache blocks."""
 
     @abstractmethod
-    def inject_kv(self, blocks: list[CacheBlock], engine_state: Any | None = None, **kwargs: Any) -> Any:
+    def inject_kv(
+        self, blocks: list[CacheBlock], engine_state: Any | None = None, **kwargs: Any
+    ) -> Any:
         """Inject cache blocks back into an engine-specific format."""
 
     def supports_model(self, signature: ArchitectureSignature) -> bool:
         return self.architecture_signature.compatibility_with(signature).value != "incompatible"
-

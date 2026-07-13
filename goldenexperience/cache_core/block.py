@@ -138,7 +138,7 @@ class CacheBlock:
         source_model_id: str | None = None,
         mapper_id: str | None = None,
         block_id: str | None = None,
-    ) -> "CacheBlock":
+    ) -> CacheBlock:
         checksum = stable_digest(payload)
         bytes_size = payload.nbytes
         metadata = CacheBlockMetadata(
@@ -165,4 +165,3 @@ class CacheBlock:
         self.metadata.shape = self.payload.shape
         self.metadata.bytes_size = self.payload.nbytes
         self.metadata.checksum = stable_digest(self.payload)
-

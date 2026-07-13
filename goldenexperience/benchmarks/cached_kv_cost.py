@@ -403,9 +403,7 @@ def _local_temporary_storage_evidence(
             "temporary_storage_files_remaining": None,
             "temporary_storage_bytes_remaining": None,
         }
-    remaining = [
-        path for path in root.rglob("*") if path.is_file() and run_nonce in path.name
-    ]
+    remaining = [path for path in root.rglob("*") if path.is_file() and run_nonce in path.name]
     return {
         "local_storage_cleanup_verified": True,
         "physical_storage_reclaimed": not remaining,

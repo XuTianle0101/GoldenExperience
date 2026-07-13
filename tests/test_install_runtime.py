@@ -2,7 +2,6 @@ import os
 import subprocess
 from pathlib import Path
 
-
 REPO_ROOT = Path(__file__).resolve().parents[1]
 INSTALL_SCRIPT = REPO_ROOT / "scripts" / "install_runtime.sh"
 

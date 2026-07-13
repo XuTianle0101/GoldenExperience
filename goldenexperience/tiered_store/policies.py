@@ -66,7 +66,9 @@ class LFUEvictionPolicy:
     ) -> list[str]:
         eligible = _eligible_candidates(candidates, protected_ids)
         if self.prefer_low_quality:
-            eligible.sort(key=lambda item: (item.access_count, item.quality_score, item.last_accessed))
+            eligible.sort(
+                key=lambda item: (item.access_count, item.quality_score, item.last_accessed)
+            )
         else:
             eligible.sort(key=lambda item: (item.access_count, item.last_accessed))
         return _take_until_bytes(eligible, required_bytes)
@@ -177,7 +179,9 @@ class WatermarkOffloadPolicy:
             target_used = int(state.capacity_bytes * self.low_watermark)
             required_bytes = max(0, state.used_bytes - target_used)
             tier_candidates = [item for item in candidates if item.device_tier == tier]
-            victims = self.eviction_policy.select_victims(tier_candidates, required_bytes, protected_ids)
+            victims = self.eviction_policy.select_victims(
+                tier_candidates, required_bytes, protected_ids
+            )
             if victims:
                 plans.append(
                     OffloadPlan(
@@ -240,7 +244,10 @@ class DecodeWindowPrefetchPolicy:
         for item in selected:
             if context.max_blocks is not None and len(block_ids) >= context.max_blocks:
                 break
-            if context.max_bytes is not None and bytes_selected + item.bytes_size > context.max_bytes:
+            if (
+                context.max_bytes is not None
+                and bytes_selected + item.bytes_size > context.max_bytes
+            ):
                 break
             block_ids.append(item.block_id)
             bytes_selected += item.bytes_size
@@ -251,7 +258,9 @@ class DecodeWindowPrefetchPolicy:
             reason=context.reason,
             metadata={
                 "policy": self.__class__.__name__,
-                "current_layer_id": "" if context.current_layer_id is None else str(context.current_layer_id),
+                "current_layer_id": ""
+                if context.current_layer_id is None
+                else str(context.current_layer_id),
                 "lookahead_layers": str(context.lookahead_layers),
             },
         )
@@ -267,13 +276,19 @@ class PrefixHotnessPrefetchPolicy:
 
     def plan(self, candidates: list[CacheBlockMetadata], context: PrefetchContext) -> PrefetchPlan:
         selected = [item for item in candidates if item.device_tier != context.target_tier]
-        selected.sort(key=lambda item: (item.access_count, item.quality_score, item.last_accessed), reverse=True)
+        selected.sort(
+            key=lambda item: (item.access_count, item.quality_score, item.last_accessed),
+            reverse=True,
+        )
         block_ids: list[str] = []
         bytes_selected = 0
         for item in selected:
             if context.max_blocks is not None and len(block_ids) >= context.max_blocks:
                 break
-            if context.max_bytes is not None and bytes_selected + item.bytes_size > context.max_bytes:
+            if (
+                context.max_bytes is not None
+                and bytes_selected + item.bytes_size > context.max_bytes
+            ):
                 break
             block_ids.append(item.block_id)
             bytes_selected += item.bytes_size

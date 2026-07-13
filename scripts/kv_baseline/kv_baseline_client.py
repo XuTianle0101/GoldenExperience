@@ -202,10 +202,7 @@ def run_request(args: argparse.Namespace) -> int:
     normalized_expected = " ".join(expected.split())
     matches_expected = bool(
         expected
-        and (
-            extracted_final_answer == expected
-            or normalized_response == normalized_expected
-        )
+        and (extracted_final_answer == expected or normalized_response == normalized_expected)
     )
     result = {
         "phase": args.phase,
@@ -404,9 +401,7 @@ def summarize(args: argparse.Namespace) -> int:
             requests[str(item.get("phase") or path.stem)] = item
 
     logs = (
-        [_summarize_log(path) for path in sorted(log_dir.glob("*.log"))]
-        if log_dir.exists()
-        else []
+        [_summarize_log(path) for path in sorted(log_dir.glob("*.log"))] if log_dir.exists() else []
     )
     metrics = (
         {path.stem: _summarize_metrics(path) for path in sorted(metrics_dir.glob("*.prom"))}
@@ -415,9 +410,7 @@ def summarize(args: argparse.Namespace) -> int:
     )
     cache = _summarize_cache_dir(cache_dir)
     mooncake_storage = (
-        _summarize_cache_dir(mooncake_storage_root)
-        if mooncake_storage_root is not None
-        else None
+        _summarize_cache_dir(mooncake_storage_root) if mooncake_storage_root is not None else None
     )
 
     def timing(phase: str, key: str) -> float | None:
@@ -497,18 +490,14 @@ def summarize(args: argparse.Namespace) -> int:
         "mooncake_storage": mooncake_storage,
         "deltas": {
             "reuse_minus_offload_ttft_ms": (
-                (
-                    reuse_ttft - offload_ttft
-                    if reuse_ttft is not None and offload_ttft is not None
-                    else None
-                )
+                reuse_ttft - offload_ttft
+                if reuse_ttft is not None and offload_ttft is not None
+                else None
             ),
             "reuse_minus_offload_e2e_ms": (
-                (
-                    reuse_e2e - offload_e2e
-                    if reuse_e2e is not None and offload_e2e is not None
-                    else None
-                )
+                reuse_e2e - offload_e2e
+                if reuse_e2e is not None and offload_e2e is not None
+                else None
             ),
         },
         "evidence": {
@@ -549,9 +538,7 @@ def summarize(args: argparse.Namespace) -> int:
             "reuse_l2_retrieve_operation_mentions": reuse_l2_retrieve_operation_mentions,
             "reuse_max_cached_tokens_mentioned": reuse_max_cached_tokens,
             "reuse_cache_hit_rate_max": reuse_cache_hit_rate,
-            "reuse_uncached_prompt_tokens_less_than_total": (
-                reuse_uncached_prompt_less_than_total
-            ),
+            "reuse_uncached_prompt_tokens_less_than_total": (reuse_uncached_prompt_less_than_total),
             "disk_cache_file_count": disk_cache_file_count,
             "disk_cache_total_bytes": disk_cache_total_bytes,
             "mooncake_storage_file_count": mooncake_file_count,
@@ -606,9 +593,7 @@ def build_parser() -> argparse.ArgumentParser:
     request_parser.add_argument(
         "--include-usage", dest="include_usage", action="store_true", default=True
     )
-    request_parser.add_argument(
-        "--no-include-usage", dest="include_usage", action="store_false"
-    )
+    request_parser.add_argument("--no-include-usage", dest="include_usage", action="store_false")
     request_parser.set_defaults(func=run_request)
 
     summary_parser = subparsers.add_parser("summarize", help="summarize requests and logs")

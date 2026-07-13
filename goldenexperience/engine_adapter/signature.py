@@ -37,7 +37,7 @@ class ArchitectureSignature:
     weights_hash: str | None = None
     extra: dict[str, str | int | float | bool] = field(default_factory=dict)
 
-    def compatibility_with(self, target: "ArchitectureSignature") -> CompatibilityLevel:
+    def compatibility_with(self, target: ArchitectureSignature) -> CompatibilityLevel:
         if self is target or self._same_verified_weights(target):
             return CompatibilityLevel.EXACT
         if self.family != target.family or self.architecture != target.architecture:
@@ -55,7 +55,7 @@ class ArchitectureSignature:
             return CompatibilityLevel.SHAPE_MISMATCH
         return CompatibilityLevel.INCOMPATIBLE
 
-    def _same_runtime_contract(self, target: "ArchitectureSignature") -> bool:
+    def _same_runtime_contract(self, target: ArchitectureSignature) -> bool:
         source_tokenizer = self.tokenizer_hash or self.tokenizer_id
         target_tokenizer = target.tokenizer_hash or target.tokenizer_id
         if source_tokenizer != target_tokenizer:
@@ -69,7 +69,7 @@ class ArchitectureSignature:
             and self.sliding_window == target.sliding_window
         )
 
-    def _same_verified_weights(self, target: "ArchitectureSignature") -> bool:
+    def _same_verified_weights(self, target: ArchitectureSignature) -> bool:
         if not _is_sha256(self.weights_hash) or self.weights_hash != target.weights_hash:
             return False
         if (

@@ -23,10 +23,14 @@ DEFAULT_PROMPTS = [
 
 
 def main_collect() -> None:
-    parser = argparse.ArgumentParser(description="Create a prompt manifest for GoldenScale calibration.")
+    parser = argparse.ArgumentParser(
+        description="Create a prompt manifest for GoldenScale calibration."
+    )
     parser.add_argument("--direction", choices=["8b_to_14b", "14b_to_8b"], default="8b_to_14b")
     parser.add_argument("--output", type=Path, default=DEFAULT_ARTIFACT_DIR / "prompts.json")
-    parser.add_argument("--prompt", action="append", default=None, help="Prompt text. Can be repeated.")
+    parser.add_argument(
+        "--prompt", action="append", default=None, help="Prompt text. Can be repeated."
+    )
     parser.add_argument("--prompt-file", type=Path, default=None, help="One prompt per line.")
     args = parser.parse_args()
 
@@ -42,7 +46,11 @@ def main_collect() -> None:
 
     source, target = qwen3_model_pair(args.direction)
     save_prompt_manifest(args.output, prompts, source, target)
-    print(json.dumps({"output": str(args.output), "prompt_count": len(prompts)}, indent=2, sort_keys=True))
+    print(
+        json.dumps(
+            {"output": str(args.output), "prompt_count": len(prompts)}, indent=2, sort_keys=True
+        )
+    )
 
 
 def main_fit() -> None:
@@ -54,14 +62,20 @@ def main_fit() -> None:
         choices=["8b_to_14b", "14b_to_8b", "bidirectional"],
         default="bidirectional",
     )
-    parser.add_argument("--prompt-manifest", type=Path, default=DEFAULT_ARTIFACT_DIR / "prompts.json")
+    parser.add_argument(
+        "--prompt-manifest", type=Path, default=DEFAULT_ARTIFACT_DIR / "prompts.json"
+    )
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_ARTIFACT_DIR)
     parser.add_argument("--calibration-id", default=None, help="Use only for single-direction fit.")
-    parser.add_argument("--method", choices=["hidden_bridge", "kv_projection"], default="hidden_bridge")
+    parser.add_argument(
+        "--method", choices=["hidden_bridge", "kv_projection"], default="hidden_bridge"
+    )
     parser.add_argument("--bridge-rank", type=int, default=256)
     args = parser.parse_args()
 
-    directions = ["8b_to_14b", "14b_to_8b"] if args.direction == "bidirectional" else [args.direction]
+    directions = (
+        ["8b_to_14b", "14b_to_8b"] if args.direction == "bidirectional" else [args.direction]
+    )
     prompt_count = load_prompt_count(args.prompt_manifest)
     outputs = []
     for direction in directions:
@@ -84,7 +98,9 @@ def main_fit() -> None:
         outputs.append({"path": str(output), "passed": manifest.passed})
     index_path = args.output_dir / "index.json"
     index_path.parent.mkdir(parents=True, exist_ok=True)
-    index_path.write_text(json.dumps({"manifests": outputs}, indent=2, sort_keys=True), encoding="utf-8")
+    index_path.write_text(
+        json.dumps({"manifests": outputs}, indent=2, sort_keys=True), encoding="utf-8"
+    )
     print(json.dumps({"outputs": outputs, "index": str(index_path)}, indent=2, sort_keys=True))
 
 
@@ -137,7 +153,9 @@ def main_bench() -> None:
         if manifest.hidden_bridge is not None
         else args.projection_us_per_token_layer
     )
-    materialization_ms = args.prompt_tokens * manifest.target.kv_shape.num_layers * us_per_token_layer / 1000.0
+    materialization_ms = (
+        args.prompt_tokens * manifest.target.kv_shape.num_layers * us_per_token_layer / 1000.0
+    )
     accepted = manifest.passed and materialization_ms <= 0.70 * target_prefill_ms
     payload = {
         "manifest": str(args.manifest),

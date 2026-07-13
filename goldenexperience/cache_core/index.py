@@ -51,7 +51,9 @@ class CacheIndex:
 
     def find(self, query: CacheQuery) -> list[CacheBlockMetadata]:
         candidates = self._candidate_ids(query)
-        matches = [self._by_id[block_id] for block_id in candidates if query.matches(self._by_id[block_id])]
+        matches = [
+            self._by_id[block_id] for block_id in candidates if query.matches(self._by_id[block_id])
+        ]
         matches.sort(key=lambda meta: (meta.quality_score, meta.last_accessed), reverse=True)
         return matches
 

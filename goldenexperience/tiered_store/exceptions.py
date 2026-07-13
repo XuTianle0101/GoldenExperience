@@ -17,6 +17,6 @@ class CapacityExceededError(TieredStoreError):
         self.required_bytes = required_bytes
         self.free_bytes = free_bytes
         super().__init__(
-            f"Tier {tier.value} cannot admit {required_bytes} bytes; only {free_bytes} bytes are free."
+            f"Tier {tier.value} cannot admit {required_bytes} bytes; "
+            f"only {free_bytes} bytes are free."
         )
-

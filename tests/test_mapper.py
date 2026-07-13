@@ -1,6 +1,6 @@
-from goldenexperience.cache_core import CacheBlock, DeviceTier, KVPayload
 import pytest
 
+from goldenexperience.cache_core import CacheBlock, DeviceTier, KVPayload
 from goldenexperience.cross_model_mapper import (
     CalibrationPair,
     IdentityKVMapper,

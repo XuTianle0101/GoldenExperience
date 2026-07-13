@@ -45,4 +45,3 @@ AGENT_WORKFLOW = Scenario(
     shared_prefix_ratio=0.60,
     batch_size=4,
 )
-

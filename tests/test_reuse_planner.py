@@ -166,7 +166,9 @@ def test_lora_pair_requires_measured_quality_evidence() -> None:
     assert plan.status == PlanStatus.NEEDS_CALIBRATION
     assert not plan.executable
     assert "lora_delta_quality_gate" in plan.required_gates
-    assert CrossModelCacheKey.from_plan(plan).to_sidecar_fields()["ge_scenario"] == plan.scenario.value
+    assert (
+        CrossModelCacheKey.from_plan(plan).to_sidecar_fields()["ge_scenario"] == plan.scenario.value
+    )
 
 
 def test_lora_pair_is_ready_with_quality_evidence() -> None:

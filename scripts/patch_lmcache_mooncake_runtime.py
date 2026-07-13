@@ -57,6 +57,7 @@ def is_complete_mooncake_read(
 ) -> bool:
     return bytes_read == requested_size == indexed_size
 
+
 MOONCAKE_PYTHON_ADAPTER_BLOCK = f'''{PYTHON_ADAPTER_MARKER}
 {PYTHON_ADAPTER_VERSION_MARKER}
 
@@ -315,7 +316,9 @@ class MooncakePythonL2Adapter(L2AdapterInterface):
                     try:
                         record = json.loads(line)
                     except json.JSONDecodeError:
-                        logger.warning("Skipping invalid Mooncake external index line: %s", line[:200])
+                        logger.warning(
+                            "Skipping invalid Mooncake external index line: %s", line[:200]
+                        )
                         continue
                     key = record.get("key")
                     if not isinstance(key, str) or not key:
@@ -336,14 +339,14 @@ class MooncakePythonL2Adapter(L2AdapterInterface):
 {PYTHON_ADAPTER_END_MARKER}
 '''
 
-MOONCAKE_FACTORY_BRANCH = '''    if _env_enabled("LMCACHE_MOONCAKE_PYTHON_ADAPTER", "1"):
+MOONCAKE_FACTORY_BRANCH = """    if _env_enabled("LMCACHE_MOONCAKE_PYTHON_ADAPTER", "1"):
         if not isinstance(config, MooncakeStoreL2AdapterConfig):
             raise ValueError(f"Expected MooncakeStoreL2AdapterConfig, got {type(config)}")
         adapter = MooncakePythonL2Adapter(config)
         logger.info("Created Mooncake Store Python L2 adapter")
         return adapter
 
-'''
+"""
 
 NATIVE_LOOKUP_HELPERS = f'''    {NATIVE_LOOKUP_MARKER}
     def _use_local_lookup_index(self) -> bool:
@@ -525,9 +528,7 @@ def patch_mooncake_store_adapter(
     if "class MooncakePythonL2Adapter" in text and PYTHON_ADAPTER_VERSION_MARKER not in text:
         if PYTHON_ADAPTER_MARKER in text:
             start = text.index(PYTHON_ADAPTER_MARKER)
-            end = text.index(PYTHON_ADAPTER_END_MARKER, start) + len(
-                PYTHON_ADAPTER_END_MARKER
-            )
+            end = text.index(PYTHON_ADAPTER_END_MARKER, start) + len(PYTHON_ADAPTER_END_MARKER)
         else:
             # Early patch versions had no markers. Replace the complete adapter section
             # rather than leaving an old class that happens to share the same name.

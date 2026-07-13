@@ -10,7 +10,7 @@ from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
-from goldenexperience.cache_core.block import CacheBlock, CacheBlockMetadata, CacheQuery
+from goldenexperience.cache_core.block import CacheBlock, CacheQuery
 from goldenexperience.cache_core.enums import DeviceTier
 from goldenexperience.cache_core.index import CacheIndex
 from goldenexperience.tiered_store.backend import MemoryTierBackend, NvmeTierBackend, TierBackend
@@ -35,7 +35,6 @@ from goldenexperience.tiered_store.policies import (
     WatermarkOffloadPolicy,
 )
 from goldenexperience.utils.tensors import move_payload_to_tier, stable_digest
-
 
 DEMOTION_TARGET: dict[DeviceTier, DeviceTier | None] = {
     DeviceTier.HBM: DeviceTier.CPU,
@@ -94,7 +93,9 @@ class TieredKVStore:
                 self.backends[existing.device_tier].remove(block.metadata.block_id)
                 self.index.remove(block.metadata.block_id)
             tier = block.metadata.device_tier
-            self._ensure_capacity(tier, block.metadata.bytes_size, protected_ids={block.metadata.block_id})
+            self._ensure_capacity(
+                tier, block.metadata.bytes_size, protected_ids={block.metadata.block_id}
+            )
             payload = self._prepare_payload_for_tier(block.payload, tier)
             self.backends[tier].put(block.metadata.block_id, payload)
             self.index.add(block.metadata)
@@ -231,7 +232,10 @@ class TieredKVStore:
         """Promote blocks according to a prefetch plan."""
 
         if plan.asynchronous:
-            return [self._executor.submit(self.offload, block_id, plan.target_tier) for block_id in plan.block_ids]
+            return [
+                self._executor.submit(self.offload, block_id, plan.target_tier)
+                for block_id in plan.block_ids
+            ]
         return [self.offload(block_id, plan.target_tier) for block_id in plan.block_ids]
 
     def build_prefetch_plan(
@@ -284,7 +288,9 @@ class TieredKVStore:
         layer_items = self._normalize_layer_input(blocks_by_layer)
         pending: Future[LayerTransferResult] | None = None
         for layer_id, blocks in layer_items:
-            next_future = self._executor.submit(self._put_layer, layer_id, list(blocks), target_tier)
+            next_future = self._executor.submit(
+                self._put_layer, layer_id, list(blocks), target_tier
+            )
             if pending is not None:
                 yield pending.result()
             pending = next_future
@@ -332,15 +338,16 @@ class TieredKVStore:
         layer_ids = plan.layer_ids or self.layer_ids(plan.query)
         if not plan.asynchronous:
             return [
-                self.offload_layer(plan.query, layer_id, plan.target_tier)
-                for layer_id in layer_ids
+                self.offload_layer(plan.query, layer_id, plan.target_tier) for layer_id in layer_ids
             ]
 
         depth = max(1, plan.pipeline_depth)
         futures: list[Future[LayerTransferResult]] = []
         in_flight: set[Future[LayerTransferResult]] = set()
         for layer_id in layer_ids:
-            future = self._executor.submit(self.offload_layer, plan.query, layer_id, plan.target_tier)
+            future = self._executor.submit(
+                self.offload_layer, plan.query, layer_id, plan.target_tier
+            )
             futures.append(future)
             in_flight.add(future)
             if len(in_flight) >= depth:
@@ -541,7 +548,9 @@ class TieredKVStore:
                 block_ids.append(block.metadata.block_id)
             except Exception:
                 failures.append(block.metadata.block_id)
-        resolved_tier = target_tier or (blocks[0].metadata.device_tier if blocks else DeviceTier.CPU)
+        resolved_tier = target_tier or (
+            blocks[0].metadata.device_tier if blocks else DeviceTier.CPU
+        )
         return LayerTransferResult(
             layer_id=layer_id,
             block_ids=block_ids,
@@ -580,7 +589,9 @@ class TieredKVStore:
             items.append((layer_id, blocks))
         return items
 
-    def _ensure_capacity(self, tier: DeviceTier, incoming_bytes: int, protected_ids: set[str]) -> None:
+    def _ensure_capacity(
+        self, tier: DeviceTier, incoming_bytes: int, protected_ids: set[str]
+    ) -> None:
         capacity = self.capacities.get(tier, 0)
         if capacity <= 0:
             return

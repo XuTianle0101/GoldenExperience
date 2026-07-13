@@ -211,9 +211,7 @@ class BaselineConfig:
         )
         mooncake_master_host = os.environ.get("GE_MOONCAKE_MASTER_HOST", "127.0.0.1")
         mooncake_master_port = int(os.environ.get("GE_MOONCAKE_MASTER_PORT", "50051"))
-        mooncake_metadata_host = os.environ.get(
-            "GE_MOONCAKE_METADATA_HOST", mooncake_master_host
-        )
+        mooncake_metadata_host = os.environ.get("GE_MOONCAKE_METADATA_HOST", mooncake_master_host)
         mooncake_metadata_port = int(os.environ.get("GE_MOONCAKE_METADATA_PORT", "8080"))
         mooncake_master_addr = os.environ.get(
             "GE_MOONCAKE_MASTER_ADDR", f"{mooncake_master_host}:{mooncake_master_port}"
@@ -300,15 +298,11 @@ class BaselineConfig:
             lmcache_mp_port=int(os.environ.get("GE_LMCACHE_MP_PORT", "6555")),
             lmcache_mp_http_host=os.environ.get("GE_LMCACHE_MP_HTTP_HOST", "127.0.0.1"),
             lmcache_mp_http_port=int(os.environ.get("GE_LMCACHE_MP_HTTP_PORT", "8081")),
-            lmcache_mp_prometheus_port=int(
-                os.environ.get("GE_LMCACHE_MP_PROMETHEUS_PORT", "9090")
-            ),
+            lmcache_mp_prometheus_port=int(os.environ.get("GE_LMCACHE_MP_PROMETHEUS_PORT", "9090")),
             lmcache_mp_l1_gb=float(os.environ.get("GE_LMCACHE_MP_L1_GB", "4")),
             lmcache_mp_l1_init_gb=_env_int("GE_LMCACHE_MP_L1_INIT_GB", "1"),
             lmcache_mp_eviction_policy=os.environ.get("GE_LMCACHE_MP_EVICTION_POLICY", "noop"),
-            lmcache_mp_l2_store_policy=os.environ.get(
-                "GE_LMCACHE_MP_L2_STORE_POLICY", "skip_l1"
-            ),
+            lmcache_mp_l2_store_policy=os.environ.get("GE_LMCACHE_MP_L2_STORE_POLICY", "skip_l1"),
             lmcache_mp_l2_adapter_type=lmcache_mp_l2_adapter_type,
             lmcache_mp_l2_dir=_abs_path(os.environ.get("GE_LMCACHE_MP_L2_DIR", str(cache_dir))),
             lmcache_mp_l2_use_odirect=_env_bool("GE_LMCACHE_MP_L2_USE_ODIRECT", "false"),

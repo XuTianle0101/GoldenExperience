@@ -219,12 +219,8 @@ def collect_layer_alignment_data(
         positions = _sample_positions(len(token_ids), samples_per_prompt)
         source_object = cache_to_object(source_out.past_key_values)
         target_object = cache_to_object(target_out.past_key_values)
-        source_parts.append(
-            source_object[:, :, positions.to(source_object.device), :].to("cpu")
-        )
-        target_parts.append(
-            target_object[:, :, positions.to(target_object.device), :].to("cpu")
-        )
+        source_parts.append(source_object[:, :, positions.to(source_object.device), :].to("cpu"))
+        target_parts.append(target_object[:, :, positions.to(target_object.device), :].to("cpu"))
         position_parts.append(positions)
         prompt_ids.append(sample.prompt_id)
         del source_out, target_out, source_object, target_object
@@ -340,11 +336,14 @@ def _kv_anchor_losses(refined: Any, reference: Any) -> tuple[Any, Any, Any]:
     relative_mse = torch.stack(
         [_relative_mse(refined[index], reference[index]) for index in range(2)]
     ).mean()
-    cosine_loss = 1 - functional.cosine_similarity(
-        refined.float().reshape(-1, refined.shape[-1]),
-        reference.detach().float().reshape(-1, reference.shape[-1]),
-        dim=-1,
-    ).mean()
+    cosine_loss = (
+        1
+        - functional.cosine_similarity(
+            refined.float().reshape(-1, refined.shape[-1]),
+            reference.detach().float().reshape(-1, reference.shape[-1]),
+            dim=-1,
+        ).mean()
+    )
     return (relative_mse + cosine_loss) / 2, relative_mse, cosine_loss
 
 
@@ -604,8 +603,8 @@ def _measure_refinement_holdout_mode(
                 label_weight=label_weight,
             )
             agreement = (
-                student_logits.argmax(dim=-1) == teacher_logits.argmax(dim=-1)
-            ).float().mean()
+                (student_logits.argmax(dim=-1) == teacher_logits.argmax(dim=-1)).float().mean()
+            )
             objectives.append(float(objective.item()))
             distillations.append(float(distillation.item()))
             label_losses.append(float(label_loss.item()))
@@ -674,11 +673,7 @@ def _measure_refinement_holdout(
     label_weight: float,
     prompt_tail_weight: float,
 ) -> dict[str, Any]:
-    modes = (
-        ("native-generation", "prompt-tail")
-        if objective_mode == "mixed"
-        else (objective_mode,)
-    )
+    modes = ("native-generation", "prompt-tail") if objective_mode == "mixed" else (objective_mode,)
     measurements = {
         mode: _measure_refinement_holdout_mode(
             samples,
@@ -753,8 +748,7 @@ def _combine_refinement_metric(
     if objective_mode != "mixed":
         return passes[objective_mode][metric]
     return (
-        passes["native-generation"][metric]
-        + prompt_tail_weight * passes["prompt-tail"][metric]
+        passes["native-generation"][metric] + prompt_tail_weight * passes["prompt-tail"][metric]
     ) / (1 + prompt_tail_weight)
 
 
@@ -802,8 +796,8 @@ def _run_refinement_training_passes(
             label_weight=label_weight,
         )
         top1_agreement = (
-            student_logits.argmax(dim=-1) == teacher_logits.argmax(dim=-1)
-        ).float().mean()
+            (student_logits.argmax(dim=-1) == teacher_logits.argmax(dim=-1)).float().mean()
+        )
         passes[mode] = {
             "source_object": source_object,
             "bridge_object": bridge_object,
@@ -1007,19 +1001,13 @@ def refine_state_with_target_logits(
                     target_rope_theta=_rope_theta(target_config),
                     device=target_device,
                 )
-            refined_object = bridge_object[
-                :, :, anchor_positions.to(bridge_object.device), :
-            ]
+            refined_object = bridge_object[:, :, anchor_positions.to(bridge_object.device), :]
             (
                 kv_anchor_loss,
                 kv_anchor_relative_mse,
                 kv_anchor_cosine_loss,
             ) = _kv_anchor_losses(refined_object, reference_object)
-        loss = (
-            objective
-            + anchor_weight * parameter_anchor_loss
-            + kv_anchor_weight * kv_anchor_loss
-        )
+        loss = objective + anchor_weight * parameter_anchor_loss + kv_anchor_weight * kv_anchor_loss
         optimizer.zero_grad(set_to_none=True)
         loss.backward()
         grad_norm = torch.nn.utils.clip_grad_norm_(parameters, max_grad_norm)
@@ -1094,9 +1082,7 @@ def refine_state_with_target_logits(
             record["holdout_free_running_greedy_match_rate"] = current_holdout[
                 "free_running_greedy_match_rate"
             ]
-            record["holdout_free_running_task_score"] = current_holdout[
-                "free_running_task_score"
-            ]
+            record["holdout_free_running_task_score"] = current_holdout["free_running_task_score"]
             collapsed = current_holdout["top1_agreement"] < (
                 holdout_records[0]["top1_agreement"] - holdout_max_top1_drop
             )
