@@ -39,6 +39,12 @@ bridge preserves task answers better than the forward bridge, but both fail ever
 output-quality gate and remain validation-only. Raw candidate manifests, per-prompt
 results, and generated weights stay local and are ignored by Git.
 
+`runtime_cost_8b_to_14b_20260713.json` binds 20 isolated Qwen3-14B native-prefill
+samples to 20 real Mooncake read-transform-put samples over the same 1776-token prefix.
+The materialization P95 is 3.44x native prefill, versus the 0.70x limit. Mooncake also
+leaves unaddressable backing files after API rollback, so the cost evidence is explicitly
+ineligible for approval even though every temporary object key was removed.
+
 Only a `CachedKVBridgeManifest` whose derived `approved` property is true may be used by
 the runtime materializer. Missing held-out accuracy or Mooncake cost evidence keeps a
 manifest fail closed.

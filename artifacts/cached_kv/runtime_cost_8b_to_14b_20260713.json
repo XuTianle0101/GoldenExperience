@@ -1,0 +1,77 @@
+{
+  "automatic_reuse_approved": false,
+  "candidate": {
+    "bridge_id": "qwen3-kv-4d86988be2bd3a98ad8b",
+    "manifest_path": "artifacts/cached_kv/qwen3_8b_to_14b.candidate.json",
+    "manifest_sha256": "2d15ddfa96bc3ba7b6a886defac7b52150e36f80c9231fba50d823f30a583d19",
+    "weights_sha256": "431885ab551d100812b7e84803dccc031ce1d81da4494f16b6e50b07dd2056e5"
+  },
+  "cleanup": {
+    "api_keys_rolled_back": true,
+    "local_storage_cleanup_verified": true,
+    "physical_storage_reclaimed": false,
+    "temporary_storage_bytes_remaining": 6692536320,
+    "temporary_storage_files_remaining": 2553
+  },
+  "cost_gate": {
+    "eligible_for_approval": false,
+    "max_materialization_to_prefill_ratio": 0.7,
+    "observed_materialization_to_prefill_ratio": 3.4356863223565846,
+    "passed": false
+  },
+  "direction": "8b_to_14b",
+  "generated_at_utc": "2026-07-13T02:47:31Z",
+  "materialization": {
+    "iterations": 20,
+    "p95_read_transform_put_ms": 769.0049484372139,
+    "p95_source_read_ms": 274.5079956948757,
+    "p95_target_put_ms": 281.99335373938084,
+    "p95_transform_ms": 387.87867315113544,
+    "report_path": "artifacts/cached_kv/qwen3_8b_to_14b_cost_1776.json",
+    "report_sha256": "85c03f662d7a5ab96d860bd4081c1c2a7566c27f239fc51b13c9c92fbc25e2d3",
+    "store_backend": "mooncake_store",
+    "warmup_iterations": 3
+  },
+  "model_identities": {
+    "qwen3_14b_weights_sha256": "cb0d7f0a0bec1ee514630fefd9d2468fe4f61a684cb154f3f288bf42eec70661",
+    "qwen3_8b_weights_sha256": "ee9fc280e4d520ded7fea3db8f0eb6f8c596b0babe95b081b6bcb60544f98b38"
+  },
+  "native_prefill": {
+    "backend": "vllm_native_target",
+    "exact_token_count_verified": true,
+    "iterations": 20,
+    "model_identity_verified": true,
+    "p95_ms": 223.82862586528063,
+    "prefix_caching_disabled": true,
+    "report_path": "artifacts/cached_kv/qwen3_8b_to_14b_native_prefill_1776.json",
+    "report_sha256": "045cbdd14aa52e3f01623ecda4d9d25db04f42068f0832d0d8ceb1cb785b9820",
+    "warmup_iterations": 3
+  },
+  "operational_findings": [
+    "Mooncake master and client binaries must come from the same Python environment",
+    "source LMCache must remain live because Mooncake aborts instead of falling back from a dead memory replica to its disk replica",
+    "Mooncake force remove clears object metadata but leaves local backing files for temporary target objects"
+  ],
+  "prefix_binding": {
+    "chunk_count": 111,
+    "chunk_size": 16,
+    "hash_algorithm": "blake3",
+    "source_objects_with_exact_size": 111,
+    "source_object_bytes": 2359296,
+    "token_count": 1776,
+    "token_ids_sha256": "e48ba988be7b822094a0e44966d78f540f81834730be6f1a312cb47901fc1d4e"
+  },
+  "rejection_reasons": [
+    "materialization P95 is 3.4356863223565846 times native target prefill, above the 0.7 limit",
+    "physical Mooncake storage cleanup failed despite successful API rollback",
+    "the validation candidate also remains below all production output-quality thresholds",
+    "the sealed test split remains unopened"
+  ],
+  "schema_version": "goldenexperience.cached_kv_runtime_cost_summary.v1",
+  "sealed_test_opened": false,
+  "source_seed": {
+    "mooncake_storage_bytes_before_benchmark": 264241152,
+    "prompt_tokens": 1790,
+    "run_dir": "artifacts/kv_baseline/qwen3_8b_cost_seed_20260713T0245Z"
+  }
+}
