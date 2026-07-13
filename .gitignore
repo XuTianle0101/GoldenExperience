@@ -17,6 +17,7 @@ artifacts/results/
 *.pth
 *.bin
 *.safetensors
+/artifacts/cached_kv/.model_identity_cache.json
 models/
 *.data
 

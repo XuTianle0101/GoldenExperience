@@ -13,6 +13,7 @@ from typing import Any
 from goldenexperience.reuse.models import KVShape, ModelRef
 
 CACHED_KV_SCHEMA_VERSION = "goldenexperience.qwen3_cached_kv_bridge.v4"
+MODEL_IDENTITY_CACHE_SCHEMA_VERSION = "goldenexperience.model_identity_cache.v1"
 _SHA256_LENGTH = 64
 _TOKENIZER_FILES = (
     "tokenizer.json",
@@ -425,6 +426,8 @@ def model_spec_from_path(
     model_id: str,
     parameter_count_b: float,
     revision: str,
+    identity_cache_path: str | Path | None = None,
+    refresh_identity: bool = False,
 ) -> CachedKVModelSpec:
     """Build a strong local model identity, including every safetensors shard."""
 
@@ -432,6 +435,18 @@ def model_spec_from_path(
     config_path = root / "config.json"
     config = json.loads(config_path.read_text(encoding="utf-8"))
     tokenizer_paths, weight_paths = _model_identity_files(root)
+    identity_paths = (config_path, *tokenizer_paths, *weight_paths)
+    digests = None
+    if identity_cache_path is not None and not refresh_identity:
+        digests = _cached_identity_digests(identity_cache_path, root, identity_paths)
+    if digests is None:
+        digests = {
+            "config_sha256": sha256_file(config_path),
+            "tokenizer_sha256": sha256_named_files(tokenizer_paths, root=root),
+            "weights_sha256": sha256_named_files(weight_paths, root=root),
+        }
+        if identity_cache_path is not None:
+            _store_identity_digests(identity_cache_path, root, identity_paths, digests)
     architecture = str(config.get("model_type", ""))
     dtype = str(config.get("torch_dtype", ""))
     return CachedKVModelSpec(
@@ -439,9 +454,9 @@ def model_spec_from_path(
         parameter_count_b=float(parameter_count_b),
         revision=revision,
         architecture=architecture,
-        config_sha256=sha256_file(config_path),
-        tokenizer_sha256=sha256_named_files(tokenizer_paths, root=root),
-        weights_sha256=sha256_named_files(weight_paths, root=root),
+        config_sha256=digests["config_sha256"],
+        tokenizer_sha256=digests["tokenizer_sha256"],
+        weights_sha256=digests["weights_sha256"],
         num_layers=int(config["num_hidden_layers"]),
         num_key_value_heads=int(config["num_key_value_heads"]),
         head_dim=int(config["head_dim"]),
@@ -450,6 +465,28 @@ def model_spec_from_path(
         max_position_embeddings=int(config["max_position_embeddings"]),
         rope_scaling=config.get("rope_scaling"),
         sliding_window=config.get("sliding_window"),
+    )
+
+
+def seed_model_identity_cache(
+    cache_path: str | Path,
+    model_path: str | Path,
+    spec: CachedKVModelSpec,
+) -> None:
+    """Seed stat-guarded digests from an artifact produced by a full hash pass."""
+
+    root = Path(model_path).resolve()
+    config_path = root / "config.json"
+    tokenizer_paths, weight_paths = _model_identity_files(root)
+    _store_identity_digests(
+        cache_path,
+        root,
+        (config_path, *tokenizer_paths, *weight_paths),
+        {
+            "config_sha256": spec.config_sha256,
+            "tokenizer_sha256": spec.tokenizer_sha256,
+            "weights_sha256": spec.weights_sha256,
+        },
     )
 
 
@@ -529,6 +566,65 @@ def _model_identity_files(root: Path) -> tuple[list[Path], list[Path]]:
     if not weight_paths:
         raise ValueError(f"safetensors model weights are missing under {root}")
     return tokenizer_paths, weight_paths
+
+
+def _identity_snapshot(root: Path, paths: Iterable[Path]) -> list[dict[str, Any]]:
+    return [
+        {
+            "path": path.resolve().relative_to(root).as_posix(),
+            "stat": list(_stat_signature(path)),
+        }
+        for path in paths
+    ]
+
+
+def _cached_identity_digests(
+    cache_path: str | Path,
+    root: Path,
+    paths: tuple[Path, ...],
+) -> dict[str, str] | None:
+    path = Path(cache_path)
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        if payload.get("schema_version") != MODEL_IDENTITY_CACHE_SCHEMA_VERSION:
+            return None
+        entry = payload["entries"][str(root)]
+        if entry.get("snapshot") != _identity_snapshot(root, paths):
+            return None
+        digests = entry["digests"]
+        if not all(_is_sha256(digests.get(name)) for name in (
+            "config_sha256",
+            "tokenizer_sha256",
+            "weights_sha256",
+        )):
+            return None
+        return {name: str(digests[name]) for name in digests}
+    except (json.JSONDecodeError, KeyError, OSError, TypeError, ValueError):
+        return None
+
+
+def _store_identity_digests(
+    cache_path: str | Path,
+    root: Path,
+    paths: tuple[Path, ...],
+    digests: dict[str, str],
+) -> None:
+    path = Path(cache_path)
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8")) if path.is_file() else {}
+    except (json.JSONDecodeError, OSError):
+        payload = {}
+    if payload.get("schema_version") != MODEL_IDENTITY_CACHE_SCHEMA_VERSION:
+        payload = {"schema_version": MODEL_IDENTITY_CACHE_SCHEMA_VERSION, "entries": {}}
+    entries = payload.setdefault("entries", {})
+    entries[str(root)] = {
+        "snapshot": _identity_snapshot(root, paths),
+        "digests": dict(digests),
+    }
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name(path.name + ".tmp")
+    temporary.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    temporary.replace(path)
 
 
 def _stat_signature(path: Path) -> tuple[int, int, int, int, int]:

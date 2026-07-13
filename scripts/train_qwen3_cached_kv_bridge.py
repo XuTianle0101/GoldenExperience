@@ -569,6 +569,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--output", type=Path, required=True, help="Output manifest JSON path.")
     parser.add_argument("--model-8b", default=DEFAULT_8B)
     parser.add_argument("--model-14b", default=DEFAULT_14B)
+    parser.add_argument(
+        "--model-identity-cache",
+        type=Path,
+        default=Path("artifacts/cached_kv/.model_identity_cache.json"),
+        help="Stat-guarded digest cache for validation sweeps; finalization always rehashes.",
+    )
     parser.add_argument("--source-device", default="cuda:0")
     parser.add_argument("--target-device", default="cuda:1")
     parser.add_argument("--fit-device", default="cuda:1")
@@ -632,12 +638,16 @@ def main() -> int:
         model_id=source_id,
         parameter_count_b=source_size,
         revision="local-content-addressed",
+        identity_cache_path=args.model_identity_cache,
+        refresh_identity=args.finalize,
     )
     target_spec = model_spec_from_path(
         target_path,
         model_id=target_id,
         parameter_count_b=target_size,
         revision="local-content-addressed",
+        identity_cache_path=args.model_identity_cache,
+        refresh_identity=args.finalize,
     )
     source_model = AutoModelForCausalLM.from_pretrained(
         source_path,

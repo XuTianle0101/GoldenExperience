@@ -15,6 +15,7 @@ from goldenexperience.size_variant.cached_kv_dataset import (
 )
 from goldenexperience.size_variant.cached_kv_manifest import (
     CACHED_KV_SCHEMA_VERSION,
+    MODEL_IDENTITY_CACHE_SCHEMA_VERSION,
     CachedKVBridgeManifest,
     CachedKVModelSpec,
     CachedKVQualityEvidence,
@@ -22,6 +23,7 @@ from goldenexperience.size_variant.cached_kv_manifest import (
     artifact_id_for,
     model_ref_from_cached_spec,
     model_spec_from_path,
+    seed_model_identity_cache,
 )
 from goldenexperience.size_variant.cached_kv_training import (
     build_source_layer_plan,
@@ -80,6 +82,7 @@ __all__ = [
     "CachedKVPromptDataset",
     "CachedKVQualityEvidence",
     "CachedKVQualityThresholds",
+    "MODEL_IDENTITY_CACHE_SCHEMA_VERSION",
     "FallbackReason",
     "HiddenBridgeMaterializer",
     "HiddenBridgeSpec",
@@ -118,6 +121,7 @@ __all__ = [
     "qwen3_model_pair",
     "model_spec_from_path",
     "model_ref_from_cached_spec",
+    "seed_model_identity_cache",
     "object_to_dynamic_cache",
     "render_to_token_bucket",
     "safetensors_metadata",

@@ -7,6 +7,7 @@ import pytest
 import torch
 from safetensors import torch as safetensors_torch
 
+import goldenexperience.size_variant.cached_kv_manifest as manifest_module
 from goldenexperience.size_variant.cached_kv_bridge import (
     CachedKVBridgeError,
     Qwen3CachedKVBridge,
@@ -19,6 +20,7 @@ from goldenexperience.size_variant.cached_kv_manifest import (
     CachedKVQualityEvidence,
     artifact_id_for,
     model_spec_from_path,
+    seed_model_identity_cache,
     sha256_file,
 )
 
@@ -82,6 +84,45 @@ def _quality(test_hash: str) -> CachedKVQualityEvidence:
         p95_source_read_transform_put_ms=10.0,
         p95_target_prefill_ms=20.0,
     )
+
+
+def test_model_identity_cache_is_stat_guarded(tmp_path: Path, monkeypatch) -> None:
+    root = tmp_path / "model"
+    spec = _write_fake_model(
+        root,
+        layers=2,
+        hidden_size=8,
+        parameter_count_b=1,
+        model_id="model",
+    )
+    cache_path = tmp_path / "identity.json"
+    seed_model_identity_cache(cache_path, root, spec)
+
+    def unexpected_hash(*_args, **_kwargs):
+        raise RuntimeError("full hash executed")
+
+    monkeypatch.setattr(manifest_module, "sha256_file", unexpected_hash)
+    monkeypatch.setattr(manifest_module, "sha256_named_files", unexpected_hash)
+    cached = model_spec_from_path(
+        root,
+        model_id="model",
+        parameter_count_b=1,
+        revision="local-test",
+        identity_cache_path=cache_path,
+    )
+    assert cached == spec
+
+    weight_path = root / "model.safetensors"
+    with weight_path.open("ab") as handle:
+        handle.write(b"x")
+    with pytest.raises(RuntimeError, match="full hash executed"):
+        model_spec_from_path(
+            root,
+            model_id="model",
+            parameter_count_b=1,
+            revision="local-test",
+            identity_cache_path=cache_path,
+        )
 
 
 def _state(*, source_layers: int, target_layers: int, source_window: int, rank: int):
