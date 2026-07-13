@@ -53,6 +53,10 @@ before decode.
 - `direct_paged_kv.py` implements `RETRIEVE_TRANSFORM`, gate-before-read behavior, batched
   exact reads, pinned asynchronous H2D on a dedicated CUDA stream, common vLLM page layouts,
   block invalidation, and atomic load-complete publication.
+- `lmcache_retrieve_transform.py` binds that path to the LMCache MP 0.4.6
+  `PREPARE_RETRIEVE`/`COMMIT_RETRIEVE` protocol, restores source-model CPU chunks to explicit
+  head layout, preserves standard LMCache connector metadata, and forwards failed page ids to
+  vLLM 0.24.0's native-recompute contract.
 - `publication.py` enforces fixed split sizes, group isolation, hash-only sealed metadata,
   license/source provenance, four-direction validation receipts, one-shot sealed access, and
   immutable content-addressed sealed reports.
@@ -155,6 +159,28 @@ forbidden.
 At runtime, a missing/corrupt sidecar, unseen prefix, insufficient shadow history, OOD score,
 model/tokenizer/transport identity change, predictor failure, or score above threshold falls
 back before source KV is read. There is no unsafe production override.
+
+The direct bridge is pinned to LMCache 0.4.6, vLLM 0.24.0, and Torch 2.11.0. Before an audit it
+checks the exact connector methods, non-GPU MP protocol members, external-connector loading
+surface, and vLLM invalid-block native-recompute path. It records content hashes for ten
+upstream source files and rechecks that identity after measurement. A version string alone is
+not accepted as compatibility evidence.
+
+Source chunks are read from the same LMCache MP server under the source model's key identity.
+The bridge registers a bounded non-GPU read context, issues exact one-chunk prepare/commit
+operations, rejects missing, oversized, wrong-shape, wrong-dtype, or wrong-checksum payloads,
+and reshapes `[K/V, layer, token, heads*dim]` into the transport's explicit head layout. The
+registered v5 experiment uses one source worker and one target worker per direction; tensor
+parallel source layouts are deliberately rejected. No filesystem staging or translated target
+object is part of this path.
+
+On the target worker, ordinary LMCache metadata is still passed to the upstream connector.
+Selective requests use the dedicated bridge: all target blocks are marked invalid before the
+first scatter, every layer must finish before one load-complete publication, and any read,
+transform, scatter, synchronization, or publication failure returns the invalid block ids via
+vLLM's `get_block_ids_with_load_errors`. vLLM then discards that step's output and natively
+recomputes from the first invalid block. This recovery behavior is measured again in the final
+runtime audit rather than inferred only from source inspection.
 
 `tokenizer_sha256` identifies token-ID semantics: tokenizer model/vocabulary files, merges,
 special tokens, and semantic tokenizer configuration. Prompt serialization is separate;

@@ -11,6 +11,9 @@
    LMCache MP substrate.
 5. GoldenScale test: enable calibrated hidden-state bridge and target KV restore.
 6. Cross-base exploratory test: enable only with calibration id and explicit task allowlist.
+7. Selective v5 audit: fingerprint LMCache 0.4.6/vLLM 0.24.0, retrieve source-model chunks
+   through MP prepare/commit, scatter directly into target vLLM pages, and verify native
+   recomputation after injected partial failures.
 
 ## Smoke Test
 
@@ -47,6 +50,8 @@ commits or package versions used for vLLM, LMCache, and Mooncake.
 - Size-variant artifacts: `CalibrationManifest`, `LayerMap`, `HiddenBridgeSpec`, `KVRestoreSpec`,
   legacy `ProjectionSpec`, and `QualityGateResult` for each direction.
 - Raw per-request latency, reuse, fallback, and quality logs.
+- The runtime stack identity, including content hashes for every LMCache/vLLM source file used
+  by `RETRIEVE_TRANSFORM`, and the exact 512-request audit report.
 
 ## Result Integrity
 

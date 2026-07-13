@@ -16,6 +16,16 @@ from goldenexperience.runtime.direct_paged_kv import (
     RetrieveTransformRequest,
     scatter_paged_kv,
 )
+from goldenexperience.runtime.lmcache_retrieve_transform import (
+    LMCacheMPSourceChunkReader,
+    LMCacheRetrieveTransformBatch,
+    LMCacheRetrieveTransformBridge,
+    LMCacheRetrieveTransformError,
+    LMCacheRetrieveTransformMetadata,
+    RuntimeBlockValidityTracker,
+    RuntimeStackIdentity,
+    probe_runtime_stack,
+)
 from goldenexperience.runtime.materializer_client import (
     MaterializerClientError,
     ResidentMaterializerClient,
@@ -32,8 +42,16 @@ __all__ = [
     "DirectInjectionResult",
     "DirectPagedKVInjector",
     "InMemoryBlockValidityTracker",
+    "LMCacheMPSourceChunkReader",
+    "LMCacheRetrieveTransformBatch",
+    "LMCacheRetrieveTransformBridge",
+    "LMCacheRetrieveTransformError",
+    "LMCacheRetrieveTransformMetadata",
     "RetrieveTransformRequest",
+    "RuntimeBlockValidityTracker",
+    "RuntimeStackIdentity",
     "build_patch_environment",
     "check_runtime",
+    "probe_runtime_stack",
     "scatter_paged_kv",
 ]
