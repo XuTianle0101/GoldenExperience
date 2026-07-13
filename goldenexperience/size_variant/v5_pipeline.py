@@ -54,6 +54,7 @@ STAGE_DEPENDENCIES: Mapping[str, tuple[str, ...]] = {
     "validate": ("evaluate_method_dev", "calibrate", "collect_validation"),
     "runtime_audit": ("semantic_sealed", "collect_runtime_audit"),
 }
+SCREENING_DIRECTION = "qwen3_4b_to_8b"
 STAGE_SPLITS: Mapping[str, str] = {
     **COLLECT_STAGES,
     "fit_transport": "transport_train",
@@ -482,6 +483,10 @@ class V5PipelineWorkspace:
         self.config.direction(direction)
         if stage not in PIPELINE_STAGES:
             raise V5PipelineError(f"unknown v5 pipeline stage {stage!r}")
+        if stage == "evaluate_method_dev" and direction != SCREENING_DIRECTION:
+            raise V5PipelineError(
+                "transport structure may only be selected on Qwen3 4B-to-8B method dev"
+            )
         if stage == "semantic_sealed":
             raise V5PipelineError(
                 "semantic sealed access requires the explicit four-direction validation guard"
@@ -498,6 +503,19 @@ class V5PipelineWorkspace:
                         f"stage {stage} requires completed dependency {dependency}"
                     )
                 dependencies[dependency] = _stage_output_binding(record)
+            if stage == "fit_transport" and direction != SCREENING_DIRECTION:
+                dependency_key = _stage_key(SCREENING_DIRECTION, "evaluate_method_dev")
+                structure_record = state.stages.get(dependency_key)
+                if (
+                    structure_record is None
+                    or structure_record.status != "completed"
+                    or not structure_record.receipt_sha256
+                ):
+                    raise V5PipelineError(
+                        "non-screening transport fitting requires the frozen 4B-to-8B "
+                        "method-dev structure"
+                    )
+                dependencies[dependency_key] = _stage_output_binding(structure_record)
             split = STAGE_SPLITS.get(stage)
             input_payload = {
                 "pipeline_id": self.config.pipeline_id,

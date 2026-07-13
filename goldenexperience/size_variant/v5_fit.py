@@ -13,7 +13,7 @@ from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import suppress
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 
 from goldenexperience.benchmarks.publication import PublicationBenchmarkManifest
 from goldenexperience.size_variant.cached_kv_manifest import (
@@ -307,6 +307,23 @@ class V5TransportFitManifest:
         return manifest
 
 
+class TransportFitManifestLike(Protocol):
+    @property
+    def direction(self) -> str: ...
+
+    @property
+    def source(self) -> CachedKVModelSpec: ...
+
+    @property
+    def target(self) -> CachedKVModelSpec: ...
+
+    @property
+    def training(self) -> TransportTrainingParameters: ...
+
+    @property
+    def candidates(self) -> tuple[TransportCandidateArtifact, ...]: ...
+
+
 def load_completed_transport_fit(
     workspace: V5PipelineWorkspace,
     direction: str,
@@ -328,7 +345,7 @@ def load_completed_transport_fit(
 
 def load_fitted_transport(
     workspace: V5PipelineWorkspace,
-    manifest: V5TransportFitManifest,
+    manifest: TransportFitManifestLike,
     candidate: TransportCandidateArtifact,
     *,
     device: str,
@@ -380,6 +397,15 @@ def load_fitted_transport(
     if runtime.parameter_count() != candidate.parameter_count:
         raise V5PipelineError("fitted transport parameter count changed")
     return runtime, spec, path
+
+
+def verify_transport_candidate_object(
+    workspace: V5PipelineWorkspace,
+    candidate: TransportCandidateArtifact,
+) -> Path:
+    """Resolve and checksum a fitted candidate's immutable workspace object."""
+
+    return _verify_workspace_object(workspace, candidate.weights)
 
 
 @dataclass

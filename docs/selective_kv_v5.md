@@ -74,6 +74,9 @@ before decode.
   deterministic semantic scorers, real shared-prefix evaluation of all nine candidates,
   resumable per-sample evidence, three-seed rank aggregation, and a seed-17 frozen structure
   receipt for downstream directions.
+- `v5_directional_fit.py` consumes that global receipt to train exactly one selected-rank,
+  seed-17 deployment transport for each remaining Qwen3 direction; the workspace also binds
+  this cross-direction dependency before a fit lease can be issued.
 
 Run the implementation smoke independently of every benchmark split:
 

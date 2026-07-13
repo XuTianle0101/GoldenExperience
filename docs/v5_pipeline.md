@@ -142,6 +142,30 @@ generation, semantic scoring, and teacher NLL. Its deliberately undertrained one
 candidate failed the safety metrics, as expected; this is implementation evidence only and
 is not included in method-dev results or used to change the registered selection rule.
 
+## Fit The Other Directions
+
+Once the frozen structure receipt exists, collect `transport_train` for each remaining
+direction and invoke the same fit command, for example:
+
+```bash
+golden-v5-pipeline fit-transport \
+  --workspace artifacts/v5_pipeline \
+  --direction qwen3_8b_to_14b \
+  --device cuda:1
+```
+
+For `qwen3_8b_to_4b`, `qwen3_8b_to_14b`, and `qwen3_14b_to_8b`, the command trains exactly
+one candidate: the method-dev-selected rank, source window 3, deployment seed 17, and the
+same three-epoch AdamW/loss contract. These directions never repeat rank or seed selection.
+The pipeline state itself enforces a cross-direction dependency on the completed 4B-to-8B
+`evaluate_method_dev` output, and the directional fit manifest binds the semantic structure
+receipt hash. Calling the generic stage API cannot bypass this ordering.
+
+Each directional manifest carries one content-addressed runtime weight object and its
+direction-specific normalizer/training metrics. Resume uses the same full model, optimizer,
+metric, progress, and input-binding checks as screening fit. A changed selected rank, seed,
+window, optimizer, loss, train trace, code hash, or structure receipt fails closed.
+
 There is deliberately no CLI option for a semantic sealed payload. Initialization records
 only its expected hash and publishes `.pipeline/semantic_sealed.locked.json`. The generic
 resume API rejects the `semantic_sealed` stage; a later one-shot guard must first verify

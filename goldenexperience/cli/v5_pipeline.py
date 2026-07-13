@@ -69,10 +69,10 @@ def build_parser() -> argparse.ArgumentParser:
     collect.add_argument("--progress-every", type=int, default=16)
     fit_transport = commands.add_parser(
         "fit-transport",
-        help="fit the registered 4B-to-8B transport candidate matrix",
+        help="fit the screening matrix or one frozen non-screening transport",
     )
     fit_transport.add_argument("--workspace", type=Path, required=True)
-    fit_transport.add_argument("--direction", choices=("qwen3_4b_to_8b",), required=True)
+    fit_transport.add_argument("--direction", choices=tuple(DIRECTION_SIZES), required=True)
     fit_transport.add_argument("--device", default="cuda:1")
     fit_transport.add_argument("--repository-root", type=Path, default=Path.cwd())
     fit_transport.add_argument("--resume", action="store_true")
@@ -193,7 +193,12 @@ def collect_split(args: argparse.Namespace) -> PipelineStageRecord:
 
 
 def fit_transport(args: argparse.Namespace) -> PipelineStageRecord:
+    from goldenexperience.size_variant.v5_directional_fit import (
+        run_frozen_direction_fit_stage,
+        stderr_directional_fit_progress,
+    )
     from goldenexperience.size_variant.v5_fit import (
+        SCREENING_DIRECTION,
         run_fit_transport_stage,
         stderr_fit_progress,
     )
@@ -201,13 +206,21 @@ def fit_transport(args: argparse.Namespace) -> PipelineStageRecord:
     workspace = V5PipelineWorkspace.open(args.workspace)
     if source_tree_sha256(args.repository_root) != workspace.config.code_sha256:
         raise V5PipelineError("executable source tree differs from the pipeline code hash")
-    return run_fit_transport_stage(
-        workspace=workspace,
-        direction=args.direction,
-        device=args.device,
-        resume=args.resume,
-        checkpoint_every_steps=args.checkpoint_every_steps,
-        progress=stderr_fit_progress(args.progress_every),
+    common = {
+        "workspace": workspace,
+        "direction": args.direction,
+        "device": args.device,
+        "resume": args.resume,
+        "checkpoint_every_steps": args.checkpoint_every_steps,
+    }
+    if args.direction == SCREENING_DIRECTION:
+        return run_fit_transport_stage(
+            **common,
+            progress=stderr_fit_progress(args.progress_every),
+        )
+    return run_frozen_direction_fit_stage(
+        **common,
+        progress=stderr_directional_fit_progress(args.progress_every),
     )
 
 

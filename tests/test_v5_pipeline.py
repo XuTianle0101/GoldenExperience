@@ -212,6 +212,36 @@ def test_pipeline_failure_requires_explicit_same_input_resume(tmp_path: Path) ->
     assert workspace.state().stages[f"{direction}/collect_selector_train"].attempt_count == 2
 
 
+def test_non_screening_fit_requires_cross_direction_structure_receipt(tmp_path: Path) -> None:
+    workspace = _workspace(tmp_path)
+    output = tmp_path / "output.json"
+    output.write_text("{}\n", encoding="utf-8")
+
+    def complete(direction: str, stage: str) -> None:
+        lease = workspace.begin_stage(direction, stage, parameters={"test": stage})
+        workspace.complete_stage(
+            lease,
+            outputs={"output": output},
+            metadata={},
+        )
+
+    other = "qwen3_8b_to_4b"
+    with pytest.raises(V5PipelineError, match="only be selected"):
+        workspace.begin_stage(other, "evaluate_method_dev", parameters={})
+    complete(other, "collect_transport_train")
+    with pytest.raises(V5PipelineError, match="frozen 4B-to-8B method-dev structure"):
+        workspace.begin_stage(other, "fit_transport", parameters={"rank": 64})
+
+    screening = "qwen3_4b_to_8b"
+    complete(screening, "collect_transport_train")
+    complete(screening, "fit_transport")
+    complete(screening, "collect_method_dev")
+    complete(screening, "evaluate_method_dev")
+
+    lease = workspace.begin_stage(other, "fit_transport", parameters={"rank": 64})
+    assert lease.reused is False
+
+
 def test_pipeline_serializes_concurrent_stage_claims(tmp_path: Path) -> None:
     workspace = _workspace(tmp_path)
     direction = "qwen3_8b_to_14b"
