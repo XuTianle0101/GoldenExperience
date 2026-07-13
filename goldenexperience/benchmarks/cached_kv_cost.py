@@ -195,6 +195,7 @@ def run_cached_kv_cost_benchmark(
     if len(operation_samples) != iterations:
         raise RuntimeError("cost benchmark did not produce the requested samples")
 
+    cleanup = _local_temporary_storage_evidence(setup_config, run_nonce)
     p95_operation = _percentile(operation_samples, 0.95)
     p95_native = _percentile(native_samples, 0.95)
     manifest = bridge.manifest
@@ -205,6 +206,7 @@ def run_cached_kv_cost_benchmark(
         and _is_sha256(native_prefill_report_sha256)
         and iterations >= MIN_COST_SAMPLES
         and len(native_samples) >= MIN_COST_SAMPLES
+        and cleanup["physical_storage_reclaimed"]
     )
     return {
         "schema_version": CACHED_KV_COST_SCHEMA_VERSION,
@@ -216,6 +218,7 @@ def run_cached_kv_cost_benchmark(
         "non_publishing": True,
         "external_index_published": False,
         "all_temporary_targets_rolled_back": True,
+        **cleanup,
         "candidate_manifest_sha256": sha256_file(manifest_path),
         "bridge_id": manifest.bridge_id,
         "direction": manifest.direction,
@@ -313,9 +316,15 @@ def load_cached_kv_cost_evidence(
         "eligible_for_approval",
         "non_publishing",
         "all_temporary_targets_rolled_back",
+        "local_storage_cleanup_verified",
+        "physical_storage_reclaimed",
     ):
         if payload.get(name) is not True:
             raise ValueError(f"cached-KV cost report requires {name}=true")
+    if int(payload.get("temporary_storage_files_remaining", -1)) != 0:
+        raise ValueError("cached-KV cost report has temporary storage files remaining")
+    if int(payload.get("temporary_storage_bytes_remaining", -1)) != 0:
+        raise ValueError("cached-KV cost report has temporary storage bytes remaining")
     if payload.get("external_index_published") is not False:
         raise ValueError("cached-KV cost benchmark must not publish an external index")
     for name in (
@@ -372,6 +381,37 @@ def _positive_finite_samples(values: Sequence[float], name: str) -> list[float]:
     if not samples or any(not math.isfinite(value) or value <= 0 for value in samples):
         raise ValueError(f"{name} samples must be finite and positive")
     return samples
+
+
+def _local_temporary_storage_evidence(
+    setup_config: Mapping[str, Any],
+    run_nonce: str,
+) -> dict[str, Any]:
+    root_value = setup_config.get("storage_root_dir")
+    if not root_value:
+        return {
+            "local_storage_cleanup_verified": False,
+            "physical_storage_reclaimed": False,
+            "temporary_storage_files_remaining": None,
+            "temporary_storage_bytes_remaining": None,
+        }
+    root = Path(str(root_value))
+    if not root.is_dir():
+        return {
+            "local_storage_cleanup_verified": False,
+            "physical_storage_reclaimed": False,
+            "temporary_storage_files_remaining": None,
+            "temporary_storage_bytes_remaining": None,
+        }
+    remaining = [
+        path for path in root.rglob("*") if path.is_file() and run_nonce in path.name
+    ]
+    return {
+        "local_storage_cleanup_verified": True,
+        "physical_storage_reclaimed": not remaining,
+        "temporary_storage_files_remaining": len(remaining),
+        "temporary_storage_bytes_remaining": sum(path.stat().st_size for path in remaining),
+    }
 
 
 def _percentile(values: Sequence[float], quantile: float) -> float:

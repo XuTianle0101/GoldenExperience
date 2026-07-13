@@ -486,6 +486,8 @@ def test_cost_benchmark_uses_exact_io_and_never_publishes_targets(tmp_path: Path
     assert report["non_publishing"] is True
     assert report["external_index_published"] is False
     assert report["all_temporary_targets_rolled_back"] is True
+    assert report["local_storage_cleanup_verified"] is False
+    assert report["physical_storage_reclaimed"] is False
     assert len(report["measurements_ms"]["read_transform_put"]) == 2
     assert not any(key.startswith("ge-cost/") for key in fake.objects)
 
@@ -584,6 +586,10 @@ def test_cost_evidence_recomputes_p95_and_binds_exact_weights(tmp_path: Path) ->
         "eligible_for_approval": True,
         "non_publishing": True,
         "all_temporary_targets_rolled_back": True,
+        "local_storage_cleanup_verified": True,
+        "physical_storage_reclaimed": True,
+        "temporary_storage_files_remaining": 0,
+        "temporary_storage_bytes_remaining": 0,
         "external_index_published": False,
         "candidate_manifest_sha256": "e" * 64,
         "native_prefill_report_sha256": "f" * 64,
@@ -615,6 +621,21 @@ def test_cost_evidence_recomputes_p95_and_binds_exact_weights(tmp_path: Path) ->
     assert evidence["cost_candidate_manifest_sha256"] == "e" * 64
     assert len(evidence["cost_report_sha256"]) == 64
 
+    report["physical_storage_reclaimed"] = False
+    report["temporary_storage_files_remaining"] = 1
+    report_path.write_text(json.dumps(report), encoding="utf-8")
+    with pytest.raises(ValueError, match="physical_storage_reclaimed=true"):
+        load_cached_kv_cost_evidence(
+            report_path,
+            direction="8b_to_14b",
+            weights_sha256="a" * 64,
+            source_model_weights_sha256="b" * 64,
+            target_model_weights_sha256="c" * 64,
+            validation_dataset_sha256="d" * 64,
+        )
+
+    report["physical_storage_reclaimed"] = True
+    report["temporary_storage_files_remaining"] = 0
     report["p95_source_read_transform_put_ms"] = 9.0
     report_path.write_text(json.dumps(report), encoding="utf-8")
     with pytest.raises(ValueError, match="materialization P95 is inconsistent"):
