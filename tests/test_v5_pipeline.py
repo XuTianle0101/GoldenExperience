@@ -98,6 +98,17 @@ def test_pipeline_workspace_is_content_bound_and_idempotent(tmp_path: Path) -> N
         V5PipelineWorkspace.create(tmp_path / "workspace", changed)
 
 
+def test_pipeline_status_reports_one_shot_sealed_marker_state(tmp_path: Path) -> None:
+    workspace = _workspace(tmp_path)
+    workspace.sealed_open_path.write_text(
+        json.dumps({"state": "opened"}) + "\n",
+        encoding="utf-8",
+    )
+    os.chmod(workspace.sealed_open_path, 0o444)
+
+    assert status_payload(workspace)["semantic_sealed"] == "opened"
+
+
 def test_pipeline_enforces_dependencies_and_reuses_completed_stage(tmp_path: Path) -> None:
     workspace = _workspace(tmp_path)
     direction = "qwen3_4b_to_8b"

@@ -400,6 +400,7 @@ class V5PipelineWorkspace:
         self.state_path = self.control / "state.json"
         self.lock_path = self.control / "state.lock"
         self.sealed_lock_path = self.control / "semantic_sealed.locked.json"
+        self.sealed_open_path = self.control / "semantic_sealed.opened.json"
         self.objects_path = self.root / "objects"
         self.receipts_path = self.root / "receipts"
         self.config = config

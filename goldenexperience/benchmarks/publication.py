@@ -6,7 +6,7 @@ import hashlib
 import json
 import os
 import tempfile
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
@@ -276,7 +276,7 @@ class DirectionValidationEvidence:
         errors: list[str] = []
         if self.direction not in REQUIRED_QWEN3_DIRECTIONS:
             errors.append(f"unknown Qwen3 validation direction {self.direction}")
-        if not self.passed:
+        if type(self.passed) is not bool or not self.passed:
             errors.append(f"Qwen3 validation direction {self.direction} did not pass")
         for name in (
             "report_sha256",
@@ -306,7 +306,7 @@ class ValidationGateReceipt:
         ):
             errors.append("validation gate receipt hashes are invalid")
         directions = {item.direction for item in self.directions}
-        if directions != REQUIRED_QWEN3_DIRECTIONS:
+        if directions != REQUIRED_QWEN3_DIRECTIONS or len(self.directions) != len(directions):
             errors.append("all four Qwen3 main directions must pass before sealed access")
         for item in self.directions:
             errors.extend(item.validate())
@@ -331,6 +331,8 @@ class SemanticSealedGuard:
         receipt: ValidationGateReceipt,
         expected_manifest_sha256: str,
         expected_validation_sha256: str,
+        validate_payload: Callable[[bytes], None] | None = None,
+        opened_metadata: Mapping[str, Any] | None = None,
     ) -> bytes:
         errors = receipt.validate()
         if receipt.benchmark_manifest_sha256 != expected_manifest_sha256:
@@ -339,7 +341,23 @@ class SemanticSealedGuard:
             errors.append("validation receipt refers to a different validation split")
         if errors:
             raise BenchmarkContractError("; ".join(errors))
+        metadata = dict(opened_metadata or {})
+        reserved = {
+            "schema_version",
+            "state",
+            "payload_sha256",
+            "validation_receipt_sha256",
+            "error_type",
+        }
+        if set(metadata) & reserved:
+            raise BenchmarkContractError("semantic sealed marker metadata uses reserved fields")
+        try:
+            _json_bytes(metadata)
+        except (TypeError, ValueError) as exc:
+            raise BenchmarkContractError("semantic sealed marker metadata is malformed") from exc
         path = Path(payload_path)
+        if path.is_symlink():
+            raise BenchmarkContractError("semantic sealed payload cannot be a symbolic link")
         try:
             before = path.stat()
         except OSError as exc:
@@ -362,6 +380,7 @@ class SemanticSealedGuard:
                         "schema_version": "goldenexperience.semantic_sealed_open.v1",
                         "state": "opening",
                         "validation_receipt_sha256": receipt_sha256,
+                        **metadata,
                     }
                 ),
             )
@@ -380,6 +399,8 @@ class SemanticSealedGuard:
                 observed = hashlib.sha256(payload).hexdigest()
                 if observed != expected_payload_sha256:
                     raise BenchmarkContractError("semantic sealed payload checksum mismatch")
+                if validate_payload is not None:
+                    validate_payload(payload)
             except Exception as exc:
                 _replace_descriptor(
                     descriptor,
@@ -389,6 +410,7 @@ class SemanticSealedGuard:
                             "state": "failed",
                             "validation_receipt_sha256": receipt_sha256,
                             "error_type": type(exc).__name__,
+                            **metadata,
                         }
                     ),
                 )
@@ -404,6 +426,7 @@ class SemanticSealedGuard:
                         "state": "opened",
                         "payload_sha256": observed,
                         "validation_receipt_sha256": receipt_sha256,
+                        **metadata,
                     }
                 ),
             )

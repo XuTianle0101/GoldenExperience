@@ -303,10 +303,40 @@ failed and emits no authoritative candidate. Even four passing validation candid
 open or approve the semantic sealed split; they only satisfy the prerequisite for the later
 one-shot guard.
 
-There is deliberately no CLI option for a semantic sealed payload. Initialization records
-only its expected hash and publishes `.pipeline/semantic_sealed.locked.json`. The generic
-resume API rejects the `semantic_sealed` stage; a later one-shot guard must first verify
-completed validation receipts for all four directions.
+## Open The Semantic Split Once
+
+Only after all four full validation stages pass, invoke the dedicated global guard:
+
+```bash
+golden-v5-pipeline open-semantic-sealed \
+  --workspace artifacts/v5_pipeline \
+  --payload secure/semantic_sealed_test.jsonl
+```
+
+The generic collector and generic stage/resume API still have no semantic-sealed path. This
+single command is the only CLI surface that accepts the payload location; it has no expected
+hash, direction subset, force, retry, or resume override. The expected hash comes solely from
+the immutable workspace config.
+
+Before reading the payload, the guard reloads every detailed validation report and verifies
+the four exact direction manifests, code hash, transport objects, predictors, calibration
+manifests, thresholds, and passing `validation_candidate` states. It builds one canonical
+four-direction gate receipt. An exclusive read-only marker is then created before the first
+payload byte is read, so concurrent callers cannot both observe sealed content.
+
+The sealed payload is a JSONL store using the same raw-sample schema, but it must contain
+exactly the 2,048 hash-only `semantic_sealed_test` records and no public-split row. While the
+exclusive marker is held, the guard verifies the original file's stat identity and configured
+SHA-256, validates every row against the frozen benchmark, and publishes a content-addressed,
+read-only snapshot plus an immutable open receipt. Only then does the marker transition from
+`opening` to `opened`. The receipt binds all four validation reports, calibration thresholds,
+the semantic split, code, payload, and snapshot hashes.
+
+Any checksum, row, publication, or callback failure permanently changes the exclusive marker
+to `failed`; the original payload cannot be opened again in that workspace. The frozen local
+snapshot makes the subsequent four-direction semantic evaluation resumable without a second
+read of the original sealed payload. `status` reports `locked`, `opening`, `opened`, or
+`failed`; an opened snapshot still grants no runtime authority.
 
 ## Stage Graph
 

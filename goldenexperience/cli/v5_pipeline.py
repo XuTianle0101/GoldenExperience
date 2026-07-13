@@ -6,6 +6,7 @@ import argparse
 import json
 from dataclasses import asdict
 from pathlib import Path
+from typing import Any
 
 from goldenexperience.benchmarks.publication import PublicationBenchmarkManifest
 from goldenexperience.size_variant.cached_kv_manifest import model_spec_from_path
@@ -131,6 +132,13 @@ def build_parser() -> argparse.ArgumentParser:
     validate.add_argument("--repository-root", type=Path, default=Path.cwd())
     validate.add_argument("--resume", action="store_true")
     validate.add_argument("--progress-every", type=int, default=1)
+    open_sealed = commands.add_parser(
+        "open-semantic-sealed",
+        help="open and snapshot the semantic sealed JSONL exactly once",
+    )
+    open_sealed.add_argument("--workspace", type=Path, required=True)
+    open_sealed.add_argument("--payload", type=Path, required=True)
+    open_sealed.add_argument("--repository-root", type=Path, default=Path.cwd())
     return parser
 
 
@@ -186,12 +194,25 @@ def status_payload(workspace: V5PipelineWorkspace) -> dict:
     }
     for record in state.stages.values():
         stages[record.direction][record.stage] = record.status
+    sealed_state = "locked"
+    if workspace.sealed_open_path.exists():
+        if workspace.sealed_open_path.is_symlink() or workspace.sealed_open_path.stat().st_mode & (
+            0o222
+        ):
+            raise V5PipelineError("semantic sealed opened marker is not immutable")
+        try:
+            sealed_marker = json.loads(workspace.sealed_open_path.read_text(encoding="utf-8"))
+            sealed_state = sealed_marker["state"]
+        except (KeyError, OSError, TypeError, ValueError, json.JSONDecodeError) as exc:
+            raise V5PipelineError("semantic sealed opened marker is malformed") from exc
+        if sealed_state not in {"opening", "opened", "failed"}:
+            raise V5PipelineError("semantic sealed opened marker has an invalid state")
     return {
         "pipeline_id": workspace.config.pipeline_id,
         "config_sha256": workspace.config.content_sha256(),
         "benchmark_manifest_sha256": workspace.config.benchmark_manifest_sha256,
         "code_sha256": workspace.config.code_sha256,
-        "semantic_sealed": "locked",
+        "semantic_sealed": sealed_state,
         "known_stages": sorted(PIPELINE_STAGES),
         "stages": stages,
     }
@@ -438,8 +459,28 @@ def validate_direction(args: argparse.Namespace) -> PipelineStageRecord:
     )
 
 
+def open_semantic_sealed(args: argparse.Namespace) -> dict[str, Any]:
+    from goldenexperience.size_variant.v5_sealed import open_semantic_sealed_once
+
+    workspace = V5PipelineWorkspace.open(args.workspace)
+    if source_tree_sha256(args.repository_root) != workspace.config.code_sha256:
+        raise V5PipelineError("executable source tree differs from the pipeline code hash")
+    receipt, snapshot = open_semantic_sealed_once(workspace, args.payload)
+    return {
+        "pipeline_id": workspace.config.pipeline_id,
+        "semantic_sealed": "opened",
+        "open_receipt_sha256": receipt.content_sha256(),
+        "snapshot": str(snapshot),
+        "snapshot_sha256": receipt.sealed_payload_sha256,
+        "validation_directions": len(receipt.directions),
+    }
+
+
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    if args.command == "open-semantic-sealed":
+        print(json.dumps(open_semantic_sealed(args), sort_keys=True))
+        return 0
     stage_commands = {
         "collect": collect_split,
         "fit-transport": fit_transport,

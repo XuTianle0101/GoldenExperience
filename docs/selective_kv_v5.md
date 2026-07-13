@@ -131,6 +131,13 @@ direction remains a `validation_candidate` unless all registered coverage, seman
 perplexity, and exact-risk gates pass. Validation never grants sealed-test or runtime
 authority.
 
+The semantic split is opened by a global one-shot guard only after all four detailed
+validation candidates are replayed successfully. The guard claims an exclusive marker before
+reading, checks the configured payload hash and every hash-only sample binding, then publishes
+one immutable snapshot and a receipt binding all direction-specific transport, predictor, and
+threshold identities. A failed opening cannot be retried; successful opening permits only the
+frozen semantic evaluation, not production reuse.
+
 At runtime, a missing/corrupt sidecar, unseen prefix, insufficient shadow history, OOD score,
 model/tokenizer/transport identity change, predictor failure, or score above threshold falls
 back before source KV is read. There is no unsafe production override.
