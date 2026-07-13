@@ -334,20 +334,16 @@ The runtime now has two cross-size paths:
 - `scripts/run_cross_model_runtime.py`: the earlier `native_target_seed` proof. It
   creates target-shaped KV with a target-model prefill, restarts target vLLM, and
   verifies LMCache/Mooncake external KV retrieval.
-- `scripts/run_cross_model_hidden_bridge_runtime.py`: the quality-gated cached-KV path
-  (the historical filename is retained). It binds lookup to the current source request,
+- `scripts/run_qwen3_cached_kv_runtime.py`: the quality-gated cached-KV path. It binds
+  lookup to the current source request,
   reads complete source Mooncake objects, applies a direction-specific safetensors bridge,
   and atomically publishes target keys only after identity, quality, exact-I/O, and runtime
   cost gates pass.
 
-The general Qwen3-8B -> Qwen3-14B low-rank bridge artifact still does **not** pass the
-quality gate and correctly falls back. The historical prefix-specific artifact at
-`artifacts/cross_model_runtime/manifests/prefix_specific_strict_20260709T0253Z.json`
-proves retrieval only: it predates the isolated native-target phase and its recorded task
-assertion is false, so it does not satisfy the current strict semantic-success gate.
-The comparison against a same-model Qwen3-14B offload -> restart -> reuse baseline is
-`artifacts/cross_model_runtime/manifests/prefix_specific_strict_20260709T0253Z_vs_qwen3_14b_same_model_restart_20260709T0223Z.json`.
-This remains historical retrieval evidence, not a general-purpose 8B -> 14B bridge.
+The retired hidden-state and prefix-specific bridge experiments are summarized in
+`docs/paper_outline.md`. Their machine-specific manifests and training scripts were
+removed after consolidation: the apparent prefix-specific cosine pass failed its runtime
+task assertion and was not a general-purpose 8B -> 14B bridge.
 The old two-model prefill materializer is now experiment-only and cannot inject Mooncake
 objects. No cached-KV bridge is automatically approved until a global held-out artifact
 passes both the accuracy and end-to-end cost gates.

@@ -11,6 +11,10 @@ Keep these small files in Git:
 - `README.md`: this policy and restore notes.
 - `manifests/*.json`: curated proof/seed manifests exported from successful runs.
 
+Historical local manifests whose payloads no longer exist were consolidated into
+`docs/paper_outline.md` and removed. New manifests should be committed only when their
+external payload URI is durable or when they are required by the active evaluation.
+
 Do not keep these raw generated files in Git:
 
 - `artifacts/kv_baseline/<run_id>/cache/**` or `cache/mooncake/**`.
