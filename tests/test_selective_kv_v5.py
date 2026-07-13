@@ -562,6 +562,13 @@ def test_risk_gate_fails_closed_for_missing_ood_history_and_identity_changes() -
         "model_hash_changed"
     )
 
+    class BrokenPredictor:
+        def unsafe_probability(self, features):
+            raise KeyError("predictor backend failed")
+
+    gate.predictor = BrokenPredictor()
+    assert gate.evaluate(sidecar).reason == "predictor_failure"
+
 
 class _Reader:
     def __init__(self, chunks):
@@ -626,6 +633,23 @@ def test_direct_paged_injection_reads_only_after_acceptance_and_never_puts_targe
     assert rejected.source_read_attempted is False
     assert reader.calls == 1
 
+    duplicate_slots = injector.retrieve_transform(
+        replace(request, slot_mapping=(1, 1, 5)), kv_caches=kv_caches
+    )
+    assert duplicate_slots.fallback_reason == "invalid_retrieve_transform_request"
+    assert duplicate_slots.source_read_attempted is False
+    assert reader.calls == 1
+
+    class BrokenGate:
+        def evaluate(self, sidecar):
+            raise KeyError("risk gate backend failed")
+
+    injector.risk_gate = BrokenGate()
+    gate_failure = injector.retrieve_transform(request, kv_caches=kv_caches)
+    assert gate_failure.fallback_reason == "risk_gate_failure"
+    assert gate_failure.source_read_attempted is False
+    assert reader.calls == 1
+
 
 def test_partial_paged_scatter_keeps_all_touched_blocks_invalid() -> None:
     source, target, _, transport = _transport()
@@ -665,6 +689,42 @@ def test_partial_paged_scatter_keeps_all_touched_blocks_invalid() -> None:
     assert result.invalidated_blocks == (0, 1)
     assert tracker.invalid == {0, 1}
     assert events == []
+
+
+def test_publisher_failure_after_scatter_reinvalidates_all_touched_blocks() -> None:
+    source, target, _, transport = _transport()
+    chunk = torch.randn(2, 3, 4, 2, 32, dtype=torch.bfloat16)
+    payload = _tensor_bytes(chunk)
+    tracker = InMemoryBlockValidityTracker()
+
+    def fail_publish(request_id, blocks):
+        raise KeyError("publisher failed")
+
+    injector = DirectPagedKVInjector(
+        risk_gate=_gate(source, target),
+        transport=transport,
+        source_reader=_Reader({"a": payload}),
+        validity_tracker=tracker,
+        publish_load_complete=fail_publish,
+    )
+    request = RetrieveTransformRequest(
+        request_id="publish-failure",
+        source_keys=("a",),
+        source_checksums=(hashlib.sha256(payload).hexdigest(),),
+        chunk_token_counts=(2,),
+        slot_mapping=(1, 5),
+        prefix_hash=_digest("prefix"),
+        sidecar=_sidecar(source, target, chunk),
+    )
+    caches = [torch.zeros(2, 2, 4, 8, 32, dtype=torch.bfloat16) for _ in range(4)]
+
+    result = injector.retrieve_transform(request, kv_caches=caches)
+
+    assert result.success is False
+    assert result.fallback_reason == "direct_injection_failed"
+    assert result.invalidated_blocks == (0, 1)
+    assert tracker.valid == set()
+    assert tracker.invalid == {0, 1}
 
 
 def test_paged_scatter_supports_vllm_head_major_packed_layout() -> None:

@@ -13,7 +13,6 @@ from typing import Any, Protocol
 
 from goldenexperience.size_variant.head_aware_transport import (
     HeadAwareKVTransport,
-    HeadAwareTransportError,
 )
 from goldenexperience.size_variant.risk_gate import (
     AdmissionDecision,
@@ -78,6 +77,8 @@ class RetrieveTransformRequest:
             errors.append("slot mapping length does not match source tokens")
         if any(slot < 0 for slot in self.slot_mapping):
             errors.append("slot mapping contains an invalid slot")
+        if len(set(self.slot_mapping)) != len(self.slot_mapping):
+            errors.append("slot mapping must not contain duplicate slots")
         try:
             text = self.prefix_hash[2:] if self.prefix_hash.startswith("0x") else self.prefix_hash
             if len(text) != 64:
@@ -223,7 +224,16 @@ class DirectPagedKVInjector:
         kv_caches: Any,
     ) -> DirectInjectionResult:
         started = time.perf_counter()
-        admission = self.risk_gate.evaluate(request.sidecar)
+        try:
+            admission = self.risk_gate.evaluate(request.sidecar)
+        except Exception as exc:
+            return self._result(
+                started,
+                admission=AdmissionDecision(False, "risk_gate_failure"),
+                fallback_reason="risk_gate_failure",
+                source_read_attempted=False,
+                error=repr(exc),
+            )
         # Rejected requests must not touch source KV; target native prefill owns their slots.
         if not admission.accepted:
             return self._result(
@@ -323,6 +333,10 @@ class DirectPagedKVInjector:
                 raise DirectInjectionError("paged scatter reported an inconsistent block set")
             if self._stream is not None:
                 self._stream.synchronize()
+            if time.perf_counter() > deadline:
+                raise DirectInjectionError(
+                    "paged scatter synchronization exceeded retrieve timeout"
+                )
             self.validity_tracker.mark_valid(block_ids)
             self.publish_load_complete(request.request_id, block_ids)
             return DirectInjectionResult(
@@ -337,16 +351,15 @@ class DirectPagedKVInjector:
                 target_mooncake_puts=0,
                 elapsed_ms=(time.perf_counter() - started) * 1000,
             )
-        except (
-            DirectInjectionError,
-            HeadAwareTransportError,
-            OSError,
-            RuntimeError,
-            ValueError,
-        ) as exc:
+        except Exception as exc:
             # A decode path must never consume partially written pages. Native prefill will
             # overwrite every invalid slot before those blocks can become valid again.
-            self.validity_tracker.mark_invalid(block_ids)
+            try:
+                self.validity_tracker.mark_invalid(block_ids)
+            except Exception as invalidation_error:
+                raise DirectInjectionError(
+                    "direct injection failed and touched blocks could not be invalidated"
+                ) from invalidation_error
             return self._result(
                 started,
                 admission=admission,

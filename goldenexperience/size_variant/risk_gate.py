@@ -735,7 +735,7 @@ class CalibratedRiskGate:
             return AdmissionDecision(False, "out_of_distribution")
         try:
             probability = self.predictor.unsafe_probability(sidecar.risk_features())
-        except RiskGateError:
+        except Exception:
             return AdmissionDecision(False, "predictor_failure")
         assert self.spec.threshold is not None
         if probability > self.spec.threshold:
