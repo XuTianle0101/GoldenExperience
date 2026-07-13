@@ -70,6 +70,10 @@ before decode.
 - `v5_fit.py` fits the fixed 3-rank by 3-seed 4B-to-8B screening matrix in one synchronized
   trace pass, checkpoints model plus AdamW state atomically, and emits runtime-loadable
   candidate weights. Its production entry point cannot override the registered matrix.
+- `publication_eval.py`, `v5_method_dev.py`, and `v5_real_method_dev.py` provide explicit
+  deterministic semantic scorers, real shared-prefix evaluation of all nine candidates,
+  resumable per-sample evidence, three-seed rank aggregation, and a seed-17 frozen structure
+  receipt for downstream directions.
 
 Run the implementation smoke independently of every benchmark split:
 
@@ -77,9 +81,10 @@ Run the implementation smoke independently of every benchmark split:
 golden-v5-smoke --output artifacts/cache/qwen3_4b_to_8b_smoke.json
 ```
 
-The smoke output and the bounded one-shard fit diagnostic prove only that the local
-code/model stack executes with finite tensors and restorable optimizer state. They are not
-transport quality, validation, calibration, sealed-test, runtime-audit, or approval evidence.
+The smoke output, bounded one-shard fit diagnostic, and single-prompt method-dev backend
+diagnostic prove only that the local code/model stack executes with finite tensors,
+restorable optimizer state, and real target generation. They are not transport quality,
+validation, calibration, sealed-test, runtime-audit, or approval evidence.
 
 ## Artifact Authority
 

@@ -20,6 +20,7 @@ from goldenexperience.benchmarks.publication import (
     GroupedPrefixRecord,
     PublicationBenchmarkManifest,
 )
+from goldenexperience.benchmarks.publication_eval import validate_publication_evaluation
 from goldenexperience.runtime.cross_model_reuse import token_ids_sha256
 from goldenexperience.size_variant.attention_collection import (
     TargetAttentionCollector,
@@ -82,6 +83,11 @@ class RawBenchmarkSample:
             errors.append(f"raw sample {self.sample_id!r} has an empty suffix/query")
         if record.dataset_id not in TRACE_ONLY_DATASETS and self.reference is None:
             errors.append(f"semantic raw sample {self.sample_id!r} lacks a reference")
+        if record.dataset_id not in TRACE_ONLY_DATASETS:
+            errors.extend(
+                f"raw sample {self.sample_id!r} evaluation: {error}"
+                for error in validate_publication_evaluation(self.reference, self.evaluation)
+            )
         try:
             _canonical_json_bytes(self.reference)
             _canonical_json_bytes(dict(self.evaluation))
@@ -914,6 +920,30 @@ def load_bound_benchmark(workspace: V5PipelineWorkspace) -> PublicationBenchmark
     if benchmark.chat_template_sha256 != workspace.config.chat_template_sha256:
         raise V5PipelineError("pipeline benchmark chat template identity changed")
     return benchmark
+
+
+def load_completed_trace_manifest(
+    workspace: V5PipelineWorkspace,
+    direction: str,
+    split: str,
+    benchmark: PublicationBenchmarkManifest,
+) -> V5TraceManifest:
+    """Load and fully verify one completed non-sealed trace dependency."""
+
+    if split not in COLLECTABLE_SPLITS:
+        raise V5PipelineError(f"split {split!r} is not a completed trace dependency")
+    state = workspace.state()
+    record = state.stages.get(f"{direction}/collect_{split}")
+    if record is None or record.status != "completed" or record.outputs is None:
+        raise V5PipelineError(f"stage requires completed {split} traces")
+    artifact = record.outputs.get("trace_manifest")
+    if artifact is None:
+        raise V5PipelineError(f"completed {split} trace stage lacks its manifest")
+    path = workspace.artifact_path(artifact, verify_hash=True)
+    trace = V5TraceManifest.load(path, workspace=workspace, benchmark=benchmark)
+    if trace.direction != direction or trace.split != split:
+        raise V5PipelineError("completed trace manifest has the wrong direction or split")
+    return trace
 
 
 def _write_trace_checkpoint(

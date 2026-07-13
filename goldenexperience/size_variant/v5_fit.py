@@ -38,6 +38,7 @@ from goldenexperience.size_variant.v5_collect import (
     TraceRecord,
     V5TraceManifest,
     load_bound_benchmark,
+    load_completed_trace_manifest,
     load_trace_shard,
 )
 from goldenexperience.size_variant.v5_pipeline import (
@@ -304,6 +305,81 @@ class V5TransportFitManifest:
         for candidate in manifest.candidates:
             _verify_workspace_object(workspace, candidate.weights)
         return manifest
+
+
+def load_completed_transport_fit(
+    workspace: V5PipelineWorkspace,
+    direction: str,
+    benchmark: PublicationBenchmarkManifest,
+) -> tuple[V5TransportFitManifest, V5TraceManifest]:
+    """Load the completed fit manifest together with its verified train traces."""
+
+    trace = load_completed_trace_manifest(workspace, direction, "transport_train", benchmark)
+    state = workspace.state()
+    record = state.stages.get(f"{direction}/fit_transport")
+    if record is None or record.status != "completed" or record.outputs is None:
+        raise V5PipelineError("stage requires completed transport fitting")
+    artifact = record.outputs.get("transport_fit_manifest")
+    if artifact is None:
+        raise V5PipelineError("completed transport fit lacks its manifest")
+    path = workspace.artifact_path(artifact, verify_hash=True)
+    return V5TransportFitManifest.load(path, workspace=workspace, trace=trace), trace
+
+
+def load_fitted_transport(
+    workspace: V5PipelineWorkspace,
+    manifest: V5TransportFitManifest,
+    candidate: TransportCandidateArtifact,
+    *,
+    device: str,
+) -> tuple[HeadAwareKVTransport, TransportSpec, Path]:
+    """Load one fitted candidate under the final runtime tensor/metadata contract."""
+
+    from safetensors import safe_open
+
+    if candidate not in manifest.candidates:
+        raise V5PipelineError("transport candidate is not part of the fit manifest")
+    path = _verify_workspace_object(workspace, candidate.weights)
+    spec = TransportSpec(
+        weights_uri=path.name,
+        weights_sha256=candidate.weights.sha256,
+        rank=candidate.rank,
+        source_window=manifest.training.source_window,
+        loss=manifest.training.loss,
+    )
+    expected_metadata = transport_artifact_metadata(
+        direction=manifest.direction,
+        source=manifest.source,
+        target=manifest.target,
+        spec=spec,
+    )
+    tensors: dict[str, Any] = {}
+    try:
+        with safe_open(str(path), framework="pt", device="cpu") as handle:
+            if (handle.metadata() or {}) != expected_metadata:
+                raise V5PipelineError("fitted transport metadata is invalid")
+            tensors = {
+                name: handle.get_tensor(name)
+                for name in handle.keys()  # noqa: SIM118
+            }
+    except V5PipelineError:
+        raise
+    except Exception as exc:
+        raise V5PipelineError("fitted transport safetensors payload is invalid") from exc
+    _verify_workspace_object(workspace, candidate.weights)
+    try:
+        runtime = HeadAwareKVTransport(
+            manifest.source,
+            manifest.target,
+            spec,
+            tensors,
+            device=device,
+        )
+    except Exception as exc:
+        raise V5PipelineError("fitted transport tensor contract is invalid") from exc
+    if runtime.parameter_count() != candidate.parameter_count:
+        raise V5PipelineError("fitted transport parameter count changed")
+    return runtime, spec, path
 
 
 @dataclass
@@ -729,7 +805,7 @@ def run_fit_transport_stage(
     if errors:
         raise V5PipelineError("; ".join(errors))
     benchmark = load_bound_benchmark(workspace)
-    trace = _load_transport_trace(workspace, direction, benchmark)
+    trace = load_completed_trace_manifest(workspace, direction, "transport_train", benchmark)
     stage_parameters = {
         "trace_manifest_sha256": trace.content_sha256(),
         "training": training.to_dict(),
@@ -803,25 +879,6 @@ def run_fit_transport_stage(
         with suppress(V5PipelineError):
             workspace.fail_stage(lease, exc)
         raise
-
-
-def _load_transport_trace(
-    workspace: V5PipelineWorkspace,
-    direction: str,
-    benchmark: PublicationBenchmarkManifest,
-) -> V5TraceManifest:
-    state = workspace.state()
-    record = state.stages.get(f"{direction}/collect_transport_train")
-    if record is None or record.status != "completed" or record.outputs is None:
-        raise V5PipelineError("transport fitting requires completed transport traces")
-    artifact = record.outputs.get("trace_manifest")
-    if artifact is None:
-        raise V5PipelineError("transport trace stage lacks its manifest")
-    path = workspace.artifact_path(artifact, verify_hash=True)
-    trace = V5TraceManifest.load(path, workspace=workspace, benchmark=benchmark)
-    if trace.split != "transport_train":
-        raise V5PipelineError("transport fit received the wrong trace split")
-    return trace
 
 
 def _candidate_id(

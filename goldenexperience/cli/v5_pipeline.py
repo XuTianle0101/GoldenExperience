@@ -78,6 +78,19 @@ def build_parser() -> argparse.ArgumentParser:
     fit_transport.add_argument("--resume", action="store_true")
     fit_transport.add_argument("--checkpoint-every-steps", type=int, default=256)
     fit_transport.add_argument("--progress-every", type=int, default=16)
+    method_dev = commands.add_parser(
+        "evaluate-method-dev",
+        help="evaluate all 4B-to-8B candidates and freeze the selected rank",
+    )
+    method_dev.add_argument("--workspace", type=Path, required=True)
+    method_dev.add_argument("--direction", choices=("qwen3_4b_to_8b",), required=True)
+    method_dev.add_argument("--samples", type=Path, required=True)
+    method_dev.add_argument("--source-device", default="cuda:0")
+    method_dev.add_argument("--target-device", default="cuda:1")
+    method_dev.add_argument("--identity-cache", type=Path)
+    method_dev.add_argument("--repository-root", type=Path, default=Path.cwd())
+    method_dev.add_argument("--resume", action="store_true")
+    method_dev.add_argument("--progress-every", type=int, default=1)
     return parser
 
 
@@ -198,10 +211,56 @@ def fit_transport(args: argparse.Namespace) -> PipelineStageRecord:
     )
 
 
+def evaluate_method_dev(args: argparse.Namespace) -> PipelineStageRecord:
+    from goldenexperience.size_variant.v5_collect import load_bound_benchmark
+    from goldenexperience.size_variant.v5_fit import load_completed_transport_fit
+    from goldenexperience.size_variant.v5_method_dev import (
+        run_method_dev_stage,
+        stderr_method_dev_progress,
+    )
+    from goldenexperience.size_variant.v5_real_method_dev import RealQwenMethodDevEvaluator
+
+    workspace = V5PipelineWorkspace.open(args.workspace)
+    if source_tree_sha256(args.repository_root) != workspace.config.code_sha256:
+        raise V5PipelineError("executable source tree differs from the pipeline code hash")
+    direction = workspace.config.direction(args.direction)
+    fit, _ = load_completed_transport_fit(
+        workspace,
+        args.direction,
+        load_bound_benchmark(workspace),
+    )
+    identity_cache = args.identity_cache
+    if identity_cache is None:
+        identity_cache = workspace.control / "model_identity_cache.json"
+    evaluator = RealQwenMethodDevEvaluator(
+        workspace=workspace,
+        fit=fit,
+        source_path=direction.source_model_path,
+        target_path=direction.target_model_path,
+        source_device=args.source_device,
+        target_device=args.target_device,
+        identity_cache_path=identity_cache,
+    )
+    return run_method_dev_stage(
+        workspace=workspace,
+        direction=args.direction,
+        sample_store_path=args.samples,
+        evaluator_parameters=evaluator.parameters(),
+        evaluator_factory=lambda: evaluator,
+        resume=args.resume,
+        progress=stderr_method_dev_progress(args.progress_every),
+    )
+
+
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    if args.command in {"collect", "fit-transport"}:
-        record = collect_split(args) if args.command == "collect" else fit_transport(args)
+    stage_commands = {
+        "collect": collect_split,
+        "fit-transport": fit_transport,
+        "evaluate-method-dev": evaluate_method_dev,
+    }
+    if args.command in stage_commands:
+        record = stage_commands[args.command](args)
         payload = {
             "direction": record.direction,
             "stage": record.stage,

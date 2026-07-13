@@ -97,6 +97,51 @@ The one-shard real-model diagnostic and synthetic resume tests establish only ex
 checkpoint correctness. They do not replace the registered 4,096-sample transport run,
 method-dev screening, four-direction validation, or any publication evidence.
 
+## Freeze Structure On Method Dev
+
+After all nine candidates and the independent 1,024-example method-dev traces exist, run:
+
+```bash
+golden-v5-pipeline evaluate-method-dev \
+  --workspace artifacts/v5_pipeline \
+  --direction qwen3_4b_to_8b \
+  --samples datasets/publication/method_dev.jsonl \
+  --source-device cuda:0 \
+  --target-device cuda:1
+```
+
+The evaluator rechecks that the raw store is byte-identical to the store bound by trace
+collection. For each prompt it performs source and native-target prefix prefill once, then
+evaluates every rank/seed transport with a fixed 16-token target continuation. Evaluation is
+declared per sample using one of the registered deterministic scorers: exact match,
+containment, token F1, numeric exact match with explicit tolerances, structural JSON exact
+match, or resource-limited Python tests. Code evaluation runs in an isolated interpreter with
+AST import/introspection restrictions, an import allowlist, audit-hook I/O/network/process
+blocking, and CPU/address-space/file/process limits. Unknown metrics, options, references,
+and thresholds fail before model execution.
+
+`task_score` is semantic preservation, `1 - max(0, native_score - bridge_score)`, averaged
+over prompts; it is not native task accuracy. Oracle-safe coverage applies the frozen unsafe
+label per prompt: no native-pass regression, at least 0.98 greedy-token agreement, and at
+most 2% teacher-forced perplexity drift. Transform time is synchronized on the target device.
+
+The three seeds are aggregated independently for each rank using arithmetic means and
+population standard deviations. Rank selection uses the registered lexicographic order:
+mean task preservation, mean oracle-safe coverage, mean greedy agreement, then lower mean
+P95 transform time. Only seed 17 from the selected rank becomes the deployment artifact.
+There is no CLI override for generation length, seed aggregation, selection order, rank, or
+deployment seed.
+
+Every completed sample has a stage-input-bound checkpoint. The final detailed report binds
+all 9,216 measurements; the frozen structure receipt binds that report, the raw store,
+method-dev trace manifest, transport-fit manifest, benchmark, code, selected rank, seed-17
+weight object, and deployment quality. Downstream directions must consume this receipt.
+
+A real-model single-prompt diagnostic has exercised prefix prefill, transform, free greedy
+generation, semantic scoring, and teacher NLL. Its deliberately undertrained one-step
+candidate failed the safety metrics, as expected; this is implementation evidence only and
+is not included in method-dev results or used to change the registered selection rule.
+
 There is deliberately no CLI option for a semantic sealed payload. Initialization records
 only its expected hash and publishes `.pipeline/semantic_sealed.locked.json`. The generic
 resume API rejects the `semantic_sealed` stage; a later one-shot guard must first verify
