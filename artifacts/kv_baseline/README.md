@@ -15,6 +15,13 @@ Historical local manifests whose payloads no longer exist were consolidated into
 `docs/paper_outline.md` and removed. New manifests should be committed only when their
 external payload URI is durable or when they are required by the active evaluation.
 
+## Local Cleanup Exception
+
+`qwen3_8b_cost_seed_20260713T0245Z/` is intentionally retained outside Git while the
+Mooncake physical-reclamation defect remains unresolved. Its 6.69 GB of backing files
+are the reproduction evidence for `artifacts/cached_kv/runtime_cost_8b_to_14b_20260713.json`.
+Do not treat this local payload as approval evidence or delete it as a routine cache.
+
 Do not keep these raw generated files in Git:
 
 - `artifacts/kv_baseline/<run_id>/cache/**` or `cache/mooncake/**`.

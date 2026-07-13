@@ -18,6 +18,11 @@ failed all-parameter refinement, constrained teacher-forced refinement, native-g
 step study, and historical runtime experiments are consolidated in
 `docs/paper_outline.md`. Their exact original JSON remains available through Git history.
 
+The only local raw quality files intentionally retained are the two mixed, holdout-16
+per-prompt results under `artifacts/results/`. They are needed to analyze the remaining
+forward and reverse exact-answer failures; all earlier smoke and refinement outputs were
+removed.
+
 Only a `CachedKVBridgeManifest` whose derived `approved` property is true may be used by
 the runtime materializer. Missing held-out accuracy or Mooncake cost evidence keeps a
 manifest fail closed.

@@ -1,9 +1,11 @@
 {
   "automatic_reuse_approved": false,
   "candidate": {
+    "artifacts_retained": false,
     "bridge_id": "qwen3-kv-4d86988be2bd3a98ad8b",
-    "manifest_path": "artifacts/cached_kv/qwen3_8b_to_14b.candidate.json",
+    "historical_manifest_path": "artifacts/cached_kv/qwen3_8b_to_14b.candidate.json",
     "manifest_sha256": "2d15ddfa96bc3ba7b6a886defac7b52150e36f80c9231fba50d823f30a583d19",
+    "pruned_reason": "The validation-failed generated manifest and weights were removed after their hashes and aggregate evidence were recorded.",
     "weights_sha256": "431885ab551d100812b7e84803dccc031ce1d81da4494f16b6e50b07dd2056e5"
   },
   "cleanup": {
