@@ -61,6 +61,9 @@ before decode.
 - `real_model_smoke.py` executes a bounded Qwen3 source/target prefill, target-attention
   capture, DynamicCache conversion, and five-term transport objective. Its schema hard-codes
   `diagnostic_only`, `evidence_eligible=false`, and `sealed_split_accessed=false`.
+- `v5_pipeline.py` provides the four-direction immutable config, lock-serialized resumable
+  state, stable dependency bindings, and atomic content-addressed object/receipt store. The
+  workspace contract is detailed in `docs/v5_pipeline.md`.
 
 Run the implementation smoke independently of every benchmark split:
 

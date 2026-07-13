@@ -73,6 +73,7 @@ golden-scale-bench = "goldenexperience.cli.size_variant:main_bench"
 golden-synthetic-benchmark = "goldenexperience.benchmarks.synthetic:main"
 golden-kv-baseline = "goldenexperience.cli.kv_baseline:main"
 golden-publication-benchmark = "goldenexperience.cli.publication_benchmark:main"
+golden-v5-pipeline = "goldenexperience.cli.v5_pipeline:main"
 golden-v5-smoke = "goldenexperience.cli.v5_smoke:main"
 
 [tool.setuptools.packages.find]
