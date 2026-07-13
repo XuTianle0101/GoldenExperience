@@ -336,6 +336,39 @@ def test_attention_losses_are_zero_for_native_kv_and_sampling_is_bounded() -> No
     assert len(keys) == 256
 
 
+def test_attention_kl_is_finite_with_causal_mask() -> None:
+    query = torch.randn(2, 8, 5, 32)
+    native_key = torch.randn(2, 4, 9, 32)
+    native_value = torch.randn(2, 4, 9, 32)
+    transformed_key = native_key + 0.01 * torch.randn_like(native_key)
+    transformed_value = native_value + 0.01 * torch.randn_like(native_value)
+    query_positions = torch.tensor([0, 2, 4, 6, 8])
+    key_positions = torch.arange(9)
+    causal_mask = (key_positions[None, :] <= query_positions[:, None])[None, None]
+
+    logit_kl, output_mse = attention_distillation_terms(
+        query,
+        native_key,
+        native_value,
+        transformed_key,
+        transformed_value,
+        attention_mask=causal_mask,
+    )
+    identity_kl, _ = attention_distillation_terms(
+        query,
+        native_key,
+        native_value,
+        native_key,
+        native_value,
+        attention_mask=causal_mask,
+    )
+
+    assert torch.isfinite(logit_kl)
+    assert torch.isfinite(output_mse)
+    assert float(logit_kl) >= 0.0
+    assert abs(float(identity_kl)) < 1e-6
+
+
 def test_transport_screening_uses_the_registered_lexicographic_order() -> None:
     common = {
         "direction": "qwen3_4b_to_8b",

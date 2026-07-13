@@ -752,7 +752,14 @@ def attention_distillation_terms(
         transformed_logits = transformed_logits.masked_fill(~mask, float("-inf"))
     teacher = native_logits.softmax(dim=-1)
     log_student = transformed_logits.log_softmax(dim=-1)
-    logit_kl = functional.kl_div(log_student, teacher, reduction="batchmean")
+    # F.kl_div evaluates 0 * -inf at causally masked positions, which produces
+    # NaNs even though those positions have zero probability under both models.
+    # Reduce the categorical KL only over visible keys, then average examples.
+    log_teacher = teacher.clamp_min(torch.finfo(teacher.dtype).tiny).log()
+    kl_elements = teacher * (log_teacher - log_student)
+    if attention_mask is not None:
+        kl_elements = kl_elements.masked_fill(~mask, 0.0)
+    logit_kl = kl_elements.sum(dim=-1).mean()
     if native_attention_output is None:
         native_output = torch.einsum("lhqk,lhkd->lhqd", teacher, native_value.float())
     else:
