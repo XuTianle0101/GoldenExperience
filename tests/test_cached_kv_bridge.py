@@ -332,6 +332,41 @@ def test_validation_candidate_loader_cannot_bypass_production_approval(tmp_path:
     assert bridge.manifest.artifact_errors() == []
 
 
+def test_validation_candidate_loader_uses_stat_guarded_model_identity_cache(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    manifest_path, source_dir, target_dir, _ = _artifact(tmp_path)
+    manifest = CachedKVBridgeManifest.load(manifest_path)
+    candidate = replace(
+        manifest,
+        quality=replace(
+            manifest.quality,
+            evaluation_dataset_sha256=manifest.validation_dataset_sha256,
+            p95_source_read_transform_put_ms=None,
+            p95_target_prefill_ms=None,
+        ),
+    )
+    candidate = replace(candidate, bridge_id=artifact_id_for(candidate))
+    candidate.save(manifest_path)
+    cache_path = tmp_path / "identity.json"
+    seed_model_identity_cache(cache_path, source_dir, candidate.source)
+    seed_model_identity_cache(cache_path, target_dir, candidate.target)
+
+    def unexpected_model_hash(*_args, **_kwargs):
+        raise RuntimeError("full model hash executed")
+
+    monkeypatch.setattr(manifest_module, "sha256_file", unexpected_model_hash)
+    bridge = Qwen3CachedKVBridge.from_validation_candidate_for_benchmark(
+        manifest_path,
+        source_model_path=source_dir,
+        target_model_path=target_dir,
+        model_identity_cache_path=cache_path,
+    )
+
+    assert bridge.manifest == candidate
+
+
 def test_qwen_rope_inverse_round_trip_uses_absolute_positions() -> None:
     value = torch.randn(2, 7, 4, dtype=torch.float32)
     positions = torch.tensor([0, 1, 15, 16, 511, 4095, 40959])

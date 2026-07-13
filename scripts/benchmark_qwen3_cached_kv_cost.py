@@ -30,6 +30,7 @@ def main() -> int:
     parser.add_argument("--source-key", action="append", required=True)
     parser.add_argument("--chunk-size", type=int, required=True)
     parser.add_argument("--native-prefill-report", type=Path, required=True)
+    parser.add_argument("--model-identity-cache", type=Path)
     parser.add_argument("--iterations", type=int, default=20)
     parser.add_argument("--warmup-iterations", type=int, default=3)
     parser.add_argument("--device", default="cuda:0")
@@ -41,6 +42,7 @@ def main() -> int:
         source_model_path=args.source_model,
         target_model_path=args.target_model,
         device=args.device,
+        model_identity_cache_path=args.model_identity_cache,
     )
     setup_config = json.loads(args.mooncake_setup.read_text(encoding="utf-8"))
     if not isinstance(setup_config, dict):

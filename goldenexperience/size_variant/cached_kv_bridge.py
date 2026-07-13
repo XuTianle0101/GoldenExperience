@@ -117,6 +117,7 @@ class Qwen3CachedKVBridge:
         target_model_path: str | Path,
         device: str = "cpu",
         compute_dtype: Any | None = None,
+        model_identity_cache_path: str | Path | None = None,
     ) -> Qwen3CachedKVBridge:
         """Load an unapproved validation artifact for non-publishing cost benchmarks."""
 
@@ -127,6 +128,7 @@ class Qwen3CachedKVBridge:
             device=device,
             compute_dtype=compute_dtype,
             benchmark_candidate=True,
+            model_identity_cache_path=model_identity_cache_path,
         )
 
     @classmethod
@@ -139,6 +141,7 @@ class Qwen3CachedKVBridge:
         device: str,
         compute_dtype: Any | None,
         benchmark_candidate: bool,
+        model_identity_cache_path: str | Path | None = None,
     ) -> Qwen3CachedKVBridge:
 
         from safetensors import safe_open
@@ -148,8 +151,16 @@ class Qwen3CachedKVBridge:
         errors = manifest.artifact_errors() if benchmark_candidate else manifest.validate()
         if errors:
             raise CachedKVBridgeError("; ".join(errors))
-        source_errors = verify_model_path(manifest.source, source_model_path)
-        target_errors = verify_model_path(manifest.target, target_model_path)
+        source_errors = verify_model_path(
+            manifest.source,
+            source_model_path,
+            identity_cache_path=model_identity_cache_path,
+        )
+        target_errors = verify_model_path(
+            manifest.target,
+            target_model_path,
+            identity_cache_path=model_identity_cache_path,
+        )
         if source_errors or target_errors:
             messages = [f"source model: {item}" for item in source_errors]
             messages.extend(f"target model: {item}" for item in target_errors)

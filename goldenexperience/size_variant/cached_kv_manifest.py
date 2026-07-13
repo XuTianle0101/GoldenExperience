@@ -514,12 +514,18 @@ def model_ref_from_cached_spec(spec: CachedKVModelSpec) -> ModelRef:
     )
 
 
-def verify_model_path(expected: CachedKVModelSpec, model_path: str | Path) -> list[str]:
+def verify_model_path(
+    expected: CachedKVModelSpec,
+    model_path: str | Path,
+    *,
+    identity_cache_path: str | Path | None = None,
+) -> list[str]:
     observed = model_spec_from_path(
         model_path,
         model_id=expected.model_id,
         parameter_count_b=expected.parameter_count_b,
         revision=expected.revision,
+        identity_cache_path=identity_cache_path,
     )
     errors: list[str] = []
     for field_name in CachedKVModelSpec.__dataclass_fields__:
