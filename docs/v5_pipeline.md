@@ -256,6 +256,53 @@ split/report/evaluator hashes, selected threshold, all counts, coverage, simulta
 bound, method, and confidence. It records `calibrated=true`, but remains only validation input;
 it does not grant semantic-sealed or production authority.
 
+## Validate Every Direction
+
+Collect the independent 2,048-row validation trace and run the frozen transport, predictor,
+and calibrated gate for each direction:
+
+```bash
+golden-v5-pipeline validate \
+  --workspace artifacts/v5_pipeline \
+  --direction qwen3_8b_to_14b \
+  --samples datasets/publication/validation.jsonl \
+  --source-device cuda:0 \
+  --target-device cuda:1
+```
+
+All four directions depend on the single frozen 4B-to-8B method-dev structure receipt as
+well as their own transport, predictor, calibration, and validation trace. Non-screening
+directions do not invent a nonexistent per-direction method-dev stage. The command exposes no
+threshold, predictor device, selector baseline, coverage, quality, or risk-bound override.
+
+Validation recreates each quantized source sidecar and target-derived label in frozen
+sample-id order. Predictor scoring is fixed to CPU. Admission follows the production gate's
+order: reject insufficient causal shadow history, reject OOD distance above 6.0, then reject
+unsafe probability above the calibrated threshold. Identity and prefix bindings have already
+been checked by the trace/evaluator contracts. Checkpoints record the exact admission reason
+and are accepted on resume only after the example, history, probability, and decision are
+recomputed.
+
+The accepted-subset report contains absolute native and bridge task scores, relative task
+score drop, greedy agreement, perplexity drift, unsafe count, exact one-sided validation risk
+bound, coverage, and target-native key-cosine diagnostic. A direction passes only when the
+frozen defaults all hold: at least 300 and 30% accepted, bridge task score at least 0.95,
+greedy agreement at least 0.98, task-score drop at most 1%, mean perplexity drift at most 2%,
+and the unadjusted validation Clopper-Pearson upper bound at most 1%.
+
+Five baselines are always evaluated on the same rows: no selector, target-dependent key
+cosine at 0.95, uncalibrated MLP at 0.5, the complete calibrated runtime gate, and an offline
+oracle selector. Ties use the calibration rule. The calibrated baseline counts and exact risk
+bound must equal the accepted-subset evidence.
+
+A passing stage emits the detailed report, a validation receipt, and a content-addressed
+`SelectiveKVBridgeManifest` in `validation_candidate` state. Loading these artifacts replays
+all probabilities, histories, decisions, aggregates, and baselines and checks the frozen
+transport/method-dev/calibration provenance. Failure of any quality gate leaves the stage
+failed and emits no authoritative candidate. Even four passing validation candidates do not
+open or approve the semantic sealed split; they only satisfy the prerequisite for the later
+one-shot guard.
+
 There is deliberately no CLI option for a semantic sealed payload. Initialization records
 only its expected hash and publishes `.pipeline/semantic_sealed.locked.json`. The generic
 resume API rejects the `semantic_sealed` stage; a later one-shot guard must first verify

@@ -51,7 +51,7 @@ STAGE_DEPENDENCIES: Mapping[str, tuple[str, ...]] = {
     "evaluate_method_dev": ("fit_transport", "collect_method_dev"),
     "fit_risk": ("fit_transport", "collect_selector_train"),
     "calibrate": ("fit_risk", "collect_risk_calibration"),
-    "validate": ("evaluate_method_dev", "calibrate", "collect_validation"),
+    "validate": ("calibrate", "collect_validation"),
     "runtime_audit": ("semantic_sealed", "collect_runtime_audit"),
 }
 SCREENING_DIRECTION = "qwen3_4b_to_8b"
@@ -514,6 +514,18 @@ class V5PipelineWorkspace:
                     raise V5PipelineError(
                         "non-screening transport fitting requires the frozen 4B-to-8B "
                         "method-dev structure"
+                    )
+                dependencies[dependency_key] = _stage_output_binding(structure_record)
+            if stage == "validate":
+                dependency_key = _stage_key(SCREENING_DIRECTION, "evaluate_method_dev")
+                structure_record = state.stages.get(dependency_key)
+                if (
+                    structure_record is None
+                    or structure_record.status != "completed"
+                    or not structure_record.receipt_sha256
+                ):
+                    raise V5PipelineError(
+                        "validation requires the frozen 4B-to-8B method-dev structure"
                     )
                 dependencies[dependency_key] = _stage_output_binding(structure_record)
             split = STAGE_SPLITS.get(stage)

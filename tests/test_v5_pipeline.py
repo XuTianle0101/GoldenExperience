@@ -242,6 +242,34 @@ def test_non_screening_fit_requires_cross_direction_structure_receipt(tmp_path: 
     assert lease.reused is False
 
 
+def test_non_screening_validation_uses_global_method_dev_dependency(tmp_path: Path) -> None:
+    workspace = _workspace(tmp_path)
+    output = tmp_path / "output.json"
+    output.write_text("{}\n", encoding="utf-8")
+
+    def complete(direction: str, stage: str) -> None:
+        lease = workspace.begin_stage(direction, stage, parameters={"test": stage})
+        workspace.complete_stage(lease, outputs={"output": output}, metadata={})
+
+    screening = "qwen3_4b_to_8b"
+    complete(screening, "collect_transport_train")
+    complete(screening, "fit_transport")
+    complete(screening, "collect_method_dev")
+    complete(screening, "evaluate_method_dev")
+
+    other = "qwen3_8b_to_4b"
+    complete(other, "collect_transport_train")
+    complete(other, "fit_transport")
+    complete(other, "collect_selector_train")
+    complete(other, "fit_risk")
+    complete(other, "collect_risk_calibration")
+    complete(other, "calibrate")
+    complete(other, "collect_validation")
+
+    lease = workspace.begin_stage(other, "validate", parameters={"test": "validate"})
+    assert lease.reused is False
+
+
 def test_pipeline_serializes_concurrent_stage_claims(tmp_path: Path) -> None:
     workspace = _workspace(tmp_path)
     direction = "qwen3_8b_to_14b"

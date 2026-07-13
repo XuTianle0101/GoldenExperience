@@ -18,6 +18,8 @@ RISK_CALIBRATION_METHOD = "bonferroni_clopper_pearson"
 SIDECAR_MAX_BYTES = 4096
 SKETCH_DIM = 128
 RISK_FEATURE_DIM = 169
+RISK_FEATURE_OOD_INDEX = 165
+SELECTOR_COSINE_THRESHOLD = 0.95
 _SIDECAR_MAGIC = b"GEKVS5\x00\x01"
 _STAT_METRICS = (
     "key_rms",
@@ -59,6 +61,7 @@ class SelectorEvaluationExample:
     unsafe: bool
     predictor_probability: float
     cosine: float
+    runtime_eligible: bool = True
 
 
 @dataclass(frozen=True)
@@ -75,17 +78,32 @@ def evaluate_selector_baselines(
     examples: Sequence[SelectorEvaluationExample],
     *,
     calibrated_threshold: float,
-    cosine_threshold: float = 0.95,
+    cosine_threshold: float = SELECTOR_COSINE_THRESHOLD,
 ) -> tuple[SelectorEvaluation, ...]:
     """Evaluate the five fixed selector baselines on one immutable split."""
 
     if not examples:
         raise ValueError("selector evaluation requires examples")
+    if not _valid_probability(calibrated_threshold):
+        raise ValueError("calibrated selector threshold must be finite in [0, 1]")
+    if not _finite_cosine(cosine_threshold):
+        raise ValueError("cosine selector threshold must be finite in [-1, 1]")
+    for row in examples:
+        if (
+            not _strict_bool(row.unsafe)
+            or not _valid_probability(row.predictor_probability)
+            or not _finite_cosine(row.cosine)
+            or not _strict_bool(row.runtime_eligible)
+        ):
+            raise ValueError("selector evaluation row is malformed")
     predicates = (
         ("no_selector", lambda row: True),
         ("cosine_threshold", lambda row: row.cosine >= cosine_threshold),
         ("uncalibrated_mlp", lambda row: row.predictor_probability <= 0.5),
-        ("calibrated_selector", lambda row: row.predictor_probability <= calibrated_threshold),
+        (
+            "calibrated_selector",
+            lambda row: row.runtime_eligible and row.predictor_probability <= calibrated_threshold,
+        ),
         ("oracle_selector", lambda row: not row.unsafe),
     )
     results: list[SelectorEvaluation] = []
@@ -812,6 +830,15 @@ def _valid_probability(value: Any) -> bool:
 
 def _strict_bool(value: Any) -> bool:
     return type(value) is bool
+
+
+def _finite_cosine(value: Any) -> bool:
+    return (
+        not isinstance(value, bool)
+        and isinstance(value, (int, float))
+        and math.isfinite(value)
+        and -1 <= value <= 1
+    )
 
 
 def _digest_bytes(value: str) -> bytes:

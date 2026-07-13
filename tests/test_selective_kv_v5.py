@@ -61,6 +61,7 @@ from goldenexperience.size_variant.head_aware_transport import (
 )
 from goldenexperience.size_variant.risk_gate import (
     RISK_CALIBRATION_METHOD,
+    RISK_FEATURE_OOD_INDEX,
     RISK_FEATURE_SCHEMA_VERSION,
     CalibratedRiskGate,
     RiskCalibrationExample,
@@ -549,6 +550,7 @@ def test_source_sidecar_is_bounded_stable_and_checksum_protected() -> None:
 
     assert len(payload) <= 4096
     assert len(restored.risk_features()) == 169
+    assert restored.risk_features()[RISK_FEATURE_OOD_INDEX] == restored.ood_distance
     assert restored.num_layers == 48
     assert restored.num_heads == 8
     tampered = bytearray(payload)

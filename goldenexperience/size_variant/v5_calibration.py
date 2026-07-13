@@ -173,6 +173,9 @@ class V5RiskCalibrationManifest:
         expected_gate_identity = (
             type(self.risk_gate.hidden_size) is int
             and type(self.risk_gate.min_shadow_samples) is int
+            and _finite_probability(self.risk_gate.threshold)
+            and _finite_number(self.risk_gate.coverage)
+            and _finite_number(self.risk_gate.ood_threshold)
             and self.risk_gate.predictor_uri == risk_fit.predictor.path
             and self.risk_gate.predictor_sha256 == risk_fit.predictor.sha256
             and self.risk_gate.calibration_dataset_sha256 == expected_split
@@ -731,6 +734,10 @@ def _is_sha256(value: Any) -> bool:
 
 def _finite_number(value: Any) -> bool:
     return not isinstance(value, bool) and isinstance(value, (int, float)) and math.isfinite(value)
+
+
+def _finite_probability(value: Any) -> bool:
+    return _finite_number(value) and 0 <= value <= 1
 
 
 def _calibration_result_errors(result: RiskCalibrationResult) -> list[str]:

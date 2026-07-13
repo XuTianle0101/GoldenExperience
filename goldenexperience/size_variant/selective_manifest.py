@@ -218,15 +218,15 @@ class SelectiveQualityThresholds:
             ("min_greedy_agreement", self.min_greedy_agreement),
             ("max_regression_risk_upper_bound", self.max_regression_risk_upper_bound),
         ):
-            if not math.isfinite(value) or not 0 <= value <= 1:
+            if not _finite_number(value) or not 0 <= value <= 1:
                 errors.append(f"{name} must be between zero and one")
         for name, value in (
             ("max_task_score_drop_pct", self.max_task_score_drop_pct),
             ("max_perplexity_drift_pct", self.max_perplexity_drift_pct),
         ):
-            if not math.isfinite(value) or value < 0:
+            if not _finite_number(value) or value < 0:
                 errors.append(f"{name} must be finite and non-negative")
-        if self.min_accepted < 300:
+        if type(self.min_accepted) is not int or self.min_accepted < 300:
             errors.append("selective quality min_accepted cannot be below 300")
         return errors
 
@@ -567,8 +567,10 @@ class SelectiveKVBridgeManifest:
         return errors
 
     def validation_errors(self) -> list[str]:
+        from goldenexperience.benchmarks.publication import SPLIT_COUNTS
+
         errors = self.risk_gate.calibration_errors(min_accepted=self.thresholds.min_accepted)
-        if self.risk_gate.total_count != 2048:
+        if self.risk_gate.total_count != SPLIT_COUNTS["risk_calibration"]:
             errors.append("risk calibration must contain exactly 2048 samples")
         if self.transport_quality is None:
             errors.append("transport method-dev quality evidence is required")
@@ -579,7 +581,7 @@ class SelectiveKVBridgeManifest:
         else:
             if self.accepted_quality.evaluation_dataset_sha256 != self.validation_dataset_sha256:
                 errors.append("accepted quality refers to the wrong validation dataset")
-            if self.accepted_quality.total_count != 2048:
+            if self.accepted_quality.total_count != SPLIT_COUNTS["validation"]:
                 errors.append("accepted validation quality must contain 2048 samples")
             errors.extend(self.accepted_quality.gate_errors(self.thresholds))
         return errors
@@ -720,3 +722,7 @@ def _resolve_uri(uri: str, manifest_path: str | Path) -> Path:
     if not path.is_absolute():
         path = Path(manifest_path).resolve().parent / path
     return path
+
+
+def _finite_number(value: Any) -> bool:
+    return not isinstance(value, bool) and isinstance(value, (int, float)) and math.isfinite(value)

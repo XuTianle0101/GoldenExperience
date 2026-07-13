@@ -124,6 +124,13 @@ and fails rather than publishing when no eligible threshold meets the simultaneo
 Reloading the artifact recomputes every per-row score, causal history, tied candidate group,
 Bonferroni correction, and selected threshold from the detailed immutable report.
 
+Independent validation then runs the complete gate, including one prior shadow sample and
+the OOD cutoff, on all 2,048 rows in each direction. It reports accepted-subset semantic
+quality and the fixed no-selector, cosine-0.95, MLP-0.5, calibrated, and oracle baselines. A
+direction remains a `validation_candidate` unless all registered coverage, semantic, token,
+perplexity, and exact-risk gates pass. Validation never grants sealed-test or runtime
+authority.
+
 At runtime, a missing/corrupt sidecar, unseen prefix, insufficient shadow history, OOD score,
 model/tokenizer/transport identity change, predictor failure, or score above threshold falls
 back before source KV is read. There is no unsafe production override.
