@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 from dataclasses import replace
 from pathlib import Path
@@ -15,11 +14,11 @@ from goldenexperience.benchmarks.publication import (
     GroupedPrefixRecord,
     PublicationBenchmarkManifest,
 )
-from goldenexperience.size_variant.cached_kv_manifest import sha256_file
-
-
-def _sha256_text(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
+from goldenexperience.size_variant.cached_kv_manifest import (
+    chat_template_sha256,
+    sha256_file,
+    tokenizer_semantic_sha256,
+)
 
 
 def _load_jsonl(path: Path) -> list[dict[str, Any]]:
@@ -45,8 +44,8 @@ def freeze_manifest(args: argparse.Namespace) -> PublicationBenchmarkManifest:
         sources=sources,
         records=records,
         split_sha256={},
-        tokenizer_sha256=sha256_file(args.tokenizer),
-        chat_template_sha256=_sha256_text(args.chat_template),
+        tokenizer_sha256=tokenizer_semantic_sha256(args.tokenizer_model),
+        chat_template_sha256=chat_template_sha256(args.tokenizer_model),
         sealed_payload_sha256=sha256_file(args.sealed_payload),
         deprecated_synthetic_sealed_sha256=(
             sha256_file(args.deprecated_synthetic_sealed)
@@ -68,8 +67,12 @@ def _parser() -> argparse.ArgumentParser:
     freeze = subparsers.add_parser("freeze", help="freeze a hash-only benchmark manifest")
     freeze.add_argument("--sources", type=Path, required=True)
     freeze.add_argument("--records", type=Path, required=True)
-    freeze.add_argument("--tokenizer", type=Path, required=True)
-    freeze.add_argument("--chat-template", type=Path, required=True)
+    freeze.add_argument(
+        "--tokenizer-model",
+        type=Path,
+        required=True,
+        help="Model directory containing the canonical tokenizer and chat template.",
+    )
     freeze.add_argument("--sealed-payload", type=Path, required=True)
     freeze.add_argument("--deprecated-synthetic-sealed", type=Path)
     freeze.add_argument("--output", type=Path, required=True)

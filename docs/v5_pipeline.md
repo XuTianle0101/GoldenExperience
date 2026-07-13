@@ -19,6 +19,10 @@ golden-v5-pipeline init \
 golden-v5-pipeline status --workspace artifacts/v5_pipeline
 ```
 
+The frozen benchmark must have been created with `--tokenizer-model`; file-level tokenizer
+hashes from older development manifests are intentionally incompatible with pipeline model
+identities.
+
 Initialization hashes every model shard. The stat-guarded identity cache under
 `.pipeline/model_identity_cache.json` avoids repeating that full pass while the files remain
 unchanged. `--refresh-identity` forces a new full hash pass.

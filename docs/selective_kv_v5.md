@@ -112,7 +112,9 @@ KV is read.
 ## Benchmark Freeze
 
 `golden-publication-benchmark freeze` consumes source provenance JSON plus hash-only record
-JSONL and enforces the registered split sizes:
+JSONL. `--tokenizer-model` must point to the canonical model directory; the command derives
+the complete token-ID semantic hash and the separate chat-template hash rather than hashing
+one tokenizer file. It then enforces the registered split sizes:
 
 | Split | Samples |
 | --- | ---: |
