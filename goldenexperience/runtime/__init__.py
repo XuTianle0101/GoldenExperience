@@ -16,6 +16,11 @@ from goldenexperience.runtime.direct_paged_kv import (
     RetrieveTransformRequest,
     scatter_paged_kv,
 )
+from goldenexperience.runtime.lmcache_mp_server import (
+    LMCacheMPServerConfig,
+    LMCacheMPServerError,
+    LMCacheMPServerProcess,
+)
 from goldenexperience.runtime.lmcache_retrieve_transform import (
     LMCacheMPSourceChunkReader,
     LMCacheRetrieveTransformBatch,
@@ -43,6 +48,9 @@ __all__ = [
     "DirectPagedKVInjector",
     "InMemoryBlockValidityTracker",
     "LMCacheMPSourceChunkReader",
+    "LMCacheMPServerConfig",
+    "LMCacheMPServerError",
+    "LMCacheMPServerProcess",
     "LMCacheRetrieveTransformBatch",
     "LMCacheRetrieveTransformBridge",
     "LMCacheRetrieveTransformError",

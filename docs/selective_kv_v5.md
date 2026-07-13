@@ -63,6 +63,8 @@ before decode.
   layer explicitly, injects synchronously, and reports invalid blocks through vLLM's recompute API.
 - `runtime_audit_telemetry.py` carries gate and worker observations over authenticated loopback
   sockets, without filesystem staging or translated target-cache objects.
+- `lmcache_mp_server.py` owns the audit's loopback LMCache MP process, fixes 128-token non-GPU
+  chunks and memory-only L1 storage, and rejects any filesystem residue at shutdown.
 - `publication.py` enforces fixed split sizes, group isolation, hash-only sealed metadata,
   license/source provenance, four-direction validation receipts, one-shot sealed access, and
   immutable content-addressed sealed reports.
