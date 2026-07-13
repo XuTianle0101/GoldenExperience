@@ -166,6 +166,53 @@ direction-specific normalizer/training metrics. Resume uses the same full model,
 metric, progress, and input-binding checks as screening fit. A changed selected rank, seed,
 window, optimizer, loss, train trace, code hash, or structure receipt fails closed.
 
+## Fit Selector-Only Risk Predictors
+
+After the deployment transport and the independent 2,048-example `selector_train` trace
+exist for a direction, fit its uncalibrated source-side ranker:
+
+```bash
+golden-v5-pipeline fit-risk \
+  --workspace artifacts/v5_pipeline \
+  --direction qwen3_4b_to_8b \
+  --samples datasets/publication/selector_train.jsonl \
+  --source-device cuda:0 \
+  --target-device cuda:1 \
+  --predictor-device cuda:1
+```
+
+The command must be run independently for all four directions. It consumes only
+`selector_train`; neither calibration nor validation rows are accepted by this stage. For
+4B-to-8B it uses the method-dev-selected rank at deployment seed 17. Every other direction
+uses its single frozen directional candidate. The CLI exposes no rank, seed, threshold,
+label, hidden-width, epoch, optimizer, or calibration override.
+
+Each example reconstructs the production 169-dimensional feature vector only after a real
+source-side sidecar serialization/deserialization round trip. Target-native and transported
+continuations are each fixed at 16 greedy tokens and are retained only as hashes and numeric
+labels in the report. A row is unsafe when a native-pass becomes a bridge-fail, greedy token
+agreement is below 0.98, or teacher-forced perplexity drift exceeds 2%. Task scoring uses the
+same frozen deterministic evaluator declared by the sample.
+
+History features are causal: rows are processed in the frozen split's lexicographic sample-id
+order, and each prefix group sees only the count, failures, and mean greedy agreement of its
+strictly earlier rows. A checkpoint binds this exact history plus the split, trace, raw store,
+transport, code, predictions, token sequences, and quantized sidecar hashes. Resume rejects a
+checkpoint whose reconstructed history differs; a resumed run therefore produces the same
+canonical report and predictor bytes as an uninterrupted run.
+
+The predictor contract is fixed to seed 17, 200 full-batch epochs, AdamW at `1e-3` with
+weight decay `1e-4`, and a 169-to-64-to-1 SiLU MLP. Both safe and unsafe selector examples are
+required. Training may run on the selected predictor device, while artifact metrics are
+recomputed on CPU and include the class-weighted training objective, unweighted log loss,
+0.5-threshold accuracy, and tie-aware ROC-AUC. The canonical safetensors artifact contains
+only the six runtime tensors and exact `feature_schema_version`/`hidden_size=64` metadata.
+
+The resulting manifest explicitly records `calibrated=false`; this stage ranks risk but
+cannot authorize reuse. Its report, predictor, selected transport object, raw sample store,
+trace manifest, split hash, code hash, and pipeline identity are all content-bound. The later
+`calibrate` stage alone may choose an admission threshold on `risk_calibration`.
+
 There is deliberately no CLI option for a semantic sealed payload. Initialization records
 only its expected hash and publishes `.pipeline/semantic_sealed.locked.json`. The generic
 resume API rejects the `semantic_sealed` stage; a later one-shot guard must first verify

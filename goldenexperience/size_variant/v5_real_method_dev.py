@@ -190,7 +190,7 @@ class RealQwenMethodDevEvaluator:
         )
         target_kv = dynamic_cache_to_head_object(target_output.past_key_values)
         del source_output, target_output
-        native_tokens, native_text, native_nll = _greedy_decode(
+        native_tokens, native_text, native_nll = greedy_decode(
             self.target_model,
             self.tokenizer,
             target_kv,
@@ -215,7 +215,7 @@ class RealQwenMethodDevEvaluator:
             transformed = transport.transform(source_kv, position_ids=positions)
             _synchronize(self.target_device)
             transform_ms = (time.perf_counter() - started) * 1000
-            bridge_tokens, bridge_text, _ = _greedy_decode(
+            bridge_tokens, bridge_text, _ = greedy_decode(
                 self.target_model,
                 self.tokenizer,
                 transformed,
@@ -223,7 +223,7 @@ class RealQwenMethodDevEvaluator:
                 device=self.target_device,
                 generation_tokens=METHOD_DEV_GENERATION_TOKENS,
             )
-            bridge_nll = _teacher_nll(
+            bridge_nll = teacher_nll(
                 self.target_model,
                 transformed,
                 suffix,
@@ -264,7 +264,7 @@ class RealQwenMethodDevEvaluator:
         return tuple(measurements)
 
 
-def _greedy_decode(
+def greedy_decode(
     target_model: Any,
     tokenizer: Any,
     prefix_kv: Any,
@@ -303,7 +303,7 @@ def _greedy_decode(
     return generated, tokenizer.decode(generated, skip_special_tokens=True), nll
 
 
-def _teacher_nll(
+def teacher_nll(
     target_model: Any,
     prefix_kv: Any,
     suffix: Any,

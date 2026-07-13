@@ -91,6 +91,20 @@ def build_parser() -> argparse.ArgumentParser:
     method_dev.add_argument("--repository-root", type=Path, default=Path.cwd())
     method_dev.add_argument("--resume", action="store_true")
     method_dev.add_argument("--progress-every", type=int, default=1)
+    fit_risk = commands.add_parser(
+        "fit-risk",
+        help="fit one uncalibrated selector-train risk predictor",
+    )
+    fit_risk.add_argument("--workspace", type=Path, required=True)
+    fit_risk.add_argument("--direction", choices=tuple(DIRECTION_SIZES), required=True)
+    fit_risk.add_argument("--samples", type=Path, required=True)
+    fit_risk.add_argument("--source-device", default="cuda:0")
+    fit_risk.add_argument("--target-device", default="cuda:1")
+    fit_risk.add_argument("--predictor-device", default="cuda:1")
+    fit_risk.add_argument("--identity-cache", type=Path)
+    fit_risk.add_argument("--repository-root", type=Path, default=Path.cwd())
+    fit_risk.add_argument("--resume", action="store_true")
+    fit_risk.add_argument("--progress-every", type=int, default=1)
     return parser
 
 
@@ -265,12 +279,66 @@ def evaluate_method_dev(args: argparse.Namespace) -> PipelineStageRecord:
     )
 
 
+def fit_risk(args: argparse.Namespace) -> PipelineStageRecord:
+    import torch
+
+    from goldenexperience.size_variant.v5_real_risk import RealQwenRiskExampleEvaluator
+    from goldenexperience.size_variant.v5_risk import (
+        load_deployment_transport_binding,
+        run_fit_risk_stage,
+        stderr_risk_progress,
+    )
+
+    workspace = V5PipelineWorkspace.open(args.workspace)
+    if source_tree_sha256(args.repository_root) != workspace.config.code_sha256:
+        raise V5PipelineError("executable source tree differs from the pipeline code hash")
+    direction = workspace.config.direction(args.direction)
+    transport_manifest, candidate, _ = load_deployment_transport_binding(
+        workspace,
+        args.direction,
+    )
+    identity_cache = args.identity_cache
+    if identity_cache is None:
+        identity_cache = workspace.control / "model_identity_cache.json"
+    evaluator = RealQwenRiskExampleEvaluator(
+        workspace=workspace,
+        transport_manifest=transport_manifest,
+        candidate=candidate,
+        source_path=direction.source_model_path,
+        target_path=direction.target_model_path,
+        source_device=args.source_device,
+        target_device=args.target_device,
+        identity_cache_path=identity_cache,
+    )
+    predictor_device = torch.device(args.predictor_device)
+    evaluator_parameters = {
+        **evaluator.parameters(),
+        "predictor_device_type": predictor_device.type,
+        "predictor_device_name": (
+            torch.cuda.get_device_name(predictor_device)
+            if predictor_device.type == "cuda"
+            else predictor_device.type
+        ),
+    }
+    return run_fit_risk_stage(
+        workspace=workspace,
+        direction=args.direction,
+        sample_store_path=args.samples,
+        evaluator_parameters=evaluator_parameters,
+        evaluator_factory=lambda: evaluator,
+        predictor_device=args.predictor_device,
+        resume=args.resume,
+        progress=stderr_risk_progress(args.progress_every),
+    )
+
+
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     stage_commands = {
         "collect": collect_split,
         "fit-transport": fit_transport,
         "evaluate-method-dev": evaluate_method_dev,
+        "fit-risk": fit_risk,
     }
     if args.command in stage_commands:
         record = stage_commands[args.command](args)

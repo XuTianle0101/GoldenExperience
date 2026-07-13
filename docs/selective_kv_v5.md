@@ -113,6 +113,14 @@ threshold on the independent calibration split for which:
   and the correction method plus candidate count are stored in the artifact;
 - tied predictor scores are admitted or rejected together.
 
+Predictor fitting is independently frozen before calibration. Each direction uses exactly
+2,048 `selector_train` rows, the method-dev-selected deployment transport, and a fixed
+169-to-64-to-1 MLP. Features are extracted from the deserialized quantized source sidecar;
+native-target execution contributes labels only and cannot enter the current row's feature
+vector. Per-prefix history contains only outcomes from lexicographically earlier rows in the
+frozen split. The fit artifact has no threshold and is rejected if either label class is
+absent. Calibration then freezes the predictor and reads only `risk_calibration`.
+
 At runtime, a missing/corrupt sidecar, unseen prefix, insufficient shadow history, OOD score,
 model/tokenizer/transport identity change, predictor failure, or score above threshold falls
 back before source KV is read. There is no unsafe production override.

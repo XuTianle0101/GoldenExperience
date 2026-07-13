@@ -677,6 +677,8 @@ def fit_risk_predictor(
         raise RiskGateError("risk training data contains non-finite values")
     if bool(((labels != 0) & (labels != 1)).any()):
         raise RiskGateError("risk training labels must be binary")
+    if int(torch.unique(labels).numel()) != 2:
+        raise RiskGateError("risk training requires both safe and unsafe examples")
     generator = torch.Generator(device=device)
     generator.manual_seed(seed)
     mean = features.mean(dim=0)
