@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from goldenexperience.lmcache_patch import PatchManifest
 from goldenexperience.runtime import RuntimeConfig, build_patch_environment, check_runtime
 
@@ -16,6 +18,12 @@ def test_patch_manifest_documents_non_invasive_hooks() -> None:
     assert any("Do not modify vLLM" in item for item in manifest.invariants)
     assert any("Do not replace LMCache MP" in item for item in manifest.invariants)
     assert "LMCache" in manifest.as_markdown()
+
+
+def test_checked_in_patch_manifest_matches_the_runtime_contract() -> None:
+    rendered = PatchManifest.default().as_markdown()
+
+    assert Path("docs/patch_manifest.md").read_text(encoding="utf-8") == rendered
 
 
 def test_runtime_environment_is_namespaced() -> None:
