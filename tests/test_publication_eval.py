@@ -26,6 +26,8 @@ from goldenexperience.benchmarks.publication_eval import (
             {"metric": "json_exact"},
             1.0,
         ),
+        ("Final: 1/2", "\\frac{1}{2}", {"metric": "math_exact"}, 1.0),
+        ("Therefore, \\boxed{x+1}", "x + 1", {"metric": "math_exact"}, 1.0),
     ],
 )
 def test_publication_scorers_are_deterministic(
@@ -47,6 +49,45 @@ def test_publication_scorer_accepts_multiple_references() -> None:
             {"metric": "contains"},
         )
         == 1.0
+    )
+
+
+def test_publication_function_call_scorer_accepts_declared_value_choices() -> None:
+    reference = {
+        "accepted_call_sequences": [
+            [
+                {
+                    "name": "weather.lookup",
+                    "arguments": {"city": ["Paris"], "units": ["metric", ""]},
+                }
+            ]
+        ]
+    }
+
+    assert (
+        score_publication_prediction(
+            '```json\n{"name":"weather.lookup","arguments":{"city":"Paris","units":"metric"}}\n```',
+            reference,
+            {"metric": "function_call"},
+        )
+        == 1.0
+    )
+    assert (
+        score_publication_prediction(
+            '{"weather.lookup":{"city":"London","units":"metric"}}',
+            reference,
+            {"metric": "function_call"},
+        )
+        == 0.0
+    )
+    assert validate_publication_evaluation(reference, {"metric": "function_call"}) == []
+
+
+def test_publication_specialized_scorers_reject_malformed_contracts() -> None:
+    assert validate_publication_evaluation("$.$", {"metric": "math_exact"})
+    assert validate_publication_evaluation(
+        {"accepted_call_sequences": []},
+        {"metric": "function_call"},
     )
 
 

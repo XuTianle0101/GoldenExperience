@@ -14,6 +14,16 @@ from goldenexperience.benchmarks.publication import (
     GroupedPrefixRecord,
     PublicationBenchmarkManifest,
 )
+from goldenexperience.benchmarks.publication_builder import (
+    PublicationDatasetBuilder,
+    PublicationTokenizer,
+    publish_publication_build,
+)
+from goldenexperience.benchmarks.publication_sources import (
+    PublicationSourceLock,
+    audit_publication_sources,
+    load_publication_sources,
+)
 from goldenexperience.size_variant.cached_kv_manifest import (
     chat_template_sha256,
     sha256_file,
@@ -78,7 +88,51 @@ def _parser() -> argparse.ArgumentParser:
     freeze.add_argument("--output", type=Path, required=True)
     validate = subparsers.add_parser("validate", help="validate an already frozen manifest")
     validate.add_argument("manifest", type=Path)
+    audit = subparsers.add_parser(
+        "audit-sources",
+        help="verify every locked source file without constructing benchmark rows",
+    )
+    _add_source_arguments(audit)
+    build = subparsers.add_parser(
+        "build",
+        help="build all balanced real-data splits and a separately protected sealed payload",
+    )
+    _add_source_arguments(build)
+    build.add_argument("--tokenizer-model", type=Path, required=True)
+    build.add_argument("--output-dir", type=Path, required=True)
+    build.add_argument("--sealed-output", type=Path, required=True)
     return parser
+
+
+def _add_source_arguments(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--source-lock", type=Path, required=True)
+    parser.add_argument(
+        "--source-root",
+        type=Path,
+        required=True,
+        help="Root for relative paths in the portable source lock.",
+    )
+    parser.add_argument(
+        "--source-path",
+        action="append",
+        default=[],
+        metavar="DATASET:ROLE=PATH",
+        help="Override one locked local path without changing its portable identity.",
+    )
+
+
+def _source_path_overrides(values: list[str]) -> dict[tuple[str, str], Path]:
+    overrides: dict[tuple[str, str], Path] = {}
+    for value in values:
+        binding, separator, path = value.partition("=")
+        dataset_id, role_separator, role = binding.partition(":")
+        if not separator or not role_separator or not dataset_id or not role or not path:
+            raise ValueError("--source-path must use DATASET:ROLE=PATH")
+        key = (dataset_id, role)
+        if key in overrides:
+            raise ValueError(f"duplicate --source-path override for {dataset_id}:{role}")
+        overrides[key] = Path(path)
+    return overrides
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -92,6 +146,50 @@ def main(argv: list[str] | None = None) -> int:
                     "sha256": manifest.content_sha256(),
                     "records": len(manifest.records),
                     "sealed_payload_sha256": manifest.sealed_payload_sha256,
+                },
+                sort_keys=True,
+            )
+        )
+        return 0
+    if args.command in {"audit-sources", "build"}:
+        source_lock = PublicationSourceLock.load(args.source_lock)
+        audited = audit_publication_sources(
+            source_lock,
+            source_root=args.source_root,
+            path_overrides=_source_path_overrides(args.source_path),
+        )
+        if args.command == "audit-sources":
+            print(
+                json.dumps(
+                    {
+                        "source_lock": str(args.source_lock),
+                        "source_lock_sha256": source_lock.content_sha256(),
+                        "files": len(audited.files),
+                        "bytes": sum(item.size_bytes for item in audited.files),
+                    },
+                    sort_keys=True,
+                )
+            )
+            return 0
+        loaded = load_publication_sources(audited)
+        tokenizer = PublicationTokenizer.from_model(args.tokenizer_model)
+        result = publish_publication_build(
+            PublicationDatasetBuilder(
+                audited_sources=audited,
+                loaded_sources=loaded,
+                tokenizer=tokenizer,
+            ),
+            output_dir=args.output_dir,
+            sealed_payload=args.sealed_output,
+        )
+        print(
+            json.dumps(
+                {
+                    "manifest": str(result.manifest_path),
+                    "manifest_sha256": result.manifest.content_sha256(),
+                    "records": len(result.manifest.records),
+                    "sealed_payload": str(result.sealed_payload),
+                    "sealed_payload_sha256": result.manifest.sealed_payload_sha256,
                 },
                 sort_keys=True,
             )

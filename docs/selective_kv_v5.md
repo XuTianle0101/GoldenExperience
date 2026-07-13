@@ -170,6 +170,12 @@ Every split must cover prefix buckets 128, 512, 2048, and 8192. Transport-train 
 cannot occur later. Risk-calibration, validation, and sealed data may share a hot prefix, but
 their suffix/query hashes cannot overlap. ShareGPT and BurstGPT records are trace-only.
 
+The real-data builder, frozen upstream revisions, exact per-source hashes, balanced allocation,
+license notes, and sealed-output procedure are specified in `docs/publication_dataset.md`. The
+legacy `freeze` command remains available for externally prepared records; the publication v5 path
+uses `golden-publication-benchmark audit-sources` followed by `build` so source bytes and split
+isolation are checked before the manifest is emitted.
+
 ## Current Evidence Boundary
 
 This repository contains the executable contracts and deterministic tests, but it does not

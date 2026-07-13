@@ -45,7 +45,8 @@ The current research path is a fail-closed v5 artifact for same-family scale var
   KV without publishing target Mooncake objects.
 
 The implementation contract and present evidence boundary are documented in
-`docs/selective_kv_v5.md`. No v5 artifact is currently approved; retained rank-512 Qwen3
+`docs/selective_kv_v5.md`; the real-data freeze is documented in
+`docs/publication_dataset.md`. No v5 artifact is currently approved; retained rank-512 Qwen3
 results are development failures, not production or paper claims.
 
 Run the bounded real-model implementation smoke on two GPUs with:

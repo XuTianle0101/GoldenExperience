@@ -1,0 +1,298 @@
+{
+  "schema_version": "goldenexperience.publication_source_lock.v1",
+  "selection_seed": 17,
+  "tokenizer_sha256": "8600b6a0f454991ab91c559b5b7cb5a3ae995016bdeef588c1a209695f33c84f",
+  "chat_template_sha256": "67b34ea2308ecf4a8a01e7078523f2d59a4afacbca5f1c131e96833feedabcac",
+  "sources": [
+    {
+      "adapter": "longbench",
+      "files": [
+        {
+          "path": "longbench/hotpotqa.jsonl",
+          "role": "data",
+          "sha256": "a0005ab2a1bc2ac3a70352dccbf96cccc4e0aac6bb677f6a55180fa51b92ef6f",
+          "size_bytes": 11483614
+        }
+      ],
+      "source": {
+        "content_sha256": "eace03bf2226015e5738a12157f82368021e747c3b1b9e7e854170750094fd92",
+        "dataset_id": "longbench_hotpotqa",
+        "license_id": "CC-BY-SA-4.0",
+        "license_uri": "https://creativecommons.org/licenses/by-sa/4.0/",
+        "revision": "5e628be450b7e67fb7ae6e201bd6d8f7056f7672",
+        "source_uri": "https://huggingface.co/datasets/zai-org/LongBench/tree/5e628be450b7e67fb7ae6e201bd6d8f7056f7672",
+        "usage": "semantic"
+      }
+    },
+    {
+      "adapter": "longbench",
+      "files": [
+        {
+          "path": "longbench/qasper.jsonl",
+          "role": "data",
+          "sha256": "29aa07d2a63f36f4fb8e8cd200a3428ee3126d750bde6af1c8f9bc41c2366854",
+          "size_bytes": 4829368
+        }
+      ],
+      "source": {
+        "content_sha256": "09609f467eada76694f026585ac58002e780787e64209516e0e30ecb8d0b7e16",
+        "dataset_id": "longbench_qasper",
+        "license_id": "CC-BY-4.0",
+        "license_uri": "https://creativecommons.org/licenses/by/4.0/",
+        "revision": "5e628be450b7e67fb7ae6e201bd6d8f7056f7672",
+        "source_uri": "https://huggingface.co/datasets/zai-org/LongBench/tree/5e628be450b7e67fb7ae6e201bd6d8f7056f7672",
+        "usage": "semantic"
+      }
+    },
+    {
+      "adapter": "longbench",
+      "files": [
+        {
+          "path": "longbench/multifieldqa_en.jsonl",
+          "role": "data",
+          "sha256": "0aac182fd317dcf6d74f8e1e0f3e61029407435346c2e0b3ff9fb45ae49c5c3f",
+          "size_bytes": 4483926
+        }
+      ],
+      "source": {
+        "content_sha256": "c97cd1506bd36428198bfa936db62272055103ecc9f594dc2fee11ed8c4d5226",
+        "dataset_id": "longbench_multifieldqa",
+        "license_id": "MIT",
+        "license_uri": "https://github.com/THUDM/LongBench/blob/2e00731f8d0bff23dc4325161044d0ed8af94c1e/LICENSE",
+        "revision": "5e628be450b7e67fb7ae6e201bd6d8f7056f7672",
+        "source_uri": "https://huggingface.co/datasets/zai-org/LongBench/tree/5e628be450b7e67fb7ae6e201bd6d8f7056f7672",
+        "usage": "semantic"
+      }
+    },
+    {
+      "adapter": "bfcl_v4",
+      "files": [
+        {
+          "path": "bfcl/BFCL_v4_simple_python.json",
+          "role": "questions",
+          "sha256": "82dd63ba502eb2520c6b5d1d9a5c4b590e03ff261565175561f6228a367d1991",
+          "size_bytes": 283274
+        },
+        {
+          "path": "bfcl/possible_answer/BFCL_v4_simple_python.json",
+          "role": "answers",
+          "sha256": "90cd5bc653690ee8e459b5b3f3fc9458606f7f3fcbf795bb51b7dc581f8c86dc",
+          "size_bytes": 63627
+        }
+      ],
+      "source": {
+        "content_sha256": "31617b5ed1a245280738de993624dc5335ecff443a71a9cc71528fdcd0f38c82",
+        "dataset_id": "bfcl",
+        "license_id": "Apache-2.0",
+        "license_uri": "https://github.com/ShishirPatil/gorilla/blob/6ea57973c7a6097fd7c5915698c54c17c5b1b6c8/LICENSE",
+        "revision": "6ea57973c7a6097fd7c5915698c54c17c5b1b6c8",
+        "source_uri": "https://github.com/ShishirPatil/gorilla/tree/6ea57973c7a6097fd7c5915698c54c17c5b1b6c8/berkeley-function-call-leaderboard/bfcl_eval/data",
+        "usage": "semantic"
+      }
+    },
+    {
+      "adapter": "gsm8k",
+      "files": [
+        {
+          "path": "gsm8k/train.jsonl",
+          "role": "train",
+          "sha256": "17f347dc51477c50d4efb83959dbb7c56297aba886e5544ee2aaed3024813465",
+          "size_bytes": 4166206
+        },
+        {
+          "path": "gsm8k/test.jsonl",
+          "role": "test",
+          "sha256": "3730d312f6e3440559ace48831e51066acaca737f6eabec99bccb9e4b3c39d14",
+          "size_bytes": 749738
+        }
+      ],
+      "source": {
+        "content_sha256": "780b55ca4a4a58fdd8f3012a576e3daae74a4df079c815023050124089c2c329",
+        "dataset_id": "gsm8k",
+        "license_id": "MIT",
+        "license_uri": "https://github.com/openai/grade-school-math/blob/3101c7d5072418e28b9008a6636bde82a006892c/LICENSE",
+        "revision": "3101c7d5072418e28b9008a6636bde82a006892c",
+        "source_uri": "https://github.com/openai/grade-school-math/tree/3101c7d5072418e28b9008a6636bde82a006892c/grade_school_math/data",
+        "usage": "semantic"
+      }
+    },
+    {
+      "adapter": "math",
+      "files": [
+        {
+          "path": "math/algebra_test.parquet",
+          "role": "algebra_test",
+          "sha256": "0e04a850dac9cfc758eac0c80afd2d0cc65e29ea72f916c8ac1045b12af937f5",
+          "size_bytes": 353114
+        },
+        {
+          "path": "math/algebra_train.parquet",
+          "role": "algebra_train",
+          "sha256": "73347f5b55869f21ff094361025dbd12d291e971aa4d72142eacee10438e449f",
+          "size_bytes": 505186
+        },
+        {
+          "path": "math/counting_and_probability_test.parquet",
+          "role": "counting_and_probability_test",
+          "sha256": "c324818949c75a6227c0328a8499d58023cbbf6757cfc1736f5ab24cc8d87966",
+          "size_bytes": 175032
+        },
+        {
+          "path": "math/counting_and_probability_train.parquet",
+          "role": "counting_and_probability_train",
+          "sha256": "d37ae017930df41678edee50dcde18c17fb06afaff9eb505c1b95f1002bfcb31",
+          "size_bytes": 329354
+        },
+        {
+          "path": "math/geometry_test.parquet",
+          "role": "geometry_test",
+          "sha256": "98720f3a8134ad9784fd8951195245264495df03ffc5c9485a9a54ff5ae2431a",
+          "size_bytes": 263835
+        },
+        {
+          "path": "math/geometry_train.parquet",
+          "role": "geometry_train",
+          "sha256": "9dbf5e5b55499e696e0ba72da9d85d4f0be3acbf7eaa6cb014b0fc78bb63784f",
+          "size_bytes": 549388
+        },
+        {
+          "path": "math/intermediate_algebra_test.parquet",
+          "role": "intermediate_algebra_test",
+          "sha256": "e859f72486c951c2017da880541ca729940eaa986b0364eb23e238983df9bfeb",
+          "size_bytes": 394797
+        },
+        {
+          "path": "math/intermediate_algebra_train.parquet",
+          "role": "intermediate_algebra_train",
+          "sha256": "0c87f3798ebdfb915b1f9b6fc13c1a8d064c3cb91631ccbe85b83ed5d71150f6",
+          "size_bytes": 575154
+        },
+        {
+          "path": "math/number_theory_test.parquet",
+          "role": "number_theory_test",
+          "sha256": "ba156c9c9fa2040836ba12135fd964e6e67d6bccd8c469ec4a3ad941f8f6fbe9",
+          "size_bytes": 182003
+        },
+        {
+          "path": "math/number_theory_train.parquet",
+          "role": "number_theory_train",
+          "sha256": "81c08649149b39811f2d1d7ddf5dfccf6c4c8044a2e169cfb24db09160c941f4",
+          "size_bytes": 308653
+        },
+        {
+          "path": "math/prealgebra_test.parquet",
+          "role": "prealgebra_test",
+          "sha256": "301e5d8ade5c7b5038032532e498bdc9dca799e7f1061a63f2e7d980803240cc",
+          "size_bytes": 267729
+        },
+        {
+          "path": "math/prealgebra_train.parquet",
+          "role": "prealgebra_train",
+          "sha256": "765b526fb5c0b8385cb7be2c16bf4f6f28cf71f2bc15c826abfbb5fa7f8616cc",
+          "size_bytes": 383626
+        },
+        {
+          "path": "math/precalculus_test.parquet",
+          "role": "precalculus_test",
+          "sha256": "da37474ba3761ae5727af3844a7ba963a735bd6a14c65e6137593669a4fe3b9c",
+          "size_bytes": 242241
+        },
+        {
+          "path": "math/precalculus_train.parquet",
+          "role": "precalculus_train",
+          "sha256": "28bb1ff95525c8d32521509bef91de76339659f5467a381e6e8deea204538f0e",
+          "size_bytes": 353745
+        }
+      ],
+      "source": {
+        "content_sha256": "6e499d904978000d0b4765bddff3e4839ab9bea398eee89bd9d2d72bd267b88d",
+        "dataset_id": "math",
+        "license_id": "MIT",
+        "license_uri": "https://github.com/hendrycks/math/blob/985bdc1696e88e8643f081a0ff4719da39f2ae2a/LICENSE",
+        "revision": "21a5633873b6a120296cce3e2df9d5550074f4a3",
+        "source_uri": "https://huggingface.co/datasets/EleutherAI/hendrycks_math/tree/21a5633873b6a120296cce3e2df9d5550074f4a3",
+        "usage": "semantic"
+      }
+    },
+    {
+      "adapter": "humaneval",
+      "files": [
+        {
+          "path": "humaneval/HumanEval.jsonl",
+          "role": "data",
+          "sha256": "1d49078ba3e2b196b9344535bef34a43021f038fad9561d6ee7c53450609a6a2",
+          "size_bytes": 214438
+        }
+      ],
+      "source": {
+        "content_sha256": "2a66dfcab9b1523336231368ebb13e199afc0b5083b0a392b50b4779513593be",
+        "dataset_id": "humaneval",
+        "license_id": "MIT",
+        "license_uri": "https://github.com/openai/human-eval/blob/6d43fb980f9fee3c892a914eda09951f772ad10d/LICENSE",
+        "revision": "6d43fb980f9fee3c892a914eda09951f772ad10d",
+        "source_uri": "https://github.com/openai/human-eval/tree/6d43fb980f9fee3c892a914eda09951f772ad10d/data",
+        "usage": "semantic"
+      }
+    },
+    {
+      "adapter": "mbpp",
+      "files": [
+        {
+          "path": "mbpp/mbpp.jsonl",
+          "role": "data",
+          "sha256": "0b5e07b5b40fedd01c57b7c9177b79f8b2eebd72c304c928605d91a7237d2f33",
+          "size_bytes": 563742
+        }
+      ],
+      "source": {
+        "content_sha256": "82387720acaf5bde5f2d315c85239241de7b4ae1d271e16a31413bb871f2dbef",
+        "dataset_id": "mbpp",
+        "license_id": "CC-BY-4.0",
+        "license_uri": "https://creativecommons.org/licenses/by/4.0/",
+        "revision": "OpenCompassData-core-20240207",
+        "source_uri": "https://huggingface.co/datasets/google-research-datasets/mbpp/tree/4bb6404fdc6cacfda99d4ac4205087b89d32030c",
+        "usage": "semantic"
+      }
+    },
+    {
+      "adapter": "sharegpt",
+      "files": [
+        {
+          "path": "sharegpt/ShareGPT_V3_unfiltered_cleaned_split.json",
+          "role": "data",
+          "sha256": "35f0e213ce091ed9b9af2a1f0755e9d39f9ccec34ab281cd4ca60d70f6479ba4",
+          "size_bytes": 672837942
+        }
+      ],
+      "source": {
+        "content_sha256": "ed290c020a27a0d0e332503e2c760399d82f174cfb4fae04675a107cba699286",
+        "dataset_id": "sharegpt",
+        "license_id": "Apache-2.0",
+        "license_uri": "https://www.apache.org/licenses/LICENSE-2.0",
+        "revision": "192ab2185289094fc556ec8ce5ce1e8e587154ca",
+        "source_uri": "https://huggingface.co/datasets/anon8231489123/ShareGPT_Vicuna_unfiltered/tree/192ab2185289094fc556ec8ce5ce1e8e587154ca",
+        "usage": "trace_only"
+      }
+    },
+    {
+      "adapter": "burstgpt",
+      "files": [
+        {
+          "path": "burstgpt/BurstGPT_1.csv",
+          "role": "data",
+          "sha256": "46fc9480ef0b748ecb2b51d512ff08c196b031782cbe6f78e28044d768e86d5a",
+          "size_bytes": 50853373
+        }
+      ],
+      "source": {
+        "content_sha256": "849f9ce177684b7a5815e9e888147248f40e9f1186aabdb510dede17b703808a",
+        "dataset_id": "burstgpt",
+        "license_id": "CC-BY-4.0",
+        "license_uri": "https://github.com/HPMLL/BurstGPT/blob/d895a53bb7b8ec137d0d2fe203b335835a78c10a/LICENSE",
+        "revision": "d895a53bb7b8ec137d0d2fe203b335835a78c10a",
+        "source_uri": "https://github.com/HPMLL/BurstGPT/tree/d895a53bb7b8ec137d0d2fe203b335835a78c10a/data",
+        "usage": "trace_only"
+      }
+    }
+  ]
+}

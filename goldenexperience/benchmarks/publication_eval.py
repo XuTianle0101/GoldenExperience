@@ -22,7 +22,9 @@ SUPPORTED_PUBLICATION_METRICS = frozenset(
     {
         "contains",
         "exact_match",
+        "function_call",
         "json_exact",
+        "math_exact",
         "numeric_exact",
         "python_tests",
         "token_f1",
@@ -58,6 +60,14 @@ def score_publication_prediction(
         predicted = _last_number(prediction)
         tolerances = _numeric_tolerances(evaluation)
         score = max(_numeric_match(predicted, item, *tolerances) for item in references)
+    elif metric == "math_exact":
+        math_prediction = _last_boxed_value(prediction) or prediction
+        score = max(
+            float(_normalize_math_answer(math_prediction) == _normalize_math_answer(item))
+            for item in references
+        )
+    elif metric == "function_call":
+        score = _function_call_score(prediction, reference)
     elif metric == "python_tests":
         score = max(_python_test_score(prediction, item) for item in references)
     else:
@@ -98,6 +108,12 @@ def validate_publication_evaluation(reference: Any, evaluation: Mapping[str, Any
                     "python test evaluation requires exactly one test contract"
                 )
             _python_test_contract(references[0])
+        elif metric == "math_exact":
+            for item in references:
+                if not _normalize_math_answer(item):
+                    raise PublicationEvaluationError("math reference is empty after normalization")
+        elif metric == "function_call":
+            _function_call_contract(reference)
         allowed_fields = {"metric", "pass_threshold"}
         if metric == "numeric_exact":
             allowed_fields.update({"absolute_tolerance", "relative_tolerance"})
@@ -204,6 +220,155 @@ def _numeric_match(
             rel_tol=relative_tolerance,
         )
     )
+
+
+def _last_boxed_value(value: str) -> str | None:
+    """Extract the last balanced ``\\boxed{...}`` payload without evaluating LaTeX."""
+
+    marker = "\\boxed{"
+    start = value.rfind(marker)
+    if start < 0:
+        marker = "\\fbox{"
+        start = value.rfind(marker)
+    if start < 0:
+        return None
+    content_start = start + len(marker)
+    depth = 1
+    for index in range(content_start, len(value)):
+        if value[index] == "{":
+            depth += 1
+        elif value[index] == "}":
+            depth -= 1
+            if depth == 0:
+                return value[content_start:index]
+    return None
+
+
+def _normalize_math_answer(value: Any) -> str:
+    if not isinstance(value, str):
+        value = str(value)
+    boxed = _last_boxed_value(value)
+    if boxed is not None:
+        value = boxed
+    normalized = value.strip().replace("\n", "").replace(" ", "")
+    normalized = re.sub(
+        r"^(?:finalanswer|final|answer)[:=]",
+        "",
+        normalized,
+        flags=re.IGNORECASE,
+    )
+    normalized = normalized.replace("\\left", "").replace("\\right", "")
+    normalized = normalized.replace("\\!", "").replace("\\,", "")
+    normalized = normalized.replace("tfrac", "frac").replace("dfrac", "frac")
+    normalized = normalized.replace("\\$", "").replace("$", "")
+    normalized = normalized.rstrip(".")
+    if normalized.startswith("."):
+        normalized = "0" + normalized
+    if normalized.startswith("-") and normalized[1:].startswith("."):
+        normalized = "-0" + normalized[1:]
+    if re.fullmatch(r"-?\d+/\d+", normalized):
+        numerator, denominator = normalized.split("/", 1)
+        normalized = f"\\frac{{{numerator}}}{{{denominator}}}"
+    return normalized.casefold()
+
+
+def _function_call_score(prediction: str, reference: Any) -> float:
+    contract = _function_call_contract(reference)
+    candidate = _first_json_value(prediction)
+    calls = _normalize_predicted_calls(candidate)
+    if calls is None:
+        return 0.0
+    expected_sequences = contract["accepted_call_sequences"]
+    return float(any(_calls_match(calls, expected) for expected in expected_sequences))
+
+
+def _function_call_contract(reference: Any) -> dict[str, list[list[dict[str, Any]]]]:
+    if not isinstance(reference, Mapping) or set(reference) != {"accepted_call_sequences"}:
+        raise PublicationEvaluationError("function-call reference fields are invalid")
+    raw_sequences = reference.get("accepted_call_sequences")
+    if not isinstance(raw_sequences, list) or not raw_sequences:
+        raise PublicationEvaluationError("function-call reference has no accepted sequence")
+    sequences: list[list[dict[str, Any]]] = []
+    for raw_sequence in raw_sequences:
+        if not isinstance(raw_sequence, list) or not raw_sequence:
+            raise PublicationEvaluationError("function-call sequence is empty")
+        sequence: list[dict[str, Any]] = []
+        for raw_call in raw_sequence:
+            if not isinstance(raw_call, Mapping) or set(raw_call) != {"name", "arguments"}:
+                raise PublicationEvaluationError("function-call reference call is malformed")
+            name = raw_call.get("name")
+            arguments = raw_call.get("arguments")
+            if not isinstance(name, str) or not name or not isinstance(arguments, Mapping):
+                raise PublicationEvaluationError("function-call name or arguments are invalid")
+            normalized_arguments: dict[str, list[Any]] = {}
+            for key, choices in arguments.items():
+                if (
+                    not isinstance(key, str)
+                    or not key
+                    or not isinstance(choices, list)
+                    or not choices
+                ):
+                    raise PublicationEvaluationError("function-call argument choices are malformed")
+                for choice in choices:
+                    try:
+                        json.dumps(choice, allow_nan=False, sort_keys=True)
+                    except (TypeError, ValueError) as exc:
+                        raise PublicationEvaluationError(
+                            "function-call argument choice is not canonical JSON"
+                        ) from exc
+                normalized_arguments[key] = choices
+            sequence.append({"name": name, "arguments": normalized_arguments})
+        sequences.append(sequence)
+    return {"accepted_call_sequences": sequences}
+
+
+def _normalize_predicted_calls(value: Any) -> list[dict[str, Any]] | None:
+    values: Sequence[Any]
+    if isinstance(value, Mapping):
+        if set(value) == {"name", "arguments"}:
+            values = [value]
+        elif len(value) == 1:
+            name, arguments = next(iter(value.items()))
+            values = [{"name": name, "arguments": arguments}]
+        else:
+            return None
+    elif isinstance(value, list):
+        values = value
+    else:
+        return None
+    calls: list[dict[str, Any]] = []
+    for item in values:
+        if not isinstance(item, Mapping):
+            return None
+        if set(item) == {"name", "arguments"}:
+            name = item.get("name")
+            arguments = item.get("arguments")
+        elif len(item) == 1:
+            name, arguments = next(iter(item.items()))
+        else:
+            return None
+        if not isinstance(name, str) or not isinstance(arguments, Mapping):
+            return None
+        calls.append({"name": name, "arguments": dict(arguments)})
+    return calls
+
+
+def _calls_match(calls: list[dict[str, Any]], expected: list[dict[str, Any]]) -> bool:
+    if len(calls) != len(expected):
+        return False
+    for candidate, reference in zip(calls, expected, strict=True):
+        if candidate["name"] != reference["name"]:
+            return False
+        candidate_arguments = candidate["arguments"]
+        reference_arguments = reference["arguments"]
+        if set(candidate_arguments) != set(reference_arguments):
+            return False
+        if any(
+            candidate_arguments[name] not in reference_arguments[name]
+            for name in reference_arguments
+        ):
+            return False
+    return True
 
 
 def _first_json_value(value: str) -> Any:
