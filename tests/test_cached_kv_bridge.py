@@ -19,9 +19,11 @@ from goldenexperience.size_variant.cached_kv_manifest import (
     CachedKVBridgeManifest,
     CachedKVQualityEvidence,
     artifact_id_for,
+    chat_template_sha256,
     model_spec_from_path,
     seed_model_identity_cache,
     sha256_file,
+    tokenizer_semantic_sha256,
 )
 
 
@@ -84,6 +86,89 @@ def _quality(test_hash: str) -> CachedKVQualityEvidence:
         p95_source_read_transform_put_ms=10.0,
         p95_target_prefill_ms=20.0,
     )
+
+
+def _write_tokenizer_identity_fixture(
+    root: Path,
+    *,
+    chat_template: str,
+    eos_token: str = "<|im_end|>",
+    vocab: str = '{"hello":0}',
+    name_or_path: str = "/models/qwen",
+    transformers_version: str = "5.0.0",
+) -> None:
+    root.mkdir(parents=True)
+    (root / "tokenizer.json").write_text('{"model":"shared"}', encoding="utf-8")
+    (root / "vocab.json").write_text(vocab, encoding="utf-8")
+    (root / "merges.txt").write_text("#version: 0.2\nh e\n", encoding="utf-8")
+    (root / "tokenizer_config.json").write_text(
+        json.dumps(
+            {
+                "added_tokens_decoder": {
+                    "151645": {
+                        "content": eos_token,
+                        "lstrip": False,
+                        "normalized": False,
+                        "rstrip": False,
+                        "single_word": False,
+                        "special": True,
+                    }
+                },
+                "chat_template": chat_template,
+                "eos_token": eos_token,
+                "name_or_path": name_or_path,
+                "tokenizer_class": "Qwen2Tokenizer",
+                "transformers_version": transformers_version,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+
+def test_tokenizer_identity_separates_token_ids_from_prompt_rendering(tmp_path: Path) -> None:
+    source = tmp_path / "source"
+    target = tmp_path / "target"
+    _write_tokenizer_identity_fixture(
+        source,
+        chat_template="{{ messages[0].content }}",
+        name_or_path="/cache/Qwen3-4B",
+        transformers_version="4.51.0",
+    )
+    _write_tokenizer_identity_fixture(
+        target,
+        chat_template="{{ messages | first | attr('content') }}",
+        name_or_path="/cache/Qwen3-8B",
+        transformers_version="5.13.0",
+    )
+
+    assert tokenizer_semantic_sha256(source) == tokenizer_semantic_sha256(target)
+    assert chat_template_sha256(source) != chat_template_sha256(target)
+
+
+@pytest.mark.parametrize(
+    ("changed_eos", "changed_vocab"),
+    [
+        ("<|different_end|>", '{"hello":0}'),
+        ("<|im_end|>", '{"hello":0,"world":1}'),
+    ],
+)
+def test_tokenizer_identity_rejects_semantic_changes(
+    tmp_path: Path,
+    changed_eos: str,
+    changed_vocab: str,
+) -> None:
+    source = tmp_path / "source"
+    target = tmp_path / "target"
+    _write_tokenizer_identity_fixture(source, chat_template="shared")
+    _write_tokenizer_identity_fixture(
+        target,
+        chat_template="shared",
+        eos_token=changed_eos,
+        vocab=changed_vocab,
+    )
+
+    assert tokenizer_semantic_sha256(source) != tokenizer_semantic_sha256(target)
+    assert chat_template_sha256(source) == chat_template_sha256(target)
 
 
 def test_model_identity_cache_is_stat_guarded(tmp_path: Path, monkeypatch) -> None:

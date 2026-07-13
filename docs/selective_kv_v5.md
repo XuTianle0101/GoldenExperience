@@ -87,6 +87,13 @@ At runtime, a missing/corrupt sidecar, unseen prefix, insufficient shadow histor
 model/tokenizer/transport identity change, predictor failure, or score above threshold falls
 back before source KV is read. There is no unsafe production override.
 
+`tokenizer_sha256` identifies token-ID semantics: tokenizer model/vocabulary files, merges,
+special tokens, and semantic tokenizer configuration. Prompt serialization is separate;
+`chat_template_sha256` preserves the exact default chat template for provenance. This split
+does not permit reuse across different requests: the source sidecar and target request must
+still carry the same exact prefix hash, so any rendered-token difference fails before source
+KV is read.
+
 ## Benchmark Freeze
 
 `golden-publication-benchmark freeze` consumes source provenance JSON plus hash-only record

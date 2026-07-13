@@ -373,6 +373,9 @@ MVP artifact 包含：
 - 前缀 token ids 必须完全匹配；要求 chunk 对齐。
 - materializer 先执行 `h_small -> h_large_hat`，再由目标模型 W_K/W_V/RoPE restore 出完整目标形状 KV。
 - `estimated_materialization_ms` 必须 <= 目标 prefill 成本的 70%。
+- tokenizer 兼容哈希覆盖词表、merge/model 文件、special token 与影响 token ID 的配置；默认
+  chat renderer 另以 `chat_template_sha256` 留存溯源。每个请求的 prefix/token 哈希仍必须完全
+  一致，才允许读取源 KV。
 - 任何 tokenizer、RoPE、配置哈希、artifact、层映射、hidden bridge、restore 或质量不匹配，都会回退到原始的 vLLM + LMCache MP 目标 prefill 路径。
 
 ## 最小 Planner 示例

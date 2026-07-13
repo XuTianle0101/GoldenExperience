@@ -17,13 +17,28 @@ if TYPE_CHECKING:
 
 CACHED_KV_SCHEMA_VERSION = "goldenexperience.qwen3_cached_kv_bridge.v4"
 CACHED_KV_V5_SCHEMA_VERSION = "goldenexperience.selective_cached_kv_bridge.v5"
-MODEL_IDENTITY_CACHE_SCHEMA_VERSION = "goldenexperience.model_identity_cache.v1"
+MODEL_IDENTITY_CACHE_SCHEMA_VERSION = "goldenexperience.model_identity_cache.v2"
+TOKENIZER_IDENTITY_SCHEMA_VERSION = "goldenexperience.tokenizer_semantics.v1"
 _SHA256_LENGTH = 64
-_TOKENIZER_FILES = (
+_TOKENIZER_CONTENT_FILES = (
     "tokenizer.json",
-    "tokenizer_config.json",
     "vocab.json",
     "merges.txt",
+    "tokenizer.model",
+    "spiece.model",
+    "added_tokens.json",
+    "special_tokens_map.json",
+)
+_TOKENIZER_CONFIG_FILE = "tokenizer_config.json"
+_TOKENIZER_CONFIG_PROVENANCE_FIELDS = frozenset(
+    {
+        "_commit_hash",
+        "_name_or_path",
+        "chat_template",
+        "commit_hash",
+        "name_or_path",
+        "transformers_version",
+    }
 )
 
 
@@ -78,6 +93,7 @@ class CachedKVModelSpec:
     max_position_embeddings: int
     rope_scaling: dict[str, Any] | None = None
     sliding_window: int | None = None
+    chat_template_sha256: str | None = None
 
     @property
     def kv_width(self) -> int:
@@ -98,6 +114,8 @@ class CachedKVModelSpec:
         ):
             if not _is_sha256(value):
                 errors.append(f"{name} must be a SHA-256 digest")
+        if self.chat_template_sha256 is not None and not _is_sha256(self.chat_template_sha256):
+            errors.append("chat_template_sha256 must be a SHA-256 digest when present")
         if not math.isfinite(self.parameter_count_b) or self.parameter_count_b <= 0:
             errors.append("parameter_count_b must be finite and positive")
         if self.num_layers <= 0 or self.num_key_value_heads <= 0 or self.head_dim <= 0:
@@ -374,7 +392,11 @@ class CachedKVBridgeManifest:
         return errors
 
     def to_dict(self) -> dict[str, Any]:
-        return asdict(self)
+        payload = asdict(self)
+        for side in ("source", "target"):
+            if payload[side].get("chat_template_sha256") is None:
+                payload[side].pop("chat_template_sha256", None)
+        return payload
 
     @classmethod
     def from_dict(cls, payload: dict[str, Any]) -> CachedKVBridgeManifest:
@@ -449,7 +471,8 @@ def model_spec_from_path(
     if digests is None:
         digests = {
             "config_sha256": sha256_file(config_path),
-            "tokenizer_sha256": sha256_named_files(tokenizer_paths, root=root),
+            "tokenizer_sha256": tokenizer_semantic_sha256(root),
+            "chat_template_sha256": chat_template_sha256(root),
             "weights_sha256": sha256_named_files(weight_paths, root=root),
         }
         if identity_cache_path is not None:
@@ -482,6 +505,7 @@ def model_spec_from_path(
         max_position_embeddings=int(config["max_position_embeddings"]),
         rope_scaling=config.get("rope_scaling"),
         sliding_window=sliding_window,
+        chat_template_sha256=digests["chat_template_sha256"],
     )
 
 
@@ -502,6 +526,7 @@ def seed_model_identity_cache(
         {
             "config_sha256": spec.config_sha256,
             "tokenizer_sha256": spec.tokenizer_sha256,
+            "chat_template_sha256": spec.chat_template_sha256 or chat_template_sha256(root),
             "weights_sha256": spec.weights_sha256,
         },
     )
@@ -608,10 +633,86 @@ def _rope_theta_from_config(config: dict[str, Any]) -> float:
     raise ValueError("model config does not expose rope_theta")
 
 
-def _model_identity_files(root: Path) -> tuple[list[Path], list[Path]]:
-    tokenizer_paths = [root / name for name in _TOKENIZER_FILES if (root / name).is_file()]
-    if not tokenizer_paths:
+def tokenizer_semantic_sha256(model_path: str | Path) -> str:
+    """Hash token-ID semantics without conflating them with prompt rendering."""
+
+    root = Path(model_path).resolve()
+    tokenizer_paths = _tokenizer_identity_files(root)
+    content_paths = [path for path in tokenizer_paths if path.name != _TOKENIZER_CONFIG_FILE]
+    config = _tokenizer_config(root)
+    semantic_config = {
+        key: value
+        for key, value in config.items()
+        if key not in _TOKENIZER_CONFIG_PROVENANCE_FIELDS
+    }
+    digest = hashlib.sha256()
+    _update_named_digest(
+        digest,
+        "schema_version",
+        TOKENIZER_IDENTITY_SCHEMA_VERSION.encode("utf-8"),
+    )
+    for path in sorted(content_paths, key=lambda item: item.name):
+        _update_named_digest(digest, path.name, bytes.fromhex(sha256_file(path)))
+    canonical_config = json.dumps(
+        semantic_config,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    _update_named_digest(digest, "tokenizer_config.semantic.json", canonical_config)
+    return digest.hexdigest()
+
+
+def chat_template_sha256(model_path: str | Path) -> str:
+    """Hash the exact default chat renderer separately for provenance."""
+
+    root = Path(model_path).resolve()
+    template = _tokenizer_config(root).get("chat_template")
+    canonical_template = json.dumps(
+        template,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    digest = hashlib.sha256()
+    _update_named_digest(digest, "chat_template", canonical_template)
+    return digest.hexdigest()
+
+
+def _update_named_digest(digest: Any, name: str, value: bytes) -> None:
+    encoded_name = name.encode("utf-8")
+    digest.update(len(encoded_name).to_bytes(4, "big"))
+    digest.update(encoded_name)
+    digest.update(len(value).to_bytes(8, "big"))
+    digest.update(value)
+
+
+def _tokenizer_config(root: Path) -> dict[str, Any]:
+    path = root / _TOKENIZER_CONFIG_FILE
+    if not path.is_file():
+        return {}
+    before = _stat_signature(path)
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    if _stat_signature(path) != before:
+        raise OSError(f"file changed while reading: {path}")
+    if not isinstance(payload, dict):
+        raise ValueError(f"{path} must contain a JSON object")
+    return payload
+
+
+def _tokenizer_identity_files(root: Path) -> list[Path]:
+    content_paths = [root / name for name in _TOKENIZER_CONTENT_FILES if (root / name).is_file()]
+    if not content_paths:
         raise ValueError(f"tokenizer files are missing under {root}")
+    tokenizer_paths = list(content_paths)
+    tokenizer_config = root / _TOKENIZER_CONFIG_FILE
+    if tokenizer_config.is_file():
+        tokenizer_paths.append(tokenizer_config)
+    return tokenizer_paths
+
+
+def _model_identity_files(root: Path) -> tuple[list[Path], list[Path]]:
+    tokenizer_paths = _tokenizer_identity_files(root)
     weight_paths = sorted(root.glob("*.safetensors"))
     if not weight_paths:
         raise ValueError(f"safetensors model weights are missing under {root}")
@@ -647,6 +748,7 @@ def _cached_identity_digests(
             for name in (
                 "config_sha256",
                 "tokenizer_sha256",
+                "chat_template_sha256",
                 "weights_sha256",
             )
         ):

@@ -413,6 +413,10 @@ Runtime behavior remains conservative:
 - Long-lived materializer workers keep verified bridge tensors resident. Every cache hit
   rechecks manifest, bridge, model-directory, config, tokenizer, and shard stat identities;
   any change forces complete content verification before reuse.
+- Tokenizer compatibility is content-addressed over vocabulary, merge/model files, special
+  tokens, and semantic tokenizer settings. The default chat renderer is recorded separately
+  as `chat_template_sha256`; it is not confused with token-ID compatibility. Exact per-request
+  prefix/token hashes still have to match before cached KV can be read.
 - Any tokenizer, RoPE, model/config/weight identity, artifact, prompt binding, object
   layout, exact-I/O, quality, or cost mismatch falls back to the original target prefill.
 

@@ -624,6 +624,9 @@ class SelectiveKVBridgeManifest:
     def to_dict(self) -> dict[str, Any]:
         payload = asdict(self)
         payload["state"] = self.state.value
+        for side in ("source", "target"):
+            if payload[side].get("chat_template_sha256") is None:
+                payload[side].pop("chat_template_sha256", None)
         return payload
 
     @classmethod
