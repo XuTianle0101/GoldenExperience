@@ -4,6 +4,7 @@ import torch
 from goldenexperience.size_variant.cached_kv_dataset import CachedKVPrompt
 from scripts.train_qwen3_cached_kv_bridge import (
     _bucket_balanced_samples,
+    _combine_refinement_metric,
     _holdout_is_better,
     _kv_anchor_losses,
     _native_generation_teacher,
@@ -133,6 +134,7 @@ def test_logit_refinement_cli_defaults_fail_closed_against_collapse() -> None:
     assert args.logit_refinement_learning_rate == pytest.approx(1e-5)
     assert args.logit_refinement_parameter_group == "bias-only"
     assert args.logit_refinement_objective == "native-generation"
+    assert args.logit_refinement_prompt_tail_weight == pytest.approx(0.25)
     assert args.logit_refinement_anchor_weight == pytest.approx(0.1)
     assert args.logit_refinement_kv_anchor_weight == pytest.approx(1.0)
     assert args.logit_refinement_holdout_prompts == 16
@@ -204,6 +206,22 @@ def test_holdout_checkpoint_selection_prioritizes_free_running_quality() -> None
         best,
         min_delta=1e-4,
     )
+
+
+def test_mixed_refinement_combines_generation_and_prompt_tail_losses() -> None:
+    passes = {
+        "native-generation": {"objective": torch.tensor(2.0)},
+        "prompt-tail": {"objective": torch.tensor(6.0)},
+    }
+
+    combined = _combine_refinement_metric(
+        passes,
+        "objective",
+        objective_mode="mixed",
+        prompt_tail_weight=0.25,
+    )
+
+    assert combined.item() == pytest.approx(2.8)
 
 
 def test_paired_refinement_validation_is_exposed_by_cli() -> None:

@@ -280,7 +280,7 @@ _LOGIT_REFINEMENT_PARAMETER_GROUPS = {
     "nonlinear-up-only": ("key_nonlinear_up", "value_nonlinear_up"),
 }
 
-_LOGIT_REFINEMENT_OBJECTIVES = ("native-generation", "prompt-tail")
+_LOGIT_REFINEMENT_OBJECTIVES = ("native-generation", "prompt-tail", "mixed")
 
 
 def _bucket_balanced_samples(
@@ -549,7 +549,7 @@ def _refinement_prompt_forward(
     )
 
 
-def _measure_refinement_holdout(
+def _measure_refinement_holdout_mode(
     samples: tuple[CachedKVPrompt, ...],
     *,
     tokenizer: Any,
@@ -658,6 +658,167 @@ def _measure_refinement_holdout(
     }
 
 
+def _measure_refinement_holdout(
+    samples: tuple[CachedKVPrompt, ...],
+    *,
+    tokenizer: Any,
+    source_model: Any,
+    target_model: Any,
+    state: dict[str, Any],
+    source_device: str,
+    target_device: str,
+    suffix_tokens: int,
+    objective_mode: str,
+    generation_tokens: int,
+    temperature: float,
+    label_weight: float,
+    prompt_tail_weight: float,
+) -> dict[str, Any]:
+    modes = (
+        ("native-generation", "prompt-tail")
+        if objective_mode == "mixed"
+        else (objective_mode,)
+    )
+    measurements = {
+        mode: _measure_refinement_holdout_mode(
+            samples,
+            tokenizer=tokenizer,
+            source_model=source_model,
+            target_model=target_model,
+            state=state,
+            source_device=source_device,
+            target_device=target_device,
+            suffix_tokens=suffix_tokens,
+            objective_mode=mode,
+            generation_tokens=generation_tokens,
+            temperature=temperature,
+            label_weight=label_weight,
+        )
+        for mode in modes
+    }
+    if objective_mode != "mixed":
+        return measurements[objective_mode]
+
+    native = measurements["native-generation"]
+    prompt_tail = measurements["prompt-tail"]
+    denominator = 1 + prompt_tail_weight
+    combined = {
+        metric: (native[metric] + prompt_tail_weight * prompt_tail[metric]) / denominator
+        for metric in ("objective", "distillation_loss", "label_loss", "top1_agreement")
+    }
+    combined.update(
+        {
+            "free_running_greedy_match_rate": native["free_running_greedy_match_rate"],
+            "free_running_task_score": native["free_running_task_score"],
+            "free_running_task_prompts": native["free_running_task_prompts"],
+            "free_running_prompt_results": native["free_running_prompt_results"],
+            "objective_components": {
+                "native-generation": {
+                    metric: native[metric]
+                    for metric in (
+                        "objective",
+                        "distillation_loss",
+                        "label_loss",
+                        "top1_agreement",
+                    )
+                },
+                "prompt-tail": {
+                    metric: prompt_tail[metric]
+                    for metric in (
+                        "objective",
+                        "distillation_loss",
+                        "label_loss",
+                        "top1_agreement",
+                    )
+                },
+            },
+        }
+    )
+    return combined
+
+
+def _refinement_objective_modes(objective_mode: str) -> tuple[str, ...]:
+    if objective_mode == "mixed":
+        return ("native-generation", "prompt-tail")
+    return (objective_mode,)
+
+
+def _combine_refinement_metric(
+    passes: dict[str, dict[str, Any]],
+    metric: str,
+    *,
+    objective_mode: str,
+    prompt_tail_weight: float,
+) -> Any:
+    if objective_mode != "mixed":
+        return passes[objective_mode][metric]
+    return (
+        passes["native-generation"][metric]
+        + prompt_tail_weight * passes["prompt-tail"][metric]
+    ) / (1 + prompt_tail_weight)
+
+
+def _run_refinement_training_passes(
+    sample: CachedKVPrompt,
+    *,
+    tokenizer: Any,
+    source_model: Any,
+    target_model: Any,
+    state: dict[str, Any],
+    source_device: str,
+    target_device: str,
+    suffix_tokens: int,
+    objective_mode: str,
+    generation_tokens: int,
+    temperature: float,
+    label_weight: float,
+) -> dict[str, dict[str, Any]]:
+    passes: dict[str, dict[str, Any]] = {}
+    for mode in _refinement_objective_modes(objective_mode):
+        (
+            source_object,
+            bridge_object,
+            student_logits,
+            teacher_logits,
+            labels,
+            source_prefill_ms,
+        ) = _refinement_prompt_forward(
+            sample,
+            tokenizer=tokenizer,
+            source_model=source_model,
+            target_model=target_model,
+            state=state,
+            source_device=source_device,
+            target_device=target_device,
+            suffix_tokens=suffix_tokens,
+            objective_mode=mode,
+            generation_tokens=generation_tokens,
+        )
+        objective, distillation, label_loss = logit_distillation_loss(
+            student_logits,
+            teacher_logits,
+            labels,
+            temperature=temperature,
+            label_weight=label_weight,
+        )
+        top1_agreement = (
+            student_logits.argmax(dim=-1) == teacher_logits.argmax(dim=-1)
+        ).float().mean()
+        passes[mode] = {
+            "source_object": source_object,
+            "bridge_object": bridge_object,
+            "student_logits": student_logits,
+            "teacher_logits": teacher_logits,
+            "labels": labels,
+            "source_prefill_ms": source_prefill_ms,
+            "objective": objective,
+            "distillation_loss": distillation,
+            "label_loss": label_loss,
+            "top1_agreement": top1_agreement,
+        }
+    return passes
+
+
 def refine_state_with_target_logits(
     samples: tuple[CachedKVPrompt, ...],
     *,
@@ -675,6 +836,7 @@ def refine_state_with_target_logits(
     learning_rate: float,
     temperature: float,
     label_weight: float,
+    prompt_tail_weight: float,
     anchor_weight: float,
     parameter_group: str,
     kv_anchor_weight: float,
@@ -697,6 +859,10 @@ def refine_state_with_target_logits(
         raise ValueError("logit refinement generation tokens must be positive")
     if learning_rate <= 0 or not math.isfinite(learning_rate):
         raise ValueError("logit refinement learning rate must be finite and positive")
+    if prompt_tail_weight < 0 or not math.isfinite(prompt_tail_weight):
+        raise ValueError("logit refinement prompt-tail weight must be finite and non-negative")
+    if objective_mode == "mixed" and prompt_tail_weight == 0:
+        raise ValueError("mixed logit refinement requires a positive prompt-tail weight")
     if anchor_weight < 0 or not math.isfinite(anchor_weight):
         raise ValueError("logit refinement anchor weight must be finite and non-negative")
     if parameter_group not in _LOGIT_REFINEMENT_PARAMETER_GROUPS:
@@ -764,6 +930,7 @@ def refine_state_with_target_logits(
             generation_tokens=generation_tokens,
             temperature=temperature,
             label_weight=label_weight,
+            prompt_tail_weight=prompt_tail_weight,
         )
         holdout_records.append({"step": 0, **initial_holdout})
         best_step = 0
@@ -772,14 +939,7 @@ def refine_state_with_target_logits(
 
     for step in range(steps):
         sample = selected[step % len(selected)]
-        (
-            source_object,
-            bridge_object,
-            student_logits,
-            teacher_logits,
-            labels,
-            source_prefill_ms,
-        ) = _refinement_prompt_forward(
+        passes = _run_refinement_training_passes(
             sample,
             tokenizer=tokenizer,
             source_model=source_model,
@@ -790,14 +950,37 @@ def refine_state_with_target_logits(
             suffix_tokens=suffix_tokens,
             objective_mode=objective_mode,
             generation_tokens=generation_tokens,
-        )
-        objective, distillation, label_loss = logit_distillation_loss(
-            student_logits,
-            teacher_logits,
-            labels,
             temperature=temperature,
             label_weight=label_weight,
         )
+        objective = _combine_refinement_metric(
+            passes,
+            "objective",
+            objective_mode=objective_mode,
+            prompt_tail_weight=prompt_tail_weight,
+        )
+        distillation = _combine_refinement_metric(
+            passes,
+            "distillation_loss",
+            objective_mode=objective_mode,
+            prompt_tail_weight=prompt_tail_weight,
+        )
+        label_loss = _combine_refinement_metric(
+            passes,
+            "label_loss",
+            objective_mode=objective_mode,
+            prompt_tail_weight=prompt_tail_weight,
+        )
+        top1_agreement = _combine_refinement_metric(
+            passes,
+            "top1_agreement",
+            objective_mode=objective_mode,
+            prompt_tail_weight=prompt_tail_weight,
+        )
+        anchor_mode = "native-generation" if "native-generation" in passes else objective_mode
+        source_object = passes[anchor_mode]["source_object"]
+        bridge_object = passes[anchor_mode]["bridge_object"]
+        source_prefill_ms = sum(float(item["source_prefill_ms"]) for item in passes.values())
         parameter_anchor_loss = _parameter_anchor_loss(
             state_on_target,
             anchors,
@@ -837,10 +1020,6 @@ def refine_state_with_target_logits(
             + anchor_weight * parameter_anchor_loss
             + kv_anchor_weight * kv_anchor_loss
         )
-        top1_agreement = (
-            student_logits.argmax(dim=-1) == teacher_logits.argmax(dim=-1)
-        ).float().mean()
-
         optimizer.zero_grad(set_to_none=True)
         loss.backward()
         grad_norm = torch.nn.utils.clip_grad_norm_(parameters, max_grad_norm)
@@ -860,21 +1039,32 @@ def refine_state_with_target_logits(
             "kv_anchor_cosine_loss": float(kv_anchor_cosine_loss.detach().item()),
             "top1_agreement": float(top1_agreement.detach().item()),
             "gradient_norm": float(grad_norm.detach().item()),
+            "objective_components": {
+                mode: {
+                    metric: float(pass_result[metric].detach().item())
+                    for metric in (
+                        "objective",
+                        "distillation_loss",
+                        "label_loss",
+                        "top1_agreement",
+                    )
+                }
+                for mode, pass_result in passes.items()
+            },
         }
         del (
             source_object,
-            student_logits,
-            teacher_logits,
             bridge_object,
-            labels,
             objective,
             distillation,
             label_loss,
+            top1_agreement,
             parameter_anchor_loss,
             kv_anchor_loss,
             kv_anchor_relative_mse,
             kv_anchor_cosine_loss,
             loss,
+            passes,
         )
         if kv_anchor_weight:
             del reference_object, refined_object
@@ -896,6 +1086,7 @@ def refine_state_with_target_logits(
                 generation_tokens=generation_tokens,
                 temperature=temperature,
                 label_weight=label_weight,
+                prompt_tail_weight=prompt_tail_weight,
             )
             holdout_records.append({"step": step + 1, **current_holdout})
             record["holdout_objective"] = current_holdout["objective"]
@@ -955,6 +1146,7 @@ def refine_state_with_target_logits(
         "generation_tokens": generation_tokens,
         "temperature": temperature,
         "label_weight": label_weight,
+        "prompt_tail_weight": prompt_tail_weight,
         "anchor_weight": anchor_weight,
         "parameter_anchor_kind": "relative_mse",
         "parameter_group": parameter_group,
@@ -1317,6 +1509,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--logit-refinement-learning-rate", type=float, default=1e-5)
     parser.add_argument("--logit-refinement-temperature", type=float, default=1.0)
     parser.add_argument("--logit-refinement-label-weight", type=float, default=0.1)
+    parser.add_argument("--logit-refinement-prompt-tail-weight", type=float, default=0.25)
     parser.add_argument("--logit-refinement-anchor-weight", type=float, default=0.1)
     parser.add_argument(
         "--logit-refinement-parameter-group",
@@ -1521,6 +1714,7 @@ def main() -> int:
             learning_rate=args.logit_refinement_learning_rate,
             temperature=args.logit_refinement_temperature,
             label_weight=args.logit_refinement_label_weight,
+            prompt_tail_weight=args.logit_refinement_prompt_tail_weight,
             anchor_weight=args.logit_refinement_anchor_weight,
             parameter_group=args.logit_refinement_parameter_group,
             kv_anchor_weight=args.logit_refinement_kv_anchor_weight,
