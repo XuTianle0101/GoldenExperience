@@ -4,12 +4,12 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import time
 from dataclasses import dataclass, field
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any
-
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 
@@ -41,6 +41,19 @@ def _env_int(name: str, default: str) -> int:
 def _abs_path(value: str | Path) -> Path:
     path = Path(value)
     return path if path.is_absolute() else REPO_ROOT / path
+
+
+def _sibling_command(python_bin: str, command: str) -> str:
+    python_path = Path(python_bin)
+    if python_path.parent == Path("."):
+        located = shutil.which(python_bin)
+        if located is None:
+            return command
+        python_path = Path(located)
+    elif not python_path.is_absolute():
+        python_path = REPO_ROOT / python_path
+    candidate = python_path.parent / command
+    return str(candidate) if candidate.is_file() else command
 
 
 def _json_object(value: str, name: str) -> dict[str, Any]:
@@ -141,7 +154,7 @@ class BaselineConfig:
     engine_args: list[str] = field(default_factory=list)
 
     @classmethod
-    def from_env(cls, raw_engine_args: list[str] | None = None) -> "BaselineConfig":
+    def from_env(cls, raw_engine_args: list[str] | None = None) -> BaselineConfig:
         args = list(raw_engine_args or [])
         if args and args[0] == "--":
             args = args[1:]
@@ -220,15 +233,20 @@ class BaselineConfig:
             ).items()
         }
 
+        python_bin = os.environ.get("PYTHON_BIN", "python3")
         cfg = cls(
-            python_bin=os.environ.get("PYTHON_BIN", "python3"),
+            python_bin=python_bin,
             kv_backend=kv_backend,
             engine=engine,
-            vllm_bin=os.environ.get("VLLM_BIN", "vllm"),
-            lmcache_bin=os.environ.get("LMCACHE_BIN", "lmcache"),
-            mooncake_master_bin=os.environ.get("MOONCAKE_MASTER_BIN", "mooncake_master"),
+            vllm_bin=os.environ.get("VLLM_BIN", _sibling_command(python_bin, "vllm")),
+            lmcache_bin=os.environ.get("LMCACHE_BIN", _sibling_command(python_bin, "lmcache")),
+            mooncake_master_bin=os.environ.get(
+                "MOONCAKE_MASTER_BIN",
+                _sibling_command(python_bin, "mooncake_master"),
+            ),
             mooncake_http_metadata_server_bin=os.environ.get(
-                "MOONCAKE_HTTP_METADATA_SERVER_BIN", "mooncake_http_metadata_server"
+                "MOONCAKE_HTTP_METADATA_SERVER_BIN",
+                _sibling_command(python_bin, "mooncake_http_metadata_server"),
             ),
             model_path=os.environ.get("GE_MODEL_PATH", "Qwen/Qwen3-8B"),
             model_name=os.environ.get(
@@ -359,7 +377,10 @@ class BaselineConfig:
                 if not args:
                     raise ValueError("--tp requires a value")
                 normalized.extend(["--tensor-parallel-size", args.pop(0)])
-            elif self.engine == "vllm" and arg in {"--disable-engine-prefix-cache", "--enable-metrics"}:
+            elif self.engine == "vllm" and arg in {
+                "--disable-engine-prefix-cache",
+                "--enable-metrics",
+            }:
                 continue
             else:
                 normalized.append(arg)

@@ -102,6 +102,36 @@ def test_mooncake_master_defaults_follow_run_storage(
     assert command[command.index("--cluster_id") + 1] == "moon-run"
 
 
+def test_runtime_commands_default_to_configured_python_environment(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    bin_dir = tmp_path / "venv" / "bin"
+    bin_dir.mkdir(parents=True)
+    python_bin = bin_dir / "python"
+    python_bin.touch()
+    for command in ("vllm", "lmcache", "mooncake_master", "mooncake_http_metadata_server"):
+        (bin_dir / command).touch()
+    monkeypatch.setenv("PYTHON_BIN", str(python_bin))
+    monkeypatch.setenv("GE_RUN_DIR", str(tmp_path / "run"))
+    for variable in (
+        "VLLM_BIN",
+        "LMCACHE_BIN",
+        "MOONCAKE_MASTER_BIN",
+        "MOONCAKE_HTTP_METADATA_SERVER_BIN",
+    ):
+        monkeypatch.delenv(variable, raising=False)
+
+    config = BaselineConfig.from_env([])
+
+    assert config.vllm_bin == str(bin_dir / "vllm")
+    assert config.lmcache_bin == str(bin_dir / "lmcache")
+    assert config.mooncake_master_bin == str(bin_dir / "mooncake_master")
+    assert config.mooncake_http_metadata_server_bin == str(
+        bin_dir / "mooncake_http_metadata_server"
+    )
+
+
 def test_native_engine_phase_disables_kv_transfer(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

@@ -107,6 +107,18 @@ class FakeMooncakeStore:
         return 0
 
 
+class TransientRemoveMooncakeStore(FakeMooncakeStore):
+    def __init__(self, objects: dict[str, bytes] | None = None) -> None:
+        super().__init__(objects)
+        self.remove_attempts = 0
+
+    def remove(self, key: str, force: bool) -> int:
+        self.remove_attempts += 1
+        if self.remove_attempts == 1:
+            return -703
+        return super().remove(key, force)
+
+
 class FakeBridge:
     def __init__(self, *, direction: str = "8b_to_14b") -> None:
         self.device = torch.device("cpu")
@@ -476,6 +488,17 @@ def test_cost_benchmark_uses_exact_io_and_never_publishes_targets(tmp_path: Path
     assert report["all_temporary_targets_rolled_back"] is True
     assert len(report["measurements_ms"]["read_transform_put"]) == 2
     assert not any(key.startswith("ge-cost/") for key in fake.objects)
+
+
+def test_exact_store_retries_transient_replica_not_ready_during_rollback() -> None:
+    fake = TransientRemoveMooncakeStore({"temporary": b"data"})
+
+    with ExactMooncakeStore({}, store_factory=lambda: fake) as store:
+        result = store.rollback(["temporary"])
+
+    assert result == {"temporary": 0}
+    assert fake.remove_attempts == 2
+    assert "temporary" not in fake.objects
 
 
 def test_native_prefill_evidence_binds_target_identity_and_runtime(tmp_path: Path) -> None:

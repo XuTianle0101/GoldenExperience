@@ -17,6 +17,10 @@ class MooncakeObjectError(RuntimeError):
     """Raised when Mooncake cannot prove a complete object operation."""
 
 
+_ROLLBACK_TIMEOUT_SEC = 5.0
+_ROLLBACK_RETRY_SEC = 0.05
+
+
 @dataclass(frozen=True)
 class ExactObjectRead:
     key: str
@@ -185,13 +189,30 @@ class ExactMooncakeStore:
 
     def rollback(self, keys: Sequence[str]) -> dict[str, int]:
         store = self._require_store()
-        results: dict[str, int] = {}
-        for key in keys:
-            try:
-                results[str(key)] = int(store.remove(str(key), True))
-            except Exception:  # noqa: BLE001 - best-effort removal after a failed batch.
-                results[str(key)] = -1
+        pending = list(dict.fromkeys(str(key) for key in keys))
+        results = {key: -1 for key in pending}
+        deadline = time.monotonic() + _ROLLBACK_TIMEOUT_SEC
+        while pending:
+            for key in tuple(pending):
+                try:
+                    result = int(store.remove(key, True))
+                except Exception:  # noqa: BLE001 - rollback must report every key.
+                    result = -1
+                results[key] = result
+                if result == 0 or self._object_is_absent(store, key):
+                    results[key] = 0
+                    pending.remove(key)
+            if not pending or time.monotonic() >= deadline:
+                break
+            time.sleep(_ROLLBACK_RETRY_SEC)
         return results
+
+    @staticmethod
+    def _object_is_absent(store: Any, key: str) -> bool:
+        try:
+            return int(store.get_size(key)) < 0
+        except Exception:  # noqa: BLE001 - a failed probe is not proof of absence.
+            return False
 
     def _batch_exists(self, keys: list[str]) -> list[int]:
         store = self._require_store()
