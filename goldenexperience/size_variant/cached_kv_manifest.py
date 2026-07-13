@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import os
 from collections.abc import Iterable
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
@@ -53,6 +54,41 @@ def sha256_file(path: str | Path) -> str:
     if _stat_signature(file_path) != before:
         raise OSError(f"file changed while hashing: {file_path}")
     return digest.hexdigest()
+
+
+def canonicalize_safetensors_header(path: str | Path) -> None:
+    """Make a generated safetensors header byte-stable across hash-map orderings."""
+
+    file_path = Path(path)
+    with file_path.open("r+b") as handle:
+        encoded_length = handle.read(8)
+        if len(encoded_length) != 8:
+            raise ValueError("safetensors file is missing its header length")
+        header_length = int.from_bytes(encoded_length, "little")
+        file_size = os.fstat(handle.fileno()).st_size
+        if header_length <= 0 or header_length > file_size - 8:
+            raise ValueError("safetensors header length is invalid")
+        encoded_header = handle.read(header_length)
+        try:
+            header = json.loads(encoded_header.decode("utf-8").rstrip(" "))
+        except (UnicodeError, json.JSONDecodeError) as exc:
+            raise ValueError("safetensors header is invalid JSON") from exc
+        if not isinstance(header, dict):
+            raise ValueError("safetensors header must be a JSON object")
+        canonical = json.dumps(
+            header,
+            allow_nan=False,
+            ensure_ascii=True,
+            separators=(",", ":"),
+            sort_keys=True,
+        ).encode("utf-8")
+        if len(canonical) > header_length:
+            raise ValueError("canonical safetensors header exceeds its reserved space")
+        handle.seek(8)
+        handle.write(canonical)
+        handle.write(b" " * (header_length - len(canonical)))
+        handle.flush()
+        os.fsync(handle.fileno())
 
 
 def sha256_named_files(paths: Iterable[Path], *, root: Path) -> str:

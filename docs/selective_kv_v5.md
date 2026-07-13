@@ -67,6 +67,9 @@ before decode.
 - `v5_collect.py` validates one raw split at a time, runs real source/target prefill, writes
   bounded safetensors KV/query/attention shards, and resumes from fully verified per-sample
   checkpoints. Generic collection cannot name or load the semantic sealed split.
+- `v5_fit.py` fits the fixed 3-rank by 3-seed 4B-to-8B screening matrix in one synchronized
+  trace pass, checkpoints model plus AdamW state atomically, and emits runtime-loadable
+  candidate weights. Its production entry point cannot override the registered matrix.
 
 Run the implementation smoke independently of every benchmark split:
 
@@ -74,8 +77,9 @@ Run the implementation smoke independently of every benchmark split:
 golden-v5-smoke --output artifacts/cache/qwen3_4b_to_8b_smoke.json
 ```
 
-The output proves only that the local code/model stack executes with finite tensors. It is
-not validation, calibration, sealed-test, runtime-audit, or approval evidence.
+The smoke output and the bounded one-shard fit diagnostic prove only that the local
+code/model stack executes with finite tensors and restorable optimizer state. They are not
+transport quality, validation, calibration, sealed-test, runtime-audit, or approval evidence.
 
 ## Artifact Authority
 
@@ -136,10 +140,12 @@ their suffix/query hashes cannot overlap. ShareGPT and BurstGPT records are trac
 ## Current Evidence Boundary
 
 This repository contains the executable contracts and deterministic tests, but it does not
-contain v5 model weights, the frozen publication dataset, calibration output, semantic sealed
-results, or a real LMCache/vLLM runtime audit. Consequently there is no v5 `approved` artifact
-and no production claim. The direct-injection module is an adapter surface guarded by final
-manifest authority; it is not automatically enabled by the existing runtime patch script.
+contain publication-eligible v5 model weights, the frozen publication dataset, calibration
+output, semantic sealed results, or a real LMCache/vLLM runtime audit. The implemented fit
+path has only a single-shard real-model diagnostic, not the registered 4,096-sample run.
+Consequently there is no v5 `approved` artifact and no production claim. The direct-injection
+module is an adapter surface guarded by final manifest authority; it is not automatically
+enabled by the existing runtime patch script.
 
 The retained Qwen3 8B-to-14B and 14B-to-8B rank-512 results remain deprecated development
 evidence. They fail the existing quality and cost gates and cannot be promoted to v5 evidence.

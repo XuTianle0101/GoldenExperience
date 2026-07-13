@@ -27,6 +27,7 @@ from goldenexperience.size_variant.attention_collection import (
 )
 from goldenexperience.size_variant.cached_kv_manifest import (
     CachedKVModelSpec,
+    canonicalize_safetensors_header,
     sha256_file,
     verify_model_path,
 )
@@ -287,6 +288,7 @@ def load_trace_shard(
     *,
     source: CachedKVModelSpec,
     target: CachedKVModelSpec,
+    verify_hash: bool = True,
 ) -> dict[str, Any]:
     """Load one immutable shard and verify its full tensor/metadata contract."""
 
@@ -300,7 +302,8 @@ def load_trace_shard(
         raise V5PipelineError("trace shard is unavailable") from exc
     if stat.st_size != record.shard.size_bytes or stat.st_mode & 0o222:
         raise V5PipelineError("trace shard size or read-only mode changed")
-    if sha256_file(shard_path) != record.shard.sha256:
+    before = (stat.st_dev, stat.st_ino, stat.st_size, stat.st_mtime_ns, stat.st_ctime_ns)
+    if verify_hash and sha256_file(shard_path) != record.shard.sha256:
         raise V5PipelineError("trace shard checksum mismatch")
     tensors: dict[str, Any] = {}
     try:
@@ -377,8 +380,18 @@ def load_trace_shard(
         raise V5PipelineError("trace shard causal mask is inconsistent with positions")
     if any(not bool(torch.isfinite(value).all()) for value in tensors.values()):
         raise V5PipelineError("trace shard contains non-finite tensors")
-    if sha256_file(shard_path) != record.shard.sha256:
+    after_stat = shard_path.stat()
+    after = (
+        after_stat.st_dev,
+        after_stat.st_ino,
+        after_stat.st_size,
+        after_stat.st_mtime_ns,
+        after_stat.st_ctime_ns,
+    )
+    if after != before:
         raise V5PipelineError("trace shard changed while loading")
+    if verify_hash and sha256_file(shard_path) != record.shard.sha256:
+        raise V5PipelineError("trace shard changed while hashing")
     return tensors
 
 
@@ -546,7 +559,7 @@ def run_collect_stage(
 
     if split not in COLLECTABLE_SPLITS:
         raise V5PipelineError(f"split {split!r} is not collectable")
-    benchmark = _load_bound_benchmark(workspace)
+    benchmark = load_bound_benchmark(workspace)
     store_path = Path(sample_store_path)
     before = _stat_signature(store_path)
     store_sha256 = sha256_file(store_path)
@@ -877,6 +890,7 @@ class RealQwenTraceCollector:
         temporary = output.with_name(f".{output.name}.{os.getpid()}.tmp")
         try:
             save_file(tensors, temporary, metadata=metadata)
+            canonicalize_safetensors_header(temporary)
             temporary.replace(output)
         finally:
             temporary.unlink(missing_ok=True)
@@ -889,7 +903,7 @@ class RealQwenTraceCollector:
         )
 
 
-def _load_bound_benchmark(workspace: V5PipelineWorkspace) -> PublicationBenchmarkManifest:
+def load_bound_benchmark(workspace: V5PipelineWorkspace) -> PublicationBenchmarkManifest:
     benchmark = PublicationBenchmarkManifest.load(workspace.config.benchmark_manifest_uri)
     if benchmark.content_sha256() != workspace.config.benchmark_manifest_sha256:
         raise V5PipelineError("pipeline benchmark content identity changed")

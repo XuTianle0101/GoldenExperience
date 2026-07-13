@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 import math
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 from goldenexperience.model_config import resolve_head_dim
 from goldenexperience.size_variant.cached_kv_manifest import (
+    CACHED_KV_V5_SCHEMA_VERSION,
     CachedKVModelSpec,
     sha256_file,
 )
@@ -598,14 +599,12 @@ def head_aware_training_objective(
 
 def fit_head_aware_normalizers(
     module: Any,
-    batches: Sequence[tuple[Any, Any]],
+    batches: Iterable[tuple[Any, Any]],
 ) -> None:
     """Fit train-split-only per-layer/head normalizers used by transport and OOD."""
 
     import torch
 
-    if not batches:
-        raise ValueError("transport normalizer fitting requires batches")
     sums: dict[str, Any] = {}
     square_sums: dict[str, Any] = {}
     samples = 0
@@ -851,16 +850,35 @@ def sample_attention_positions(
 
 
 def transport_safetensors_metadata(manifest: SelectiveKVBridgeManifest) -> dict[str, str]:
+    return transport_artifact_metadata(
+        direction=manifest.direction,
+        source=manifest.source,
+        target=manifest.target,
+        spec=manifest.transport,
+        schema_version=manifest.schema_version,
+    )
+
+
+def transport_artifact_metadata(
+    *,
+    direction: str,
+    source: CachedKVModelSpec,
+    target: CachedKVModelSpec,
+    spec: TransportSpec,
+    schema_version: str = CACHED_KV_V5_SCHEMA_VERSION,
+) -> dict[str, str]:
+    """Build the non-circular metadata shared by training and final manifests."""
+
     return {
-        "schema_version": manifest.schema_version,
-        "direction": manifest.direction,
-        "source_config_sha256": manifest.source.config_sha256,
-        "source_tokenizer_sha256": manifest.source.tokenizer_sha256,
-        "source_weights_sha256": manifest.source.weights_sha256,
-        "target_config_sha256": manifest.target.config_sha256,
-        "target_tokenizer_sha256": manifest.target.tokenizer_sha256,
-        "target_weights_sha256": manifest.target.weights_sha256,
-        "structure_id": manifest.transport.structure_id,
+        "schema_version": schema_version,
+        "direction": direction,
+        "source_config_sha256": source.config_sha256,
+        "source_tokenizer_sha256": source.tokenizer_sha256,
+        "source_weights_sha256": source.weights_sha256,
+        "target_config_sha256": target.config_sha256,
+        "target_tokenizer_sha256": target.tokenizer_sha256,
+        "target_weights_sha256": target.weights_sha256,
+        "structure_id": spec.structure_id,
     }
 
 

@@ -60,6 +60,43 @@ Initialization hashes every model shard. The stat-guarded identity cache under
 `.pipeline/model_identity_cache.json` avoids repeating that full pass while the files remain
 unchanged. `--refresh-identity` forces a new full hash pass.
 
+## Fit Transport Candidates
+
+Structure screening is registered only on Qwen3 4B-to-8B. The production command exposes no
+rank, seed, loss, epoch, or optimizer override:
+
+```bash
+golden-v5-pipeline fit-transport \
+  --workspace artifacts/v5_pipeline \
+  --direction qwen3_4b_to_8b \
+  --device cuda:1
+```
+
+The stage trains the Cartesian product of ranks 32/64/128 and seeds 17/29/43. It fixes seed
+17 for later deployment, source window 3, three epochs, AdamW at `3e-4` with weight decay
+`1e-4`, gradient accumulation 8, gradient clipping at 1.0, and the manifest loss contract.
+All nine candidates consume each trace shard synchronously, so a shard is loaded once per
+epoch rather than once per candidate. The native-generation and prompt-tail values in a
+trace are bounded reference constants; they are included in the registered reported total,
+while gradients come from attention-logit KL, attention-output MSE, and transformed-KV
+anchor loss.
+
+Normalizers are fit once over transport-train traces. Checkpoint generations atomically bind
+the trace manifest, complete training parameters, exact sample/optimizer boundary, model
+state, AdamW moments and step counters, and finite cumulative metrics for every candidate.
+The pointer is published only after the full nine-file generation exists. `--resume` rejects
+partial generations, path or symlink escapes, changed hashes, missing optimizer tensors,
+changed hyperparameters, fractional progress, and non-finite state. Runtime weights use the
+same metadata contract as a final v5 manifest.
+
+Generated safetensors headers are canonicalized before hashing. This removes serialization
+order from trace, checkpoint, normalizer, and weight identities: an interrupted-and-resumed
+deterministic run produces the same weight bytes as an uninterrupted run.
+
+The one-shard real-model diagnostic and synthetic resume tests establish only executable and
+checkpoint correctness. They do not replace the registered 4,096-sample transport run,
+method-dev screening, four-direction validation, or any publication evidence.
+
 There is deliberately no CLI option for a semantic sealed payload. Initialization records
 only its expected hash and publishes `.pipeline/semantic_sealed.locked.json`. The generic
 resume API rejects the `semantic_sealed` stage; a later one-shot guard must first verify
@@ -93,6 +130,7 @@ workspace/
     state.json                        lock-serialized mutable state
     state.lock
     semantic_sealed.locked.json       immutable until guarded one-shot access
+    work/<direction>/fit_transport/   resumable, non-authoritative checkpoints
   objects/<sha256-prefix>/<sha256>.*  immutable content-addressed outputs
   receipts/<direction>/<stage>/<sha256>.json
 ```
