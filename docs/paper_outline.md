@@ -75,6 +75,28 @@ larger held-out splits, and fail-closed runtime admission.
   Physical reclamation is therefore a correctness requirement for a later runtime phase,
   not evidence that can be counted toward approval.
 
+### Bridge-construction ablations
+
+- The original rank-256 fixed map produced key cosine near 0.85, value cosine 0.59-0.61,
+  zero bridged task score in both directions, and extreme perplexity drift. Learned
+  per-channel scaling raised key cosine to about 0.897 and value cosine to 0.71, but did
+  not make forward generation useful.
+- Increasing rank without regularization was not a capacity fix. With ridge 1000, rank
+  512 became the best small-corpus setting: forward task/greedy reached 0.9375/0.8281 and
+  reverse reached 0.8125/0.6094, while value cosine remained only 0.8272/0.8223.
+- On the expanded 256-train/64-validation corpus, the SiLU residual raised forward task
+  score from 0.015625 to 0.171875 and reverse task score from 0.796875 to 0.84375. It was
+  retained as the structural baseline despite remaining far below the output gates.
+- Train-only monotonic CKA alignment improved forward task score from 0.171875 to 0.25,
+  but reduced reverse task score from 0.84375 to 0.578125, worsened tensor cosine in both
+  directions, and increased forward perplexity drift. Normalized-depth alignment stayed
+  as the default.
+- Updating all 83,968,000 up-projection and bias parameters at learning rate 1e-4 caused
+  continuation collapse. Restricting refinement to the nonlinear-up matrices at 3e-6
+  was stable, but teacher-forced prompt-tail refinement initially added only four short,
+  mostly code-task passes. Aligning the teacher with native greedy continuations was the
+  change that produced the large task gain.
+
 ### Current cached-KV bridge
 
 The selected validation configuration is rank 512, source window 3, a scaled SiLU
