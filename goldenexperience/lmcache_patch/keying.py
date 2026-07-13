@@ -29,6 +29,9 @@ class CrossModelCacheKey:
     hidden_contract: str | None = None
     target_kv_layout: str | None = None
     fallback_reason: str | None = None
+    artifact_state: str | None = None
+    risk_threshold: float | None = None
+    risk_feature_schema: str | None = None
 
     @classmethod
     def from_plan(cls, plan: ReusePlan) -> "CrossModelCacheKey":
@@ -51,6 +54,9 @@ class CrossModelCacheKey:
             hidden_contract=plan.hidden_contract,
             target_kv_layout=plan.target_kv_layout,
             fallback_reason=plan.fallback_reason,
+            artifact_state=plan.artifact_state,
+            risk_threshold=plan.risk_threshold,
+            risk_feature_schema=plan.risk_feature_schema,
         )
 
     def to_sidecar_fields(self) -> dict[str, str]:
@@ -76,8 +82,12 @@ class CrossModelCacheKey:
             "ge_hidden_contract": self.hidden_contract,
             "ge_target_kv_layout": self.target_kv_layout,
             "ge_fallback_reason": self.fallback_reason,
+            "ge_artifact_state": self.artifact_state,
+            "ge_risk_feature_schema": self.risk_feature_schema,
         }
         for key, value in optional.items():
             if value is not None:
                 fields[key] = value
+        if self.risk_threshold is not None:
+            fields["ge_risk_threshold"] = format(self.risk_threshold, ".17g")
         return fields

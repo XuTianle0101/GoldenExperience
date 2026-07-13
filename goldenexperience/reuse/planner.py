@@ -18,6 +18,7 @@ from goldenexperience.reuse.models import (
 )
 from goldenexperience.size_variant.cached_kv_manifest import (
     CACHED_KV_SCHEMA_VERSION,
+    CACHED_KV_V5_SCHEMA_VERSION,
     CachedKVBridgeManifest,
     CachedKVModelSpec,
 )
@@ -28,6 +29,10 @@ from goldenexperience.size_variant.models import (
     pair_id_for,
 )
 from goldenexperience.size_variant.projection import validate_projection_cost
+from goldenexperience.size_variant.selective_manifest import (
+    ArtifactState,
+    SelectiveKVBridgeManifest,
+)
 
 
 @dataclass(frozen=True)
@@ -104,7 +109,10 @@ class CrossModelReusePlanner:
             ),
             ScenarioDescriptor(
                 scenario=ReuseScenario.CROSS_BASE_MODEL,
-                goal="Explore reuse between different base models under an explicit calibration gate.",
+                goal=(
+                    "Explore reuse between different base models under an explicit "
+                    "calibration gate."
+                ),
                 default_strategy=ReuseStrategy.LEARNED_CROSS_BASE_TRANSLATOR,
                 required_evidence=(
                     "offline calibration set",
@@ -133,9 +141,7 @@ class CrossModelReusePlanner:
         status = PlanStatus.READY if has_quality_evidence else PlanStatus.NEEDS_CALIBRATION
         confidence = float(request.lora_quality_score or 0.0)
         fallback_reason = None if has_quality_evidence else FallbackReason.MISSING_CALIBRATION.value
-        notes = [
-            "LoRA pair detected; inference remains owned by vLLM and shared KV by LMCache MP."
-        ]
+        notes = ["LoRA pair detected; inference remains owned by vLLM and shared KV by LMCache MP."]
         if not request.source.shares_tokenizer_with(request.target):
             status = PlanStatus.BLOCKED
             confidence = 0.0
@@ -162,6 +168,8 @@ class CrossModelReusePlanner:
     def _plan_size_variant(self, request: ReuseRequest) -> ReusePlan:
         cached_manifest = self._load_cached_kv_manifest(request)
         if cached_manifest is not None:
+            if isinstance(cached_manifest, SelectiveKVBridgeManifest):
+                return self._plan_selective_cached_kv(request, cached_manifest)
             return self._plan_cached_kv(request, cached_manifest)
 
         same_layout = request.source.kv_shape.same_layout(request.target.kv_shape)
@@ -181,7 +189,8 @@ class CrossModelReusePlanner:
         ]
         gates.extend(("hidden_bridge_calibration", "target_kv_restore"))
         notes = [
-            "Same model line with a parameter-size change; reuse is limited to mapped prefix state.",
+            "Same model line with a parameter-size change; reuse is limited to mapped "
+            "prefix state.",
         ]
         if not request.source.shares_tokenizer_with(request.target):
             status = PlanStatus.BLOCKED
@@ -192,10 +201,15 @@ class CrossModelReusePlanner:
             status = PlanStatus.BLOCKED
             confidence = 0.0
             fallback_reason = FallbackReason.ROPE_MISMATCH.value
-            notes.append("Runtime KV contract differs; dtype, RoPE, or sliding-window settings are incompatible.")
+            notes.append(
+                "Runtime KV contract differs; dtype, RoPE, or sliding-window settings "
+                "are incompatible."
+            )
         elif manifest is None:
             fallback_reason = FallbackReason.MISSING_CALIBRATION.value
-            notes.append("Hidden-state bridge path needs a validated calibration artifact before execution.")
+            notes.append(
+                "Hidden-state bridge path needs a validated calibration artifact before execution."
+            )
         elif not validate_projection_cost(
             request.estimated_materialization_ms,
             request.estimated_target_prefill_ms,
@@ -203,7 +217,9 @@ class CrossModelReusePlanner:
             status = PlanStatus.WARM_START_RECOMPUTE
             confidence = 0.0
             fallback_reason = FallbackReason.COST_GATE_FAILED.value
-            notes.append("Projection cost gate failed; target prefill is cheaper than materialization.")
+            notes.append(
+                "Projection cost gate failed; target prefill is cheaper than materialization."
+            )
 
         if manifest is not None:
             manifest_errors = self._manifest_errors(request, manifest)
@@ -215,27 +231,45 @@ class CrossModelReusePlanner:
             else:
                 gates.append("artifact_hash_match")
                 if has_hidden_bridge:
-                    status = PlanStatus.READY if status != PlanStatus.WARM_START_RECOMPUTE else status
+                    status = (
+                        PlanStatus.READY if status != PlanStatus.WARM_START_RECOMPUTE else status
+                    )
                     gates.append("pre_kv_hidden_contract")
                     confidence = self._manifest_confidence(manifest)
-                    notes.append("Using hidden-state bridge: h_small -> h_large_hat -> target W_K/W_V/RoPE -> KV.")
+                    notes.append(
+                        "Using hidden-state bridge: h_small -> h_large_hat -> target "
+                        "W_K/W_V/RoPE -> KV."
+                    )
                 else:
-                    status = PlanStatus.READY if status != PlanStatus.WARM_START_RECOMPUTE else status
+                    status = (
+                        PlanStatus.READY if status != PlanStatus.WARM_START_RECOMPUTE else status
+                    )
                     gates.append("kv_projection_baseline")
                     confidence = self._manifest_confidence(manifest)
-                    notes.append("Using legacy KV projection baseline because artifact has no hidden bridge spec.")
+                    notes.append(
+                        "Using legacy KV projection baseline because artifact has no "
+                        "hidden bridge spec."
+                    )
 
         direction = infer_direction(request.source, request.target).value
         pair_id = pair_id_for(request.source, request.target)
-        layer_map_id = manifest.layer_map_id if manifest is not None and not manifest_errors else None
+        layer_map_id = (
+            manifest.layer_map_id if manifest is not None and not manifest_errors else None
+        )
         projection_id = (
             manifest.projection_id
             if manifest is not None and not manifest_errors and not has_hidden_bridge
             else None
         )
-        hidden_bridge_id = manifest.hidden_bridge_id if manifest is not None and not manifest_errors else None
+        hidden_bridge_id = (
+            manifest.hidden_bridge_id if manifest is not None and not manifest_errors else None
+        )
         restore_id = manifest.restore_id if manifest is not None and not manifest_errors else None
-        state_kind = manifest.state_kind if manifest is not None and not manifest_errors else ("kv" if same_layout else "hidden")
+        state_kind = (
+            manifest.state_kind
+            if manifest is not None and not manifest_errors
+            else ("kv" if same_layout else "hidden")
+        )
         hidden_contract = (
             manifest.hidden_bridge.capture_point
             if manifest is not None and manifest.hidden_bridge is not None and not manifest_errors
@@ -247,7 +281,10 @@ class CrossModelReusePlanner:
             else None
         )
         estimated_prefill_saved_ms = None
-        if request.estimated_target_prefill_ms is not None and request.estimated_materialization_ms is not None:
+        if (
+            request.estimated_target_prefill_ms is not None
+            and request.estimated_materialization_ms is not None
+        ):
             estimated_prefill_saved_ms = max(
                 0.0,
                 request.estimated_target_prefill_ms - request.estimated_materialization_ms,
@@ -303,12 +340,16 @@ class CrossModelReusePlanner:
         else:
             fallback_reason = None
         status = PlanStatus.BLOCKED if errors else PlanStatus.READY
-        confidence = 0.0 if errors else min(
-            manifest.quality.key_cosine,
-            manifest.quality.value_cosine,
-            manifest.quality.next_token_top1_agreement,
-            manifest.quality.bridge_task_score,
-            manifest.quality.greedy_continuation_match_rate,
+        confidence = (
+            0.0
+            if errors
+            else min(
+                manifest.quality.key_cosine,
+                manifest.quality.value_cosine,
+                manifest.quality.next_token_top1_agreement,
+                manifest.quality.bridge_task_score,
+                manifest.quality.greedy_continuation_match_rate,
+            )
         )
         materialization_ms = manifest.quality.p95_source_read_transform_put_ms
         target_prefill_ms = manifest.quality.p95_target_prefill_ms
@@ -316,7 +357,8 @@ class CrossModelReusePlanner:
         if materialization_ms is not None and target_prefill_ms is not None:
             saved_ms = max(0.0, target_prefill_ms - materialization_ms)
         notes = [
-            "Using approved cached-KV translation without loading either model in the materializer.",
+            "Using approved cached-KV translation without loading either model in the "
+            "materializer.",
         ]
         notes.extend(errors)
         return self._make_plan(
@@ -345,16 +387,102 @@ class CrossModelReusePlanner:
             fallback_reason=fallback_reason,
         )
 
+    def _plan_selective_cached_kv(
+        self,
+        request: ReuseRequest,
+        manifest: SelectiveKVBridgeManifest,
+    ) -> ReusePlan:
+        artifact_errors = manifest.artifact_errors()
+        identity_errors: list[str] = []
+        if request.calibration_id != manifest.artifact_id:
+            identity_errors.append("calibration_id must equal the selective artifact_id")
+        if manifest.source.model_id != request.source.model_id:
+            identity_errors.append("source model differs from selective artifact")
+        if manifest.target.model_id != request.target.model_id:
+            identity_errors.append("target model differs from selective artifact")
+        identity_errors.extend(
+            self._cached_model_contract_errors(request.source, manifest.source, "source")
+        )
+        identity_errors.extend(
+            self._cached_model_contract_errors(request.target, manifest.target, "target")
+        )
+        approval_errors = manifest.validate()
+        if manifest.state is not ArtifactState.APPROVED:
+            approval_errors.append("selective artifact is not approved for runtime reuse")
+        errors = artifact_errors + identity_errors + approval_errors
+        if artifact_errors or identity_errors:
+            fallback_reason = FallbackReason.ARTIFACT_HASH_MISMATCH.value
+        elif manifest.state is not ArtifactState.APPROVED:
+            fallback_reason = FallbackReason.ARTIFACT_NOT_APPROVED.value
+        elif approval_errors:
+            fallback_reason = FallbackReason.QUALITY_GATE_FAILED.value
+        else:
+            fallback_reason = None
+        status = PlanStatus.BLOCKED if errors else PlanStatus.READY
+        confidence = 0.0 if errors else 1.0 - manifest.risk_gate.regression_risk_upper_bound
+        materialization_ms = (
+            manifest.runtime_cost.p95_materialization_ms
+            if manifest.runtime_cost is not None
+            else None
+        )
+        target_prefill_ms = (
+            manifest.runtime_cost.p95_native_prefill_ms
+            if manifest.runtime_cost is not None
+            else None
+        )
+        saved_ms = None
+        if materialization_ms is not None and target_prefill_ms is not None:
+            saved_ms = max(0.0, target_prefill_ms - materialization_ms)
+        notes = [
+            "Using calibrated source-only admission followed by direct paged-KV injection.",
+            "Runtime execution still requires an accepted sidecar for this exact prefix.",
+        ]
+        notes.extend(errors)
+        return self._make_plan(
+            request=request,
+            scenario=ReuseScenario.SAME_MODEL_SIZE_VARIANT,
+            strategy=ReuseStrategy.SELECTIVE_PAGED_KV_REUSE,
+            status=status,
+            confidence=confidence,
+            required_gates=(
+                "same_architecture_tokenizer",
+                "head_dimension_compatibility",
+                "selective_artifact_identity",
+                "calibrated_source_sidecar",
+                "semantic_sealed_quality",
+                "runtime_cost_audit",
+                "direct_paged_kv_injection",
+            ),
+            notes=tuple(notes),
+            direction=manifest.direction,
+            pair_id=pair_id_for(request.source, request.target),
+            artifact_uri=request.artifact_uri,
+            cached_kv_bridge_id=manifest.artifact_id,
+            state_kind="kv",
+            target_kv_layout=manifest.layout,
+            estimated_prefill_saved_ms=saved_ms,
+            estimated_materialization_ms=materialization_ms,
+            fallback_reason=fallback_reason,
+            artifact_state=manifest.state.value,
+            risk_threshold=manifest.risk_gate.threshold,
+            risk_feature_schema=manifest.risk_gate.feature_schema_version,
+        )
+
     def _plan_cross_base(self, request: ReuseRequest) -> ReusePlan:
         status = PlanStatus.NEEDS_CALIBRATION
         confidence = 0.0
         notes = [
-            "Different base model detected; default behavior is conservative and must fallback cleanly.",
+            "Different base model detected; default behavior is conservative and must "
+            "fallback cleanly.",
         ]
         if not request.allow_cross_base:
-            notes.append("Set allow_cross_base only for experiments with an explicit task allowlist.")
+            notes.append(
+                "Set allow_cross_base only for experiments with an explicit task allowlist."
+            )
         if request.calibration_id is None:
-            notes.append("A calibration_id is required before the LMCache patch executes cross-base reuse.")
+            notes.append(
+                "A calibration_id is required before the LMCache patch executes cross-base reuse."
+            )
         else:
             notes.append(
                 "Cross-base execution remains disabled until translator, tokenizer bridge, "
@@ -399,6 +527,9 @@ class CrossModelReusePlanner:
         estimated_prefill_saved_ms: float | None = None,
         estimated_materialization_ms: float | None = None,
         fallback_reason: str | None = None,
+        artifact_state: str | None = None,
+        risk_threshold: float | None = None,
+        risk_feature_schema: str | None = None,
     ) -> ReusePlan:
         if status == PlanStatus.READY and (
             not math.isfinite(confidence) or not 0.0 <= confidence <= 1.0
@@ -426,6 +557,23 @@ class CrossModelReusePlanner:
             or projection_id
             or self._transform_id(request, scenario, strategy)
         )
+        patch_hooks = (
+            (
+                "engine_request_metadata",
+                "lmcache_cross_model_lookup",
+                "calibrated_risk_gate",
+                "lmcache_retrieve_transform",
+                "direct_paged_kv_scatter",
+                "quality_gate_accounting",
+            )
+            if strategy == ReuseStrategy.SELECTIVE_PAGED_KV_REUSE
+            else (
+                "engine_request_metadata",
+                "lmcache_cross_model_lookup",
+                "goldenexperience_materializer",
+                "quality_gate_accounting",
+            )
+        )
         return ReusePlan(
             request=request,
             scenario=scenario,
@@ -435,12 +583,7 @@ class CrossModelReusePlanner:
             transform_id=transform_id,
             lmcache_lookup_model_id=request.source.model_id,
             required_gates=required_gates,
-            patch_hooks=(
-                "engine_request_metadata",
-                "lmcache_cross_model_lookup",
-                "goldenexperience_materializer",
-                "quality_gate_accounting",
-            ),
+            patch_hooks=patch_hooks,
             direction=direction,
             pair_id=pair_id,
             artifact_uri=artifact_uri,
@@ -455,6 +598,9 @@ class CrossModelReusePlanner:
             estimated_prefill_saved_ms=estimated_prefill_saved_ms,
             estimated_materialization_ms=estimated_materialization_ms,
             fallback_reason=fallback_reason,
+            artifact_state=artifact_state,
+            risk_threshold=risk_threshold,
+            risk_feature_schema=risk_feature_schema,
             notes=notes,
         )
 
@@ -472,7 +618,7 @@ class CrossModelReusePlanner:
     def _load_cached_kv_manifest(
         self,
         request: ReuseRequest,
-    ) -> CachedKVBridgeManifest | None:
+    ) -> CachedKVBridgeManifest | SelectiveKVBridgeManifest | None:
         if request.artifact_uri is None:
             return None
         path = Path(request.artifact_uri)
@@ -480,9 +626,12 @@ class CrossModelReusePlanner:
             return None
         try:
             payload = json.loads(path.read_text(encoding="utf-8"))
-            if payload.get("schema_version") != CACHED_KV_SCHEMA_VERSION:
-                return None
-            return CachedKVBridgeManifest.from_dict(payload)
+            schema_version = payload.get("schema_version")
+            if schema_version == CACHED_KV_SCHEMA_VERSION:
+                return CachedKVBridgeManifest.from_dict(payload)
+            if schema_version == CACHED_KV_V5_SCHEMA_VERSION:
+                return SelectiveKVBridgeManifest.from_dict(payload)
+            return None
         except (json.JSONDecodeError, KeyError, TypeError, ValueError, OSError):
             return None
 
@@ -530,9 +679,17 @@ class CrossModelReusePlanner:
             errors.append("request prefix hash is outside artifact allowlist")
         source_hash = request.source.kv_shape.model_config_hash
         target_hash = request.target.kv_shape.model_config_hash
-        if source_hash and manifest.source.kv_shape.model_config_hash and source_hash != manifest.source.kv_shape.model_config_hash:
+        if (
+            source_hash
+            and manifest.source.kv_shape.model_config_hash
+            and source_hash != manifest.source.kv_shape.model_config_hash
+        ):
             errors.append("source model_config_hash differs from artifact")
-        if target_hash and manifest.target.kv_shape.model_config_hash and target_hash != manifest.target.kv_shape.model_config_hash:
+        if (
+            target_hash
+            and manifest.target.kv_shape.model_config_hash
+            and target_hash != manifest.target.kv_shape.model_config_hash
+        ):
             errors.append("target model_config_hash differs from artifact")
         return errors
 

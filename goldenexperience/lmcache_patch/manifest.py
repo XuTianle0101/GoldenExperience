@@ -33,7 +33,7 @@ class PatchManifest:
     notes: tuple[str, ...] = field(default_factory=tuple)
 
     @classmethod
-    def default(cls) -> "PatchManifest":
+    def default(cls) -> PatchManifest:
         return cls(
             hooks=(
                 PatchHook(
@@ -52,13 +52,32 @@ class PatchManifest:
                     order=20,
                 ),
                 PatchHook(
+                    name="calibrated_risk_gate",
+                    target="LMCache MP candidate path before source KV retrieval",
+                    purpose=(
+                        "Evaluate the source-only sidecar and reject missing, OOD, stale, "
+                        "or statistically unsafe prefixes without reading source KV."
+                    ),
+                    order=25,
+                ),
+                PatchHook(
+                    name="lmcache_retrieve_transform",
+                    target="LMCache MP RETRIEVE_TRANSFORM connector worker path",
+                    purpose=(
+                        "Batch-read accepted source chunks, run head-aware transport, and "
+                        "scatter every layer into registered vLLM paged KV slots."
+                    ),
+                    order=30,
+                ),
+                PatchHook(
                     name="goldenexperience_materializer",
-                    target="LMCache MP retrieve path before KV is handed back to vLLM",
+                    target="Legacy LMCache MP read-transform-put path for v4 artifacts",
                     purpose=(
                         "Alias KV, bridge hidden states, or translate retrieved state "
                         "according to a ReusePlan."
                     ),
-                    order=30,
+                    order=35,
+                    required=False,
                 ),
                 PatchHook(
                     name="quality_gate_accounting",
@@ -75,6 +94,10 @@ class PatchManifest:
                 "If a ReusePlan is not ready, fall back to the original vLLM plus LMCache MP path.",
                 "All cross-model reuse must carry scenario, state_kind, transform_id, "
                 "confidence, and calibration metadata.",
+                "Rejected selective requests must not read source KV or write target objects.",
+                "Accepted v5 requests must publish load-complete only after every paged-KV "
+                "layer succeeds; partial writes remain invalid for native prefill overwrite.",
+                "Direct selective reuse must never create target Mooncake objects.",
             ),
             notes=(
                 "The patch should be small enough to carry as a delta on top of upstream LMCache.",
@@ -93,7 +116,9 @@ class PatchManifest:
         return [
             str(root / "lookup path: add secondary cross-model lookup"),
             str(root / "key builder: include GoldenExperience metadata sidecar"),
-            str(root / "retrieve path: call GoldenExperience materializer before return"),
+            str(root / "candidate path: run calibrated source-side risk gate"),
+            str(root / "retrieve path: add atomic RETRIEVE_TRANSFORM paged scatter"),
+            str(root / "legacy retrieve path: retain v4 materializer read compatibility"),
             str(root / "metrics path: emit reuse scenario and fallback reason"),
         ]
 

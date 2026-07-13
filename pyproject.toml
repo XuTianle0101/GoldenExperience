@@ -41,6 +41,7 @@ golden-scale-validate = "goldenexperience.cli.size_variant:main_validate"
 golden-scale-bench = "goldenexperience.cli.size_variant:main_bench"
 golden-synthetic-benchmark = "goldenexperience.benchmarks.synthetic:main"
 golden-kv-baseline = "goldenexperience.cli.kv_baseline:main"
+golden-publication-benchmark = "goldenexperience.cli.publication_benchmark:main"
 
 [tool.setuptools.packages.find]
 where = ["."]

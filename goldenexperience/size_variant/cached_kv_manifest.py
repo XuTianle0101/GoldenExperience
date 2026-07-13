@@ -8,11 +8,15 @@ import math
 from collections.abc import Iterable
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from goldenexperience.reuse.models import KVShape, ModelRef
 
+if TYPE_CHECKING:
+    from goldenexperience.size_variant.selective_manifest import SelectiveKVBridgeManifest
+
 CACHED_KV_SCHEMA_VERSION = "goldenexperience.qwen3_cached_kv_bridge.v4"
+CACHED_KV_V5_SCHEMA_VERSION = "goldenexperience.selective_cached_kv_bridge.v5"
 MODEL_IDENTITY_CACHE_SCHEMA_VERSION = "goldenexperience.model_identity_cache.v1"
 _SHA256_LENGTH = 64
 _TOKENIZER_FILES = (
@@ -85,8 +89,8 @@ class CachedKVModelSpec:
             errors.append("model_id is required")
         if not self.revision:
             errors.append("model revision is required")
-        if self.architecture != "qwen3":
-            errors.append("cached KV bridge only supports qwen3")
+        if self.architecture not in {"qwen2", "qwen3"}:
+            errors.append("cached KV transport only supports qwen2 or qwen3")
         for name, value in (
             ("config_sha256", self.config_sha256),
             ("tokenizer_sha256", self.tokenizer_sha256),
@@ -300,6 +304,9 @@ class CachedKVBridgeManifest:
             errors.append("direction must be 8b_to_14b or 14b_to_8b")
         errors.extend(f"source: {item}" for item in self.source.validate())
         errors.extend(f"target: {item}" for item in self.target.validate())
+        # v4 artifacts remain executable only under their original Qwen3 contract.
+        if self.source.architecture != "qwen3" or self.target.architecture != "qwen3":
+            errors.append("cached KV bridge v4 only supports qwen3")
         if self.direction == "8b_to_14b" and not (
             self.source.parameter_count_b < self.target.parameter_count_b
         ):
@@ -448,7 +455,17 @@ def model_spec_from_path(
         if identity_cache_path is not None:
             _store_identity_digests(identity_cache_path, root, identity_paths, digests)
     architecture = str(config.get("model_type", ""))
-    dtype = str(config.get("torch_dtype", ""))
+    dtype = str(config.get("torch_dtype") or config.get("dtype") or "")
+    configured_head_dim = config.get("head_dim")
+    if configured_head_dim is None:
+        attention_heads = int(config["num_attention_heads"])
+        head_dim = int(config["hidden_size"]) // attention_heads
+    else:
+        head_dim = int(configured_head_dim)
+    use_sliding_window = config.get("use_sliding_window")
+    sliding_window = config.get("sliding_window")
+    if use_sliding_window is False:
+        sliding_window = None
     return CachedKVModelSpec(
         model_id=model_id,
         parameter_count_b=float(parameter_count_b),
@@ -459,12 +476,12 @@ def model_spec_from_path(
         weights_sha256=digests["weights_sha256"],
         num_layers=int(config["num_hidden_layers"]),
         num_key_value_heads=int(config["num_key_value_heads"]),
-        head_dim=int(config["head_dim"]),
+        head_dim=head_dim,
         dtype=dtype,
-        rope_theta=float(config["rope_theta"]),
+        rope_theta=_rope_theta_from_config(config),
         max_position_embeddings=int(config["max_position_embeddings"]),
         rope_scaling=config.get("rope_scaling"),
-        sliding_window=config.get("sliding_window"),
+        sliding_window=sliding_window,
     )
 
 
@@ -554,6 +571,22 @@ def artifact_id_for(manifest: CachedKVBridgeManifest) -> str:
     return "qwen3-kv-" + hashlib.sha256(raw.encode("utf-8")).hexdigest()[:20]
 
 
+def load_cached_kv_manifest(
+    path: str | Path,
+) -> CachedKVBridgeManifest | SelectiveKVBridgeManifest:
+    """Dispatch v4 read compatibility and the v5 selective manifest by schema."""
+
+    payload = json.loads(Path(path).read_text(encoding="utf-8"))
+    schema_version = payload.get("schema_version")
+    if schema_version == CACHED_KV_SCHEMA_VERSION:
+        return CachedKVBridgeManifest.from_dict(payload)
+    if schema_version == CACHED_KV_V5_SCHEMA_VERSION:
+        from goldenexperience.size_variant.selective_manifest import SelectiveKVBridgeManifest
+
+        return SelectiveKVBridgeManifest.from_dict(payload)
+    raise ValueError(f"unsupported cached KV manifest schema: {schema_version!r}")
+
+
 def _is_sha256(value: str | None) -> bool:
     if not isinstance(value, str) or len(value) != _SHA256_LENGTH:
         return False
@@ -562,6 +595,17 @@ def _is_sha256(value: str | None) -> bool:
     except ValueError:
         return False
     return True
+
+
+def _rope_theta_from_config(config: dict[str, Any]) -> float:
+    direct = config.get("rope_theta")
+    if direct is not None:
+        return float(direct)
+    for name in ("rope_parameters", "rope_scaling"):
+        nested = config.get(name)
+        if isinstance(nested, dict) and nested.get("rope_theta") is not None:
+            return float(nested["rope_theta"])
+    raise ValueError("model config does not expose rope_theta")
 
 
 def _model_identity_files(root: Path) -> tuple[list[Path], list[Path]]:
@@ -598,11 +642,14 @@ def _cached_identity_digests(
         if entry.get("snapshot") != _identity_snapshot(root, paths):
             return None
         digests = entry["digests"]
-        if not all(_is_sha256(digests.get(name)) for name in (
-            "config_sha256",
-            "tokenizer_sha256",
-            "weights_sha256",
-        )):
+        if not all(
+            _is_sha256(digests.get(name))
+            for name in (
+                "config_sha256",
+                "tokenizer_sha256",
+                "weights_sha256",
+            )
+        ):
             return None
         return {name: str(digests[name]) for name in digests}
     except (json.JSONDecodeError, KeyError, OSError, TypeError, ValueError):

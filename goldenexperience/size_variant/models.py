@@ -35,6 +35,12 @@ class FallbackReason(str, Enum):
     QUALITY_GATE_FAILED = "quality_gate_failed"
     MATERIALIZATION_TIMEOUT = "materialization_timeout"
     COST_GATE_FAILED = "cost_gate_failed"
+    ARTIFACT_NOT_APPROVED = "artifact_not_approved"
+    RISK_GATE_REJECTED = "risk_gate_rejected"
+    MISSING_SIDECAR = "missing_sidecar"
+    OUT_OF_DISTRIBUTION = "out_of_distribution"
+    MODEL_HASH_CHANGED = "model_hash_changed"
+    DIRECT_INJECTION_FAILED = "direct_injection_failed"
 
 
 @dataclass(frozen=True)

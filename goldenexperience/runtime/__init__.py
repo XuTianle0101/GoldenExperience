@@ -7,6 +7,15 @@ from goldenexperience.runtime.config import (
     build_patch_environment,
     check_runtime,
 )
+from goldenexperience.runtime.direct_paged_kv import (
+    RETRIEVE_TRANSFORM,
+    DirectInjectionError,
+    DirectInjectionResult,
+    DirectPagedKVInjector,
+    InMemoryBlockValidityTracker,
+    RetrieveTransformRequest,
+    scatter_paged_kv,
+)
 from goldenexperience.runtime.materializer_client import (
     MaterializerClientError,
     ResidentMaterializerClient,
@@ -18,6 +27,13 @@ __all__ = [
     "RuntimeStatus",
     "MaterializerClientError",
     "ResidentMaterializerClient",
+    "RETRIEVE_TRANSFORM",
+    "DirectInjectionError",
+    "DirectInjectionResult",
+    "DirectPagedKVInjector",
+    "InMemoryBlockValidityTracker",
+    "RetrieveTransformRequest",
     "build_patch_environment",
     "check_runtime",
+    "scatter_paged_kv",
 ]

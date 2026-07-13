@@ -21,6 +21,7 @@ class ReuseStrategy(str, Enum):
     DIRECT_SHAPE_ALIAS = "direct_shape_alias"
     HIDDEN_STATE_BRIDGE = "hidden_state_bridge"
     CACHED_KV_TRANSLATION = "cached_kv_translation"
+    SELECTIVE_PAGED_KV_REUSE = "selective_paged_kv_reuse"
     LAYERWISE_PROJECTION = "layerwise_projection"
     KV_PROJECTION_BASELINE = "kv_projection_baseline"
     LEARNED_CROSS_BASE_TRANSLATOR = "learned_cross_base_translator"
@@ -155,6 +156,9 @@ class ReusePlan:
     estimated_prefill_saved_ms: float | None = None
     estimated_materialization_ms: float | None = None
     fallback_reason: str | None = None
+    artifact_state: str | None = None
+    risk_threshold: float | None = None
+    risk_feature_schema: str | None = None
     notes: tuple[str, ...] = ()
 
     @property
@@ -191,6 +195,9 @@ class ReusePlan:
             "ge_estimated_prefill_saved_ms": self.estimated_prefill_saved_ms,
             "ge_estimated_materialization_ms": self.estimated_materialization_ms,
             "ge_fallback_reason": self.fallback_reason,
+            "ge_artifact_state": self.artifact_state,
+            "ge_risk_threshold": self.risk_threshold,
+            "ge_risk_feature_schema": self.risk_feature_schema,
             "ge_source_config_hash": self.request.source.kv_shape.model_config_hash,
             "ge_target_config_hash": self.request.target.kv_shape.model_config_hash,
         }
