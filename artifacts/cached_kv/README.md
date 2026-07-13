@@ -75,6 +75,13 @@ regressions and generalizes to all four token buckets. Tensor cosine, next-token
 agreement, perplexity drift, and remaining output metrics still fail production gates,
 so the result remains validation-only and the sealed test stays unopened.
 
+`native_generation_steps_ab_8b_to_14b_20260713.json` compares four and eight
+generation-aligned steps under the same seed and rank. Eight steps slightly improve
+greedy match and perplexity drift but reduce task score from 0.90625 to 0.890625 by
+changing one correct exact answer into the wrong marker. Because the four-prompt
+teacher-forced holdout continues improving through that regression, four steps remain
+the selected validation configuration and further step scaling is stopped.
+
 Only a `CachedKVBridgeManifest` whose derived `approved` property is true may be used by
 the runtime materializer. Missing held-out accuracy or Mooncake cost evidence keeps a
 manifest fail closed.
