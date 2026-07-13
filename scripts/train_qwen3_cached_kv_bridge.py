@@ -41,6 +41,7 @@ from goldenexperience.size_variant.cached_kv_training import (
     cache_to_object,
     cosine_mean,
     fit_low_rank_state,
+    logit_distillation_loss,
     object_to_dynamic_cache,
     transform_with_state,
 )
@@ -262,6 +263,191 @@ def _quantize_state(state: dict[str, Any]) -> dict[str, Any]:
         else:
             quantized[name] = tensor.contiguous()
     return quantized
+
+
+_LOGIT_REFINEMENT_PARAMETERS = (
+    "key_up",
+    "key_nonlinear_up",
+    "key_bias",
+    "value_up",
+    "value_nonlinear_up",
+    "value_bias",
+)
+
+
+def refine_state_with_target_logits(
+    samples: tuple[CachedKVPrompt, ...],
+    *,
+    tokenizer: Any,
+    source_model: Any,
+    target_model: Any,
+    state: dict[str, Any],
+    source_device: str,
+    target_device: str,
+    suffix_tokens: int,
+    steps: int,
+    max_prompts: int,
+    learning_rate: float,
+    temperature: float,
+    label_weight: float,
+    anchor_weight: float,
+    max_grad_norm: float,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Refine the existing v4 map against frozen target-model continuation logits."""
+
+    import torch
+
+    if steps <= 0 or max_prompts <= 0:
+        raise ValueError("logit refinement steps and prompt count must be positive")
+    if learning_rate <= 0 or not math.isfinite(learning_rate):
+        raise ValueError("logit refinement learning rate must be finite and positive")
+    if anchor_weight < 0 or not math.isfinite(anchor_weight):
+        raise ValueError("logit refinement anchor weight must be finite and non-negative")
+    if max_grad_norm <= 0 or not math.isfinite(max_grad_norm):
+        raise ValueError("logit refinement max grad norm must be finite and positive")
+    selected = samples[:max_prompts]
+    if not selected:
+        raise ValueError("logit refinement received no training prompts")
+
+    target_model.requires_grad_(False)
+    state_on_target = {name: tensor.to(target_device) for name, tensor in state.items()}
+    parameters: list[Any] = []
+    anchors: dict[str, Any] = {}
+    for name in _LOGIT_REFINEMENT_PARAMETERS:
+        parameter = torch.nn.Parameter(state_on_target[name].float())
+        state_on_target[name] = parameter
+        parameters.append(parameter)
+        anchors[name] = parameter.detach().clone()
+    optimizer = torch.optim.AdamW(parameters, lr=learning_rate, weight_decay=0.0)
+    source_config = source_model.config
+    target_config = target_model.config
+    records: list[dict[str, Any]] = []
+
+    for step in range(steps):
+        sample = selected[step % len(selected)]
+        _, token_ids = render_to_token_bucket(sample, tokenizer, suffix_tokens=suffix_tokens)
+        prefix = sample.token_bucket
+        continuation = token_ids[prefix : prefix + suffix_tokens + 1]
+        if len(continuation) != suffix_tokens + 1:
+            raise ValueError("logit refinement prompt has an incomplete continuation")
+
+        source_input = torch.tensor([token_ids[:prefix]], dtype=torch.long)
+        source_out, source_prefill_ms = _run_prefill(
+            source_model,
+            source_input,
+            source_device,
+        )
+        source_object = cache_to_object(source_out.past_key_values)
+        teacher_input = torch.tensor(
+            [token_ids[: prefix + suffix_tokens]],
+            dtype=torch.long,
+            device=target_device,
+        )
+        with torch.inference_mode():
+            teacher_out = target_model(input_ids=teacher_input, use_cache=False)
+            teacher_logits = teacher_out.logits[:, prefix : prefix + suffix_tokens].detach()
+
+        positions = torch.arange(prefix, device=target_device)
+        bridge_object = transform_with_state(
+            source_object,
+            positions,
+            state_on_target,
+            source_heads=int(source_config.num_key_value_heads),
+            source_head_dim=int(source_config.head_dim),
+            source_rope_theta=_rope_theta(source_config),
+            target_heads=int(target_config.num_key_value_heads),
+            target_head_dim=int(target_config.head_dim),
+            target_rope_theta=_rope_theta(target_config),
+            device=target_device,
+        )
+        bridge_cache = object_to_dynamic_cache(bridge_object, target_config)
+        student_input = torch.tensor(
+            [continuation[:-1]],
+            dtype=torch.long,
+            device=target_device,
+        )
+        labels = torch.tensor(
+            [continuation[1:]],
+            dtype=torch.long,
+            device=target_device,
+        )
+        student_out = target_model(
+            input_ids=student_input,
+            past_key_values=bridge_cache,
+            use_cache=False,
+        )
+        objective, distillation, label_loss = logit_distillation_loss(
+            student_out.logits,
+            teacher_logits,
+            labels,
+            temperature=temperature,
+            label_weight=label_weight,
+        )
+        anchor_loss = torch.stack(
+            [
+                (state_on_target[name] - anchors[name]).square().mean()
+                for name in _LOGIT_REFINEMENT_PARAMETERS
+            ]
+        ).mean()
+        loss = objective + anchor_weight * anchor_loss
+        top1_agreement = (
+            student_out.logits.argmax(dim=-1) == teacher_logits.argmax(dim=-1)
+        ).float().mean()
+
+        optimizer.zero_grad(set_to_none=True)
+        loss.backward()
+        grad_norm = torch.nn.utils.clip_grad_norm_(parameters, max_grad_norm)
+        optimizer.step()
+        records.append(
+            {
+                "step": step + 1,
+                "prompt_id": sample.prompt_id,
+                "token_bucket": sample.token_bucket,
+                "source_prefill_ms": source_prefill_ms,
+                "loss": float(loss.detach().item()),
+                "distillation_loss": float(distillation.detach().item()),
+                "label_loss": float(label_loss.detach().item()),
+                "anchor_loss": float(anchor_loss.detach().item()),
+                "top1_agreement": float(top1_agreement.detach().item()),
+                "gradient_norm": float(grad_norm.detach().item()),
+            }
+        )
+        del (
+            source_out,
+            source_object,
+            teacher_out,
+            teacher_logits,
+            bridge_object,
+            bridge_cache,
+            student_out,
+            objective,
+            distillation,
+            label_loss,
+            anchor_loss,
+            loss,
+        )
+        gc.collect()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+
+    refined = {
+        name: tensor.detach().cpu() if name in _LOGIT_REFINEMENT_PARAMETERS else tensor.cpu()
+        for name, tensor in state_on_target.items()
+    }
+    return _quantize_state(refined), {
+        "enabled": True,
+        "steps": steps,
+        "max_prompts": max_prompts,
+        "prompt_ids": [sample.prompt_id for sample in selected],
+        "learning_rate": learning_rate,
+        "temperature": temperature,
+        "label_weight": label_weight,
+        "anchor_weight": anchor_weight,
+        "max_grad_norm": max_grad_norm,
+        "parameter_names": list(_LOGIT_REFINEMENT_PARAMETERS),
+        "parameter_count": sum(parameter.numel() for parameter in parameters),
+        "records": records,
+    }
 
 
 def _teacher_forced_metrics(
@@ -589,6 +775,13 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--max-training-samples", type=int, default=2048)
     parser.add_argument("--suffix-tokens", type=int, default=16)
     parser.add_argument("--greedy-tokens", type=int, default=16)
+    parser.add_argument("--logit-refinement-steps", type=int, default=0)
+    parser.add_argument("--logit-refinement-prompts", type=int, default=16)
+    parser.add_argument("--logit-refinement-learning-rate", type=float, default=1e-4)
+    parser.add_argument("--logit-refinement-temperature", type=float, default=1.0)
+    parser.add_argument("--logit-refinement-label-weight", type=float, default=0.1)
+    parser.add_argument("--logit-refinement-anchor-weight", type=float, default=1e-5)
+    parser.add_argument("--logit-refinement-max-grad-norm", type=float, default=1.0)
     parser.add_argument(
         "--smoke-max-validation-prompts",
         type=int,
@@ -620,6 +813,8 @@ def main() -> int:
         raise ValueError("--output must be a JSON manifest path")
     if args.layer_alignment_prompts <= 0 or args.layer_alignment_samples_per_prompt <= 0:
         raise ValueError("layer alignment prompt and sample counts must be positive")
+    if args.logit_refinement_steps < 0:
+        raise ValueError("--logit-refinement-steps must be non-negative")
     dataset = CachedKVPromptDataset.load(args.dataset)
     if args.finalize and args.emit_validation_candidate:
         raise ValueError("--finalize and --emit-validation-candidate are mutually exclusive")
@@ -729,6 +924,26 @@ def main() -> int:
     gc.collect()
     torch.cuda.empty_cache()
 
+    logit_refinement: dict[str, Any] = {"enabled": False, "steps": 0}
+    if args.logit_refinement_steps:
+        state, logit_refinement = refine_state_with_target_logits(
+            dataset.split("train"),
+            tokenizer=tokenizer,
+            source_model=source_model,
+            target_model=target_model,
+            state=state,
+            source_device=args.source_device,
+            target_device=args.target_device,
+            suffix_tokens=args.suffix_tokens,
+            steps=args.logit_refinement_steps,
+            max_prompts=args.logit_refinement_prompts,
+            learning_rate=args.logit_refinement_learning_rate,
+            temperature=args.logit_refinement_temperature,
+            label_weight=args.logit_refinement_label_weight,
+            anchor_weight=args.logit_refinement_anchor_weight,
+            max_grad_norm=args.logit_refinement_max_grad_norm,
+        )
+
     validation_samples = dataset.split("validation")
     if args.smoke_max_validation_prompts > 0:
         validation_samples = validation_samples[: args.smoke_max_validation_prompts]
@@ -760,6 +975,7 @@ def main() -> int:
         "ridge_lambda": args.ridge_lambda,
         "nonlinear_ridge_lambda": args.nonlinear_ridge_lambda,
         "training_collection": collection,
+        "logit_refinement": logit_refinement,
         "validation": validation,
     }
     if not args.finalize and not args.emit_validation_candidate:

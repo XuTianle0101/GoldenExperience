@@ -19,6 +19,7 @@ from goldenexperience.size_variant.cached_kv_training import (
     build_source_layer_plan,
     build_training_matrices,
     fit_low_rank_state,
+    logit_distillation_loss,
     transform_with_state,
 )
 
@@ -320,6 +321,58 @@ def test_supervised_low_rank_fit_reconstructs_synthetic_cached_kv() -> None:
     )
 
     torch.testing.assert_close(reconstructed, target, atol=2e-3, rtol=2e-3)
+
+
+def test_logit_distillation_prefers_teacher_logits_and_detaches_teacher() -> None:
+    torch.manual_seed(29)
+    teacher = torch.randn(1, 4, 11, requires_grad=True)
+    labels = teacher.detach().argmax(dim=-1)
+    matching = teacher.detach().clone().requires_grad_(True)
+    mismatched = torch.zeros_like(teacher, requires_grad=True)
+
+    matching_loss, matching_distillation, _ = logit_distillation_loss(
+        matching,
+        teacher,
+        labels,
+        temperature=1.5,
+        label_weight=0.0,
+    )
+    mismatched_loss, mismatched_distillation, _ = logit_distillation_loss(
+        mismatched,
+        teacher,
+        labels,
+        temperature=1.5,
+        label_weight=0.0,
+    )
+    mismatched_loss.backward()
+
+    assert matching_loss.item() == pytest.approx(0.0, abs=1e-6)
+    assert matching_distillation.item() == pytest.approx(0.0, abs=1e-6)
+    assert mismatched_distillation > matching_distillation
+    assert mismatched.grad is not None
+    assert teacher.grad is None
+
+
+def test_logit_distillation_rejects_invalid_contracts() -> None:
+    logits = torch.zeros(1, 2, 3)
+    labels = torch.zeros(1, 2, dtype=torch.long)
+
+    with pytest.raises(ValueError, match="share"):
+        logit_distillation_loss(
+            logits,
+            torch.zeros(1, 3, 3),
+            labels,
+            temperature=1.0,
+            label_weight=0.0,
+        )
+    with pytest.raises(ValueError, match="temperature"):
+        logit_distillation_loss(
+            logits,
+            logits,
+            labels,
+            temperature=0.0,
+            label_weight=0.0,
+        )
 
 
 def test_supervised_fit_learns_full_width_diagonal_baseline() -> None:

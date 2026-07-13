@@ -484,6 +484,41 @@ def cosine_mean(left: Any, right: Any) -> float:
     return float(functional.cosine_similarity(left_flat, right_flat, dim=-1).mean().item())
 
 
+def logit_distillation_loss(
+    student_logits: Any,
+    teacher_logits: Any,
+    labels: Any,
+    *,
+    temperature: float,
+    label_weight: float,
+) -> tuple[Any, Any, Any]:
+    """Combine target-logit distillation with a bounded teacher-forced label loss."""
+
+    import torch.nn.functional as functional
+
+    if student_logits.ndim != 3 or teacher_logits.shape != student_logits.shape:
+        raise ValueError("teacher and student logits must share [batch, token, vocab] shape")
+    if tuple(labels.shape) != tuple(student_logits.shape[:2]):
+        raise ValueError("distillation labels must cover every batch and token")
+    if not math.isfinite(temperature) or temperature <= 0:
+        raise ValueError("distillation temperature must be finite and positive")
+    if not math.isfinite(label_weight) or label_weight < 0:
+        raise ValueError("distillation label_weight must be finite and non-negative")
+    teacher = teacher_logits.detach().float() / temperature
+    student = student_logits.float() / temperature
+    teacher_probabilities = functional.softmax(teacher, dim=-1)
+    teacher_log_probabilities = functional.log_softmax(teacher, dim=-1)
+    student_log_probabilities = functional.log_softmax(student, dim=-1)
+    distillation = (
+        teacher_probabilities * (teacher_log_probabilities - student_log_probabilities)
+    ).sum(dim=-1).mean() * (temperature * temperature)
+    label_loss = functional.cross_entropy(
+        student_logits.float().reshape(-1, student_logits.shape[-1]),
+        labels.reshape(-1),
+    )
+    return distillation + label_weight * label_loss, distillation, label_loss
+
+
 def _fit_supervised_projection(
     x_centered: Any,
     y: Any,
