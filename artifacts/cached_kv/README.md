@@ -51,6 +51,14 @@ logits. One 16-prompt pass at learning rate 1e-4 reduces validation task score f
 0.1875 to 0.015625 and greedy continuation match from 0.1572 to 0.0498. The experiment
 remains validation-only and is not selected as the default bridge.
 
+`logit_refinement_parameter_screen_8b_to_14b_20260713.json` compares constrained
+bias-only and nonlinear-up-only refinement with lower learning rates, transformed-KV
+anchoring, and train-only holdout checkpoint selection. Nonlinear-up-only improves the
+reference validation task score from 0.1875 to 0.21875 and perplexity drift from 26.39%
+to 13.21%, but remains far below approval thresholds. Because each arm independently
+refit a randomized baseline, the result is screening evidence pending a seeded,
+same-fit pre/post confirmation.
+
 Only a `CachedKVBridgeManifest` whose derived `approved` property is true may be used by
 the runtime materializer. Missing held-out accuracy or Mooncake cost evidence keeps a
 manifest fail closed.

@@ -1,0 +1,94 @@
+{
+  "automatic_reuse_approved": false,
+  "baseline_reference": {
+    "artifact_path": "artifacts/cached_kv/validation_candidate_8b_to_14b_20260713.json",
+    "artifact_sha256": "84e92c18f17a9d2139e4f37b5c75c760e2e0c58c9b3626e1ebfab31d117f105c",
+    "bridge_perplexity": 42.79813670876787,
+    "bridge_task_score": 0.1875,
+    "greedy_continuation_match_rate": 0.1572265625,
+    "key_cosine": 0.9316622419282794,
+    "next_token_top1_agreement": 0.8125,
+    "perplexity_drift_pct": 26.38675495609311,
+    "task_score_drop_pct": 81.25,
+    "value_cosine": 0.7990368343889713
+  },
+  "common_contract": {
+    "anchor_weight": 0.1,
+    "dataset": "configs/qwen3_cached_kv_prompts.json",
+    "early_stopping_patience": 2,
+    "holdout_prompt_count": 4,
+    "implementation_commit": "9dfa853",
+    "kv_anchor_weight": 1.0,
+    "max_prompts": 16,
+    "rank": 512,
+    "requested_steps": 8,
+    "source_window": 3,
+    "validation_prompt_count": 64,
+    "validation_split_sha256": "fbcb5a68716be8230945d01c503774f5a733b043822d78aaedeac9816a6b0936"
+  },
+  "conclusion": {
+    "bias_only_selected": false,
+    "nonlinear_up_only_selected_as_default": false,
+    "nonlinear_up_only_selected_for_confirmatory_ab": true,
+    "reason": "Nonlinear-up-only is the only arm that improves continuation, task, and perplexity metrics, but every arm remains far below production quality thresholds."
+  },
+  "direction": "8b_to_14b",
+  "limitations": [
+    "Each arm independently refit the randomized low-rank baseline without an explicit seed.",
+    "Pre-refinement validation was not captured from the same fitted state, so deltas against the earlier baseline are screening evidence rather than a causal A/B."
+  ],
+  "parameter_arms": {
+    "bias_only": {
+      "best_step": 1,
+      "bridge_perplexity": 42.210308697079,
+      "bridge_task_score": 0.109375,
+      "deltas_vs_reference": {
+        "bridge_task_score": -0.078125,
+        "greedy_continuation_match_rate": -0.064453125,
+        "next_token_top1_agreement": 0.0029296875,
+        "perplexity_drift_pct": -1.7359090975198583
+      },
+      "greedy_continuation_match_rate": 0.0927734375,
+      "holdout_objective_after": 0.4431760385632515,
+      "holdout_objective_before": 0.4477195143699646,
+      "key_cosine": 0.9316598260775208,
+      "learning_rate": 0.00001,
+      "next_token_top1_agreement": 0.8154296875,
+      "parameter_count": 81920,
+      "perplexity_drift_pct": 24.650845858573252,
+      "raw_results_path": "artifacts/results/qwen3_8b_to_14b_bias_refinement_rank512.results.json",
+      "raw_results_sha256": "e52f897af66e0b3ecfee82d379e51aacc9e998020e8aacdd7e3a843a87f81d0e",
+      "steps_completed": 3,
+      "stopped_reason": "holdout_objective_patience",
+      "task_score_drop_pct": 89.0625,
+      "value_cosine": 0.7990021584555507
+    },
+    "nonlinear_up_only": {
+      "best_step": 8,
+      "bridge_perplexity": 38.335903314223316,
+      "bridge_task_score": 0.21875,
+      "deltas_vs_reference": {
+        "bridge_task_score": 0.03125,
+        "greedy_continuation_match_rate": 0.0263671875,
+        "next_token_top1_agreement": 0.0078125,
+        "perplexity_drift_pct": -13.177377380489107
+      },
+      "greedy_continuation_match_rate": 0.18359375,
+      "holdout_objective_after": 0.41251789033412933,
+      "holdout_objective_before": 0.44624677300453186,
+      "key_cosine": 0.9316605348140001,
+      "learning_rate": 0.000003,
+      "next_token_top1_agreement": 0.8203125,
+      "parameter_count": 41943040,
+      "perplexity_drift_pct": 13.209377575604003,
+      "raw_results_path": "artifacts/results/qwen3_8b_to_14b_nonlinear_up_refinement_rank512.results.json",
+      "raw_results_sha256": "26b03e41c1b5edbe9441cf3512a139a713042dce9b76f59c0b554b57be753f85",
+      "steps_completed": 8,
+      "stopped_reason": null,
+      "task_score_drop_pct": 78.125,
+      "value_cosine": 0.7989495135843754
+    }
+  },
+  "schema_version": "goldenexperience.cached_kv_logit_refinement_parameter_screen.v1",
+  "sealed_test_opened": false
+}
