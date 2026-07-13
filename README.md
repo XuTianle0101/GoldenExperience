@@ -48,6 +48,17 @@ The implementation contract and present evidence boundary are documented in
 `docs/selective_kv_v5.md`. No v5 artifact is currently approved; retained rank-512 Qwen3
 results are development failures, not production or paper claims.
 
+Run the bounded real-model implementation smoke on two GPUs with:
+
+```bash
+python3 -m pip install -e ".[hf]"
+golden-v5-smoke --output artifacts/cache/qwen3_4b_to_8b_smoke.json
+```
+
+The command verifies real prefill, head-structured DynamicCache conversion, target attention
+capture, transport shape, and finite five-term loss. Its report is permanently marked
+`diagnostic_only`; it cannot open the sealed split or approve an artifact.
+
 ## Architecture
 
 ```text

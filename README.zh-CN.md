@@ -43,6 +43,17 @@ target Mooncake object。
 完整合同与当前证据边界见 `docs/selective_kv_v5.md`。仓库目前没有获批的 v5 artifact；
 保留的 Qwen3 rank-512 结果只是失败的开发基线，不构成生产或论文主张。
 
+可在两张 GPU 上运行有界的真实模型实现 smoke：
+
+```bash
+python3 -m pip install -e ".[hf]"
+golden-v5-smoke --output artifacts/cache/qwen3_4b_to_8b_smoke.json
+```
+
+该命令验证真实 prefill、head-structured DynamicCache 转换、目标 attention 采集、transport
+shape 与五项有限 loss。报告固定标记为 `diagnostic_only`，不能打开 sealed split，也不能批准
+任何 artifact。
+
 ## 架构
 
 ```text

@@ -58,6 +58,18 @@ before decode.
   immutable content-addressed sealed reports.
 - `selective_runtime.py` recomputes P50/P95/P99 and the 0.70x materialization, 30% accepted
   TTFT, and 5% rejected-overhead gates from at least 20 warmups and 100 measurements.
+- `real_model_smoke.py` executes a bounded Qwen3 source/target prefill, target-attention
+  capture, DynamicCache conversion, and five-term transport objective. Its schema hard-codes
+  `diagnostic_only`, `evidence_eligible=false`, and `sealed_split_accessed=false`.
+
+Run the implementation smoke independently of every benchmark split:
+
+```bash
+golden-v5-smoke --output artifacts/cache/qwen3_4b_to_8b_smoke.json
+```
+
+The output proves only that the local code/model stack executes with finite tensors. It is
+not validation, calibration, sealed-test, runtime-audit, or approval evidence.
 
 ## Artifact Authority
 

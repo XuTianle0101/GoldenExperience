@@ -41,7 +41,12 @@ dependencies = []
 
 [project.optional-dependencies]
 torch = ["torch>=2.1", "safetensors>=0.4,<1"]
-hf = ["transformers>=4.40", "torch>=2.1", "safetensors>=0.4,<1"]
+hf = [
+  "accelerate>=1,<2",
+  "transformers>=5,<6",
+  "torch>=2.1",
+  "safetensors>=0.4,<1",
+]
 runtime = ["vllm==0.24.0", "lmcache==0.4.6"]
 dev = [
   "build>=1,<2",
@@ -68,6 +73,7 @@ golden-scale-bench = "goldenexperience.cli.size_variant:main_bench"
 golden-synthetic-benchmark = "goldenexperience.benchmarks.synthetic:main"
 golden-kv-baseline = "goldenexperience.cli.kv_baseline:main"
 golden-publication-benchmark = "goldenexperience.cli.publication_benchmark:main"
+golden-v5-smoke = "goldenexperience.cli.v5_smoke:main"
 
 [tool.setuptools.packages.find]
 where = ["."]
