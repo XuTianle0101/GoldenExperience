@@ -6,8 +6,10 @@ import argparse
 import json
 import tempfile
 import time
+from concurrent.futures import Future
 from dataclasses import asdict
 from pathlib import Path
+from typing import cast
 
 from goldenexperience.benchmarks.metrics import BenchmarkRecord, summarize
 from goldenexperience.cache_core import CacheBlock, DeviceTier, KVPayload
@@ -44,27 +46,28 @@ def run_synthetic_benchmark(
 
     for block_id in block_ids:
         start = time.perf_counter()
-        block = store.get_by_id(block_id, promote_to=DeviceTier.HBM)
+        retrieved = store.get_by_id(block_id, promote_to=DeviceTier.HBM)
         latency_ms = (time.perf_counter() - start) * 1000.0
         records.append(
             BenchmarkRecord(
                 "get_promote",
                 latency_ms,
-                block.metadata.bytes_size if block is not None else 0,
-                cache_hit=block is not None,
+                retrieved.metadata.bytes_size if retrieved is not None else 0,
+                cache_hit=retrieved is not None,
             )
         )
 
     prefetch_ids = block_ids[: min(8, len(block_ids))]
     start = time.perf_counter()
-    futures = store.prefetch(
-        PrefetchPlan(prefetch_ids, target_tier=DeviceTier.HBM, asynchronous=True)
+    futures = cast(
+        list[Future[bool]],
+        store.prefetch(PrefetchPlan(prefetch_ids, target_tier=DeviceTier.HBM, asynchronous=True)),
     )
     for future in futures:
         future.result()
     records.append(BenchmarkRecord("prefetch_batch", (time.perf_counter() - start) * 1000.0))
 
-    result = {
+    result: dict[str, object] = {
         "summaries": {
             name: asdict(summarize(name, [record for record in records if record.name == name]))
             for name in sorted({record.name for record in records})

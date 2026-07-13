@@ -580,9 +580,6 @@ class SelectiveKVBridgeManifest:
             if self.runtime_cost is not None or self.direct_injection is not None:
                 errors.append("semantic_approved artifact cannot carry runtime approval evidence")
             return errors
-        if self.state is not ArtifactState.APPROVED:
-            errors.append("unsupported artifact state")
-            return errors
         if self.runtime_cost is None:
             errors.append("approved artifact requires runtime cost evidence")
         else:

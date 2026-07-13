@@ -52,6 +52,15 @@ testpaths = ["tests"]
 pythonpath = ["."]
 addopts = "-q"
 
+[tool.mypy]
+python_version = "3.10"
+check_untyped_defs = true
+show_error_codes = true
+warn_redundant_casts = true
+warn_unreachable = true
+warn_unused_configs = true
+warn_unused_ignores = true
+
 [tool.ruff]
 line-length = 100
 target-version = "py310"

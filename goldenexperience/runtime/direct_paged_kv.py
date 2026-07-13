@@ -143,12 +143,11 @@ class DirectPagedKVInjector:
         self.publish_load_complete = publish_load_complete
         self.scatter = scatter or scatter_paged_kv
         self._lock = threading.RLock()
+        self._stream: Any | None = None
         if self.transport.device.type == "cuda":
             import torch
 
             self._stream = torch.cuda.Stream(device=self.transport.device)
-        else:
-            self._stream = None
 
     @classmethod
     def from_approved_artifact(

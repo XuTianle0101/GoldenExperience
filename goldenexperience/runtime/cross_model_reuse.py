@@ -37,8 +37,8 @@ def object_key_string(
     kv_rank: int | None = None,
     cache_salt: str = "",
 ) -> str:
-    from lmcache.v1.distributed.api import ObjectKey
-    from lmcache.v1.distributed.l2_adapters.native_connector_l2_adapter import (
+    from lmcache.v1.distributed.api import ObjectKey  # type: ignore[import-untyped]
+    from lmcache.v1.distributed.l2_adapters.native_connector_l2_adapter import (  # type: ignore[import-untyped]
         _object_key_to_string,
     )
 
@@ -73,7 +73,7 @@ def mooncake_setup_config(adapter_config: dict[str, Any]) -> dict[str, str]:
 
 
 def _read_lookup_hash_file(path: Path) -> list[dict[str, Any]]:
-    records = []
+    records: list[dict[str, Any]] = []
     if not path.exists():
         return records
     with path.open("r", encoding="utf-8") as handle:
@@ -279,9 +279,15 @@ def _lookup_record_matches(
             str(record.get("request_id") or ""), request_id
         ):
             return False
-        if expected_seq_len is not None and int(record.get("seq_len")) != expected_seq_len:
+        record_seq_len = record.get("seq_len")
+        if expected_seq_len is not None and (
+            record_seq_len is None or int(record_seq_len) != expected_seq_len
+        ):
             return False
-        if expected_chunk_size is not None and int(record.get("chunk_size")) != expected_chunk_size:
+        record_chunk_size = record.get("chunk_size")
+        if expected_chunk_size is not None and (
+            record_chunk_size is None or int(record_chunk_size) != expected_chunk_size
+        ):
             return False
         if (
             expected_seq_len is not None
@@ -494,7 +500,7 @@ def mooncake_key_exists(
     setup_config: dict[str, Any],
     key_strings: list[str],
 ) -> dict[str, Any]:
-    from mooncake.store import MooncakeDistributedStore
+    from mooncake.store import MooncakeDistributedStore  # type: ignore[import-untyped]
 
     store = MooncakeDistributedStore()
     prepared = mooncake_setup_config(setup_config)

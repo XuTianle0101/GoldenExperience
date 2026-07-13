@@ -145,7 +145,7 @@ class PublicationBenchmarkManifest:
         ids: set[str] = set()
         contents: set[str] = set()
         counts = {name: 0 for name in SPLIT_COUNTS}
-        buckets = {name: set() for name in SPLIT_COUNTS}
+        buckets: dict[str, set[int]] = {name: set() for name in SPLIT_COUNTS}
         transport_groups: set[str] = set()
         later_groups: set[str] = set()
         protected_suffixes: dict[str, str] = {}

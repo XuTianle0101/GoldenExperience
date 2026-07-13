@@ -3,19 +3,20 @@
 from __future__ import annotations
 
 import hashlib
+import importlib
 import pickle
 from dataclasses import is_dataclass
 from typing import Any
 
 try:  # pragma: no cover - depends on optional environment packages
-    import torch
+    torch: Any | None = importlib.import_module("torch")
 except Exception:  # pragma: no cover
-    torch = None  # type: ignore[assignment]
+    torch = None
 
 try:  # pragma: no cover - depends on optional environment packages
-    import numpy as np
+    np: Any | None = importlib.import_module("numpy")
 except Exception:  # pragma: no cover
-    np = None  # type: ignore[assignment]
+    np = None
 
 
 def infer_shape(value: Any) -> tuple[int, ...]:

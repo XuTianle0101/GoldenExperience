@@ -306,6 +306,6 @@ def _integer_results(raw: Any, count: int, operation: str) -> list[int]:
 
 
 def _default_store_factory() -> Any:
-    from mooncake.store import MooncakeDistributedStore
+    from mooncake.store import MooncakeDistributedStore  # type: ignore[import-untyped]
 
     return MooncakeDistributedStore()

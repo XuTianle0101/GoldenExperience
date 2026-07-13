@@ -441,6 +441,8 @@ def build_trainable_head_aware_transport(
     generator.manual_seed(seed)
 
     class _TrainableTransport(torch.nn.Module):
+        source_layer_ids: Any
+
         def __init__(self) -> None:
             super().__init__()
             self.source = source

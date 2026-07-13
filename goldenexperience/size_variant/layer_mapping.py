@@ -21,11 +21,13 @@ def build_linear_layer_map(
 
     if source_num_layers <= 0 or target_num_layers <= 0:
         raise ValueError("source_num_layers and target_num_layers must be positive")
-    entries = []
+    entries: list[LayerMapEntry] = []
     if target_num_layers == 1:
         entries.append(LayerMapEntry(target_layer_id=0, source_layer_ids=(0,), weights=(1.0,)))
     else:
         for target_layer_id in range(target_num_layers):
+            source_layer_ids: tuple[int, ...]
+            weights: tuple[float, ...]
             ratio = target_layer_id / max(1, target_num_layers - 1)
             source_position = ratio * max(0, source_num_layers - 1)
             lower = int(source_position)

@@ -128,7 +128,7 @@ def _build_layer_map(
 ) -> list[tuple[int, tuple[int, ...], tuple[float, ...]]]:
     if target_layers == 1:
         return [(0, (0,), (1.0,))]
-    entries = []
+    entries: list[tuple[int, tuple[int, ...], tuple[float, ...]]] = []
     for target_layer in range(target_layers):
         pos = target_layer * (source_layers - 1) / (target_layers - 1)
         low = int(pos)
