@@ -207,6 +207,21 @@ failure observations are authenticated back to the audit process. A dedicated fa
 the first target layer and then raises, so the reported block set must be invalidated and natively
 recomputed before vLLM may return a token.
 
+Accepted loads use vLLM's asynchronous pre-forward receive handshake even though the LMCache read
+and transform are completed synchronously inside the isolated worker. The worker returns the load
+result, invalid block IDs, and `finished_recving` in one engine step; only a successful load can
+advance to target inference. A failed partial write is therefore invalidated before any logits are
+consumed, and the same request is rescheduled from native target prefill. The failure probe requires
+its 16-token recovered continuation to equal an independently measured native continuation exactly.
+
+The real audit backend starts a managed loopback-only, memory-only LMCache MP server and authenticated
+telemetry collector, then launches vLLM with a fixed `spawn` worker before any parent-process CUDA
+initialization. Prefix caching, chunked prefill, hybrid KV management, asynchronous scheduling,
+tensor/pipeline parallelism, and target-side KV stores are disabled; eager execution and one request
+at a time are enforced. Only after the vLLM worker is isolated does the parent open the source writer
+and the two Transformers models. Four source prefixes (128, 512, 2,048, and 8,192 tokens) are stored
+once and reused by the registered 512-row audit without filesystem staging.
+
 The 512-request approval audit is an isolated paired latency experiment in lexicographic sample-id
 order. For every accepted row it compares native target prefill/TTFT with direct reuse; for every
 rejected row it compares native TTFT with fail-closed fallback, with at least 100 measurements on

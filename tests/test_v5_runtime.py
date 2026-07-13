@@ -13,6 +13,7 @@ import goldenexperience.runtime.lmcache_retrieve_transform as bridge_module
 import goldenexperience.size_variant.v5_runtime as runtime_module
 from goldenexperience.benchmarks.publication import SPLIT_COUNTS, GroupedPrefixRecord
 from goldenexperience.runtime.lmcache_retrieve_transform import (
+    V5_AUDIT_CONNECTOR_CLASS,
     RuntimeSourceIdentity,
     RuntimeStackIdentity,
 )
@@ -274,6 +275,7 @@ def _stack() -> RuntimeStackIdentity:
         vllm_version="0.24.0",
         torch_version="2.11.0",
         cuda_version="13.0",
+        connector_class=V5_AUDIT_CONNECTOR_CLASS,
         sources=tuple(
             RuntimeSourceIdentity(
                 module=name,
@@ -543,7 +545,15 @@ def test_runtime_stage_resumes_recomputes_and_grants_final_authority(
             else pytest.fail("wrong raw runtime split")
         ),
     )
-    monkeypatch.setattr(runtime_module, "probe_runtime_stack", lambda: stack)
+    monkeypatch.setattr(
+        runtime_module,
+        "probe_runtime_stack",
+        lambda *, connector_class: (
+            stack
+            if connector_class == V5_AUDIT_CONNECTOR_CLASS
+            else pytest.fail("runtime used another connector identity")
+        ),
+    )
     monkeypatch.setattr(runtime_module, "verify_runtime_stack_identity", lambda _stack: None)
     monkeypatch.setattr(
         runtime_module,

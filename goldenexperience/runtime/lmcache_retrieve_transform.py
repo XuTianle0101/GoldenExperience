@@ -26,10 +26,14 @@ from goldenexperience.runtime.direct_paged_kv import (
 from goldenexperience.size_variant.cached_kv_manifest import CachedKVModelSpec, sha256_file
 
 LMCACHE_RETRIEVE_TRANSFORM_SCHEMA = "goldenexperience.lmcache_retrieve_transform.v1"
-RUNTIME_STACK_SCHEMA = "goldenexperience.runtime_stack_identity.v2"
+RUNTIME_STACK_SCHEMA = "goldenexperience.runtime_stack_identity.v3"
 EXPECTED_LMCACHE_VERSION = "0.4.6"
 EXPECTED_VLLM_VERSION = "0.24.0"
 EXPECTED_TORCH_VERSION_PREFIX = "2.11.0"
+LMCACHE_MP_CONNECTOR_CLASS = "lmcache.integration.vllm.lmcache_mp_connector.LMCacheMPConnector"
+V5_AUDIT_CONNECTOR_CLASS = (
+    "goldenexperience.runtime.vllm_retrieve_transform_connector.V5RetrieveTransformConnector"
+)
 
 _PINNED_RUNTIME_MODULES = (
     "lmcache.integration.vllm.lmcache_mp_connector",
@@ -74,7 +78,7 @@ class RuntimeStackIdentity:
     torch_version: str
     cuda_version: str | None
     sources: tuple[RuntimeSourceIdentity, ...]
-    connector_class: str = "lmcache.integration.vllm.lmcache_mp_connector.LMCacheMPConnector"
+    connector_class: str = LMCACHE_MP_CONNECTOR_CLASS
     store_protocol: str = "PREPARE_STORE+COMMIT_STORE"
     retrieve_protocol: str = "LOOKUP+QUERY_PREFETCH_STATUS+PREPARE_RETRIEVE+COMMIT_RETRIEVE"
     failure_policy: str = "vllm_invalid_block_native_recompute"
@@ -90,9 +94,7 @@ class RuntimeStackIdentity:
             errors.append("runtime audit requires vLLM 0.24.0")
         if not self.torch_version.startswith(EXPECTED_TORCH_VERSION_PREFIX):
             errors.append("runtime audit requires the verified Torch 2.11.0 stack")
-        if self.connector_class != (
-            "lmcache.integration.vllm.lmcache_mp_connector.LMCacheMPConnector"
-        ):
+        if self.connector_class not in {LMCACHE_MP_CONNECTOR_CLASS, V5_AUDIT_CONNECTOR_CLASS}:
             errors.append("runtime connector class changed")
         if self.store_protocol != "PREPARE_STORE+COMMIT_STORE":
             errors.append("runtime source store protocol changed")
@@ -819,7 +821,10 @@ class LMCacheRetrieveTransformBridge:
             self.upstream_connector.shutdown()
 
 
-def probe_runtime_stack() -> RuntimeStackIdentity:
+def probe_runtime_stack(
+    *,
+    connector_class: str = LMCACHE_MP_CONNECTOR_CLASS,
+) -> RuntimeStackIdentity:
     """Fail closed unless the installed LMCache/vLLM APIs match the audited bridge."""
 
     versions = {name: importlib.metadata.version(name) for name in ("lmcache", "vllm", "torch")}
@@ -917,6 +922,7 @@ def probe_runtime_stack() -> RuntimeStackIdentity:
         torch_version=versions["torch"],
         cuda_version=torch.version.cuda,
         sources=tuple(sources),
+        connector_class=connector_class,
     )
     errors = identity.validate()
     if errors:
@@ -925,7 +931,7 @@ def probe_runtime_stack() -> RuntimeStackIdentity:
 
 
 def verify_runtime_stack_identity(expected: RuntimeStackIdentity) -> None:
-    observed = probe_runtime_stack()
+    observed = probe_runtime_stack(connector_class=expected.connector_class)
     if observed != expected or observed.content_sha256() != expected.content_sha256():
         raise LMCacheRetrieveTransformError("runtime stack identity changed after measurement")
 

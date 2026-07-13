@@ -27,6 +27,7 @@ from goldenexperience.benchmarks.selective_runtime import (
     runtime_cost_evidence_from_report,
 )
 from goldenexperience.runtime.lmcache_retrieve_transform import (
+    V5_AUDIT_CONNECTOR_CLASS,
     RuntimeSourceIdentity,
     RuntimeStackIdentity,
     probe_runtime_stack,
@@ -542,6 +543,8 @@ class V5RuntimeManifest:
         ):
             errors.append("runtime calibrated threshold changed")
         errors.extend(self.runtime_stack.validate())
+        if self.runtime_stack.connector_class != V5_AUDIT_CONNECTOR_CLASS:
+            errors.append("runtime audit did not use the external v5 connector")
         try:
             errors.extend(
                 self.runtime_cost.validate(workspace.config.split_sha256["runtime_audit"])
@@ -683,7 +686,7 @@ def run_runtime_audit_stage(
     traces = {item.sample_id: item for item in trace.records}
     if set(traces) != {record.sample_id for record, _ in samples}:
         raise V5PipelineError("runtime samples differ from trace manifest")
-    stack = probe_runtime_stack()
+    stack = probe_runtime_stack(connector_class=V5_AUDIT_CONNECTOR_CLASS)
     evaluator_payload = dict(evaluator_parameters)
     evaluator_sha256 = _sha256_bytes(_canonical_json_bytes(evaluator_payload))
     stage_parameters = {

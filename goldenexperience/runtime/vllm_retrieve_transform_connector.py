@@ -231,7 +231,7 @@ class V5RetrieveTransformScheduler:
             return 0, False
         cached = self._eligible.get(request.request_id)
         if cached is not None:
-            return self._external_tokens(request, cached, num_computed_tokens), False
+            return self._external_tokens(request, cached, num_computed_tokens), True
         parsed = _parse_request(request, self.manifest)
         if parsed is None:
             return 0, False
@@ -255,7 +255,7 @@ class V5RetrieveTransformScheduler:
             self._claimed.add(request.request_id)
             return 0, False
         self._eligible[request.request_id] = parsed
-        return self._external_tokens(request, parsed, num_computed_tokens), False
+        return self._external_tokens(request, parsed, num_computed_tokens), True
 
     def _external_tokens(
         self,
@@ -343,6 +343,7 @@ class V5RetrieveTransformWorker:
         self.validity = RuntimeBlockValidityTracker()
         self._kv_caches: tuple[Any, ...] = ()
         self._load_complete: set[str] = set()
+        self._finished_recving: set[str] = set()
         self._active_request: tuple[str, str] | None = None
         self._inject_partial_failure = False
         self._partial_failure_count = 0
@@ -462,6 +463,12 @@ class V5RetrieveTransformWorker:
                     "registered_layer_count": len(self._kv_caches),
                 },
             )
+            self._finished_recving.add(item.target_request_id)
+
+    def drain_finished_recving(self) -> set[str]:
+        finished = set(self._finished_recving)
+        self._finished_recving.clear()
+        return finished
 
     def get_block_ids_with_load_errors(self) -> set[int]:
         return self.validity.drain_invalid()
@@ -574,6 +581,11 @@ class V5RetrieveTransformConnector(KVConnectorBase_V1):
 
     def get_block_ids_with_load_errors(self) -> set[int]:
         return self.worker.get_block_ids_with_load_errors() if self.worker is not None else set()
+
+    def get_finished(self, _finished_req_ids: set[str]) -> tuple[set[str] | None, set[str] | None]:
+        if self.worker is None:
+            return set(), set()
+        return set(), self.worker.drain_finished_recving()
 
     def get_num_new_matched_tokens(
         self,

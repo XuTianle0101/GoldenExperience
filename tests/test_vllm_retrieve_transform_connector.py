@@ -129,11 +129,11 @@ def test_scheduler_gates_before_building_exact_paged_metadata() -> None:
     request = _request(manifest, accepted=True, decision="accepted")
 
     matched, asynchronous = scheduler.get_num_new_matched_tokens(request, 0)
-    assert scheduler.get_num_new_matched_tokens(request, 0) == (128, False)
+    assert scheduler.get_num_new_matched_tokens(request, 0) == (128, True)
     scheduler.update_state_after_alloc(request, cast(Any, _Blocks()), matched)
     metadata = scheduler.build_connector_meta(cast(Any, object()))
 
-    assert (matched, asynchronous) == (128, False)
+    assert (matched, asynchronous) == (128, True)
     assert len(metadata.requests) == 1
     load = metadata.requests[0]
     assert load.audit_request_id == "audit-request"
@@ -224,6 +224,7 @@ def _worker(
     worker.validity = RuntimeBlockValidityTracker()
     worker._kv_caches = tuple(torch.zeros(20, 2, 16, 2, 4, dtype=torch.bfloat16) for _ in range(2))
     worker._load_complete = set()
+    worker._finished_recving = set()
     worker._active_request = None
     worker._inject_partial_failure = False
     worker._partial_failure_count = 0
@@ -257,6 +258,8 @@ def test_worker_reports_success_or_invalid_blocks_without_target_puts(success: b
     assert event[2]["load_complete_published"] is success
     assert reader.bound == ["source-store"]
     assert reader.finished == ["source-store"]
+    assert worker.drain_finished_recving() == {"target-request"}
+    assert worker.drain_finished_recving() == set()
     invalid = worker.get_block_ids_with_load_errors()
     assert invalid == (set() if success else set(range(3, 11)))
 
