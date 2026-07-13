@@ -96,6 +96,13 @@ and reduces perplexity drift by 5.32 percentage points. It creates no new valida
 task passes, and every production quality gate remains failed, so the reverse bridge is
 also validation-only and the sealed test remains unopened.
 
+`bidirectional_mixed_refinement_summary_20260713.json` closes this validation phase.
+Greedy match, next-token agreement, and perplexity drift improve in both directions,
+while task score improves only from 8B to 14B and merely holds steady from 14B to 8B.
+Both directions fail seven quality checks. Consequently the sealed test stays closed,
+and chunk batching, batch serialization, further cost optimization, and Mooncake
+physical reclamation remain deferred.
+
 Only a `CachedKVBridgeManifest` whose derived `approved` property is true may be used by
 the runtime materializer. Missing held-out accuracy or Mooncake cost evidence keeps a
 manifest fail closed.

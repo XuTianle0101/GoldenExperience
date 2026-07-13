@@ -1,0 +1,222 @@
+{
+  "automatic_reuse_approved": false,
+  "bidirectional_effect": {
+    "free_running_holdout_selected_step_4_in_both_directions": true,
+    "greedy_continuation_gain_in_both_directions": true,
+    "next_token_agreement_gain_in_both_directions": true,
+    "perplexity_drift_reduction_in_both_directions": true,
+    "task_gain_in_both_directions": false,
+    "task_non_regression_in_both_directions": true
+  },
+  "conclusion": {
+    "reason": "The mixed objective produces paired greedy, next-token, and perplexity improvements in both directions, but the large task gain is forward-only and neither direction passes the validation quality contract.",
+    "selected_as_production_bridge": false,
+    "status": "validation_phase_closed_below_threshold"
+  },
+  "cost_evidence": {
+    "optimization_deferred": true,
+    "prior_8b_to_14b_evidence": {
+      "eligible_for_approval": false,
+      "materialization_to_prefill_ratio": 3.4356863223565846,
+      "max_materialization_to_prefill_ratio": 0.7,
+      "mooncake_physical_storage_reclaimed": false,
+      "p95_mooncake_read_transform_put_ms": 769.0049484372139,
+      "p95_native_prefill_ms": 223.82862586528063,
+      "summary_path": "artifacts/cached_kv/runtime_cost_8b_to_14b_20260713.json"
+    },
+    "reverse_direction_evidence_collected": false
+  },
+  "decisions": {
+    "open_sealed_test": false,
+    "reason": "Both directions fail seven validation quality checks. The sealed test and runtime optimization phase remain gated on all validation thresholds passing.",
+    "start_batch_serialization": false,
+    "start_chunk_batching": false,
+    "start_mooncake_physical_reclamation": false,
+    "start_runtime_cost_optimization": false
+  },
+  "directions": {
+    "14b_to_8b": {
+      "free_running_holdout": {
+        "best_step": 4,
+        "greedy_match_after": 0.8203125,
+        "greedy_match_before": 0.6640625,
+        "prompt_count": 16,
+        "task_score_after": 1.0,
+        "task_score_before": 1.0
+      },
+      "paired_delta_vs_unrefined": {
+        "bridge_perplexity": -3.61032283070233,
+        "bridge_task_score": 0.0,
+        "greedy_continuation_match_rate": 0.1015625,
+        "key_cosine": -6.426125764846802e-8,
+        "next_token_top1_agreement": 0.0087890625,
+        "perplexity_drift_pct": -5.315731707554683,
+        "task_score_drop_pct": 0.0,
+        "value_cosine": -0.000022047199308872223
+      },
+      "post_refinement": {
+        "bridge_perplexity": 91.71076974938445,
+        "bridge_task_score": 0.84375,
+        "greedy_continuation_match_rate": 0.73828125,
+        "key_cosine": 0.9290075469762087,
+        "native_perplexity": 67.91770219650786,
+        "native_task_score": 1.0,
+        "next_token_top1_agreement": 0.751953125,
+        "perplexity_drift_pct": 35.03220336288109,
+        "task_score_drop_pct": 15.625,
+        "value_cosine": 0.7923242133110762
+      },
+      "pre_refinement": {
+        "bridge_perplexity": 95.32109258008678,
+        "bridge_task_score": 0.84375,
+        "greedy_continuation_match_rate": 0.63671875,
+        "key_cosine": 0.9290076112374663,
+        "native_perplexity": 67.91770219650786,
+        "native_task_score": 1.0,
+        "next_token_top1_agreement": 0.7431640625,
+        "perplexity_drift_pct": 40.347935070435774,
+        "task_score_drop_pct": 15.625,
+        "value_cosine": 0.792346260510385
+      },
+      "summary_path": "artifacts/cached_kv/mixed_refinement_14b_to_8b_20260713.json",
+      "validation_gate": {
+        "all_thresholds_passed": false,
+        "failed_checks": {
+          "bridge_task_score": 0.84375,
+          "greedy_continuation_match_rate": 0.73828125,
+          "key_cosine": 0.9290075469762087,
+          "next_token_top1_agreement": 0.751953125,
+          "perplexity_drift_pct": 35.03220336288109,
+          "task_score_drop_pct": 15.625,
+          "value_cosine": 0.7923242133110762
+        },
+        "failed_check_count": 7,
+        "passed_checks": {
+          "native_task_score": 1.0,
+          "prompt_count": 64,
+          "task_prompt_count": 64,
+          "token_buckets": [
+            32,
+            128,
+            512,
+            2048
+          ]
+        }
+      }
+    },
+    "8b_to_14b": {
+      "free_running_holdout": {
+        "best_step": 4,
+        "greedy_match_after": 0.87890625,
+        "greedy_match_before": 0.171875,
+        "prompt_count": 16,
+        "task_score_after": 1.0,
+        "task_score_before": 0.25
+      },
+      "paired_delta_vs_unrefined": {
+        "bridge_perplexity": -0.650821126830877,
+        "bridge_task_score": 0.8125,
+        "greedy_continuation_match_rate": 0.755859375,
+        "key_cosine": -1.0151416063308716e-7,
+        "next_token_top1_agreement": 0.0068359375,
+        "perplexity_drift_pct": -1.9219334438962008,
+        "task_score_drop_pct": -81.25,
+        "value_cosine": -0.00003525242209434509
+      },
+      "post_refinement": {
+        "bridge_perplexity": 41.72323583064613,
+        "bridge_task_score": 0.90625,
+        "greedy_continuation_match_rate": 0.837890625,
+        "key_cosine": 0.931664576753974,
+        "native_perplexity": 33.86283374680835,
+        "native_task_score": 1.0,
+        "next_token_top1_agreement": 0.8232421875,
+        "perplexity_drift_pct": 23.212475785723765,
+        "task_score_drop_pct": 9.375,
+        "value_cosine": 0.7989458534866571
+      },
+      "pre_refinement": {
+        "bridge_perplexity": 42.37405695747701,
+        "bridge_task_score": 0.09375,
+        "greedy_continuation_match_rate": 0.08203125,
+        "key_cosine": 0.9316646782681346,
+        "native_perplexity": 33.86283374680835,
+        "native_task_score": 1.0,
+        "next_token_top1_agreement": 0.81640625,
+        "perplexity_drift_pct": 25.134409229619965,
+        "task_score_drop_pct": 90.625,
+        "value_cosine": 0.7989811059087515
+      },
+      "summary_path": "artifacts/cached_kv/mixed_refinement_8b_to_14b_20260713.json",
+      "validation_gate": {
+        "all_thresholds_passed": false,
+        "failed_checks": {
+          "bridge_task_score": 0.90625,
+          "greedy_continuation_match_rate": 0.837890625,
+          "key_cosine": 0.931664576753974,
+          "next_token_top1_agreement": 0.8232421875,
+          "perplexity_drift_pct": 23.212475785723765,
+          "task_score_drop_pct": 9.375,
+          "value_cosine": 0.7989458534866571
+        },
+        "failed_check_count": 7,
+        "passed_checks": {
+          "native_task_score": 1.0,
+          "prompt_count": 64,
+          "task_prompt_count": 64,
+          "token_buckets": [
+            32,
+            128,
+            512,
+            2048
+          ]
+        }
+      }
+    }
+  },
+  "next_validation_focus": [
+    "Improve the bridge representation itself, especially value mapping, because four logit-refinement steps leave key and value cosine effectively unchanged.",
+    "Treat prompt-tail weight tuning as secondary: the mixed objective's paired next-token gains are only 0.00684 and 0.00879 against gaps larger than 0.15.",
+    "Analyze the remaining 6 forward and 10 reverse validation task failures by domain and token bucket before another full paired run.",
+    "Repeat the complete 64-prompt validation contract after structural changes and open the sealed test only if every threshold passes."
+  ],
+  "quality_thresholds": {
+    "max_materialization_to_prefill_ratio": 0.7,
+    "max_perplexity_drift_pct": 2.0,
+    "max_task_score_drop_pct": 1.0,
+    "min_bridge_task_score": 0.95,
+    "min_greedy_continuation_match_rate": 0.98,
+    "min_held_out_prompts": 32,
+    "min_key_cosine": 0.95,
+    "min_native_task_score": 0.95,
+    "min_next_token_top1_agreement": 0.98,
+    "min_task_prompts": 32,
+    "min_value_cosine": 0.95,
+    "required_token_buckets": [
+      32,
+      128,
+      512,
+      2048
+    ]
+  },
+  "schema_version": "goldenexperience.cached_kv_bidirectional_mixed_summary.v1",
+  "sealed_test_opened": false,
+  "shared_experiment": {
+    "holdout_prompt_count": 16,
+    "learning_rate": 0.000003,
+    "objective": "mixed",
+    "parameter_group": "nonlinear-up-only",
+    "prompt_tail_weight": 0.25,
+    "rank": 512,
+    "seed": 17,
+    "source_window": 3,
+    "steps": 4
+  },
+  "validation_contract": {
+    "evaluated_tokens_per_direction": 1024,
+    "prompt_count_per_direction": 64,
+    "split": "validation",
+    "split_sha256": "fbcb5a68716be8230945d01c503774f5a733b043822d78aaedeac9816a6b0936",
+    "task_prompt_count_per_direction": 64
+  }
+}
