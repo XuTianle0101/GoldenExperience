@@ -4,14 +4,18 @@ from __future__ import annotations
 
 import argparse
 import json
+from dataclasses import asdict
 from pathlib import Path
 
 from goldenexperience.benchmarks.publication import PublicationBenchmarkManifest
 from goldenexperience.size_variant.cached_kv_manifest import model_spec_from_path
 from goldenexperience.size_variant.v5_pipeline import (
+    COLLECTABLE_SPLITS,
     PIPELINE_STAGES,
+    PipelineStageRecord,
     V5DirectionConfig,
     V5PipelineConfig,
+    V5PipelineError,
     V5PipelineWorkspace,
     source_tree_sha256,
 )
@@ -52,6 +56,17 @@ def build_parser() -> argparse.ArgumentParser:
     initialize.add_argument("--repository-root", type=Path, default=Path.cwd())
     status = commands.add_parser("status", help="validate and display workspace state")
     status.add_argument("--workspace", type=Path, required=True)
+    collect = commands.add_parser("collect", help="collect one complete non-sealed split")
+    collect.add_argument("--workspace", type=Path, required=True)
+    collect.add_argument("--direction", choices=tuple(DIRECTION_SIZES), required=True)
+    collect.add_argument("--split", choices=tuple(sorted(COLLECTABLE_SPLITS)), required=True)
+    collect.add_argument("--samples", type=Path, required=True)
+    collect.add_argument("--source-device", default="cuda:0")
+    collect.add_argument("--target-device", default="cuda:1")
+    collect.add_argument("--identity-cache", type=Path)
+    collect.add_argument("--repository-root", type=Path, default=Path.cwd())
+    collect.add_argument("--resume", action="store_true")
+    collect.add_argument("--progress-every", type=int, default=16)
     return parser
 
 
@@ -118,14 +133,63 @@ def status_payload(workspace: V5PipelineWorkspace) -> dict:
     }
 
 
+def collect_split(args: argparse.Namespace) -> PipelineStageRecord:
+    from goldenexperience.size_variant.v5_collect import (
+        RealQwenTraceCollector,
+        run_collect_stage,
+        stderr_progress,
+    )
+
+    workspace = V5PipelineWorkspace.open(args.workspace)
+    if source_tree_sha256(args.repository_root) != workspace.config.code_sha256:
+        raise V5PipelineError("executable source tree differs from the pipeline code hash")
+    direction = workspace.config.direction(args.direction)
+    identity_cache = args.identity_cache
+    if identity_cache is None:
+        identity_cache = workspace.control / "model_identity_cache.json"
+    collector = RealQwenTraceCollector(
+        source_path=direction.source_model_path,
+        target_path=direction.target_model_path,
+        source=direction.source,
+        target=direction.target,
+        source_device=args.source_device,
+        target_device=args.target_device,
+        identity_cache_path=identity_cache,
+    )
+    return run_collect_stage(
+        workspace=workspace,
+        direction=args.direction,
+        split=args.split,
+        sample_store_path=args.samples,
+        collector_parameters=collector.parameters(),
+        collector_factory=lambda: collector,
+        resume=args.resume,
+        progress=stderr_progress(args.progress_every),
+    )
+
+
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    workspace = (
-        initialize_workspace(args)
-        if args.command == "init"
-        else V5PipelineWorkspace.open(args.workspace)
-    )
-    print(json.dumps(status_payload(workspace), indent=2, sort_keys=True))
+    if args.command == "collect":
+        record = collect_split(args)
+        payload = {
+            "direction": record.direction,
+            "stage": record.stage,
+            "status": record.status,
+            "input_sha256": record.input_sha256,
+            "receipt_sha256": record.receipt_sha256,
+            "outputs": {
+                name: asdict(artifact) for name, artifact in (record.outputs or {}).items()
+            },
+        }
+    else:
+        workspace = (
+            initialize_workspace(args)
+            if args.command == "init"
+            else V5PipelineWorkspace.open(args.workspace)
+        )
+        payload = status_payload(workspace)
+    print(json.dumps(payload, indent=2, sort_keys=True))
     return 0
 
 

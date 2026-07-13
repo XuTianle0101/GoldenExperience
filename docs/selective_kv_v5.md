@@ -64,6 +64,9 @@ before decode.
 - `v5_pipeline.py` provides the four-direction immutable config, lock-serialized resumable
   state, stable dependency bindings, and atomic content-addressed object/receipt store. The
   workspace contract is detailed in `docs/v5_pipeline.md`.
+- `v5_collect.py` validates one raw split at a time, runs real source/target prefill, writes
+  bounded safetensors KV/query/attention shards, and resumes from fully verified per-sample
+  checkpoints. Generic collection cannot name or load the semantic sealed split.
 
 Run the implementation smoke independently of every benchmark split:
 

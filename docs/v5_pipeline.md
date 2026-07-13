@@ -23,6 +23,39 @@ The frozen benchmark must have been created with `--tokenizer-model`; file-level
 hashes from older development manifests are intentionally incompatible with pipeline model
 identities.
 
+## Collect A Split
+
+Each non-sealed split has a separate raw JSONL store. This is deliberate: collecting
+`transport_train` cannot even parse validation or calibration content from the same file.
+
+```bash
+golden-v5-pipeline collect \
+  --workspace artifacts/v5_pipeline \
+  --direction qwen3_4b_to_8b \
+  --split transport_train \
+  --samples datasets/publication/transport_train.jsonl
+```
+
+Every JSONL row uses `goldenexperience.publication_raw_sample.v1` and contains
+`sample_id`, `prefix_text`, `suffix_query`, `reference`, `evaluation`, and provenance-only
+`provenance`. The hash-only benchmark record binds prefix text, suffix/query text, task,
+reference, and evaluation settings. The raw-store file hash additionally binds provenance.
+The collector rejects missing, duplicate, foreign-split, hash-mismatched, and sealed rows.
+
+For every request, the real collector runs source and target prefix prefill, converts both
+DynamicCache objects to `[K/V, layer, head, sampled_key, head_dim]`, captures bounded target
+queries, and stores two attention outputs: one recomputed over the exact sampled-key domain
+used by the training loss, and the full native attention output retained as a diagnostic.
+It also records the bounded native-generation and prompt-tail constants without storing raw
+token ids or logits.
+
+Each sample is immediately published as an immutable safetensors object, followed by a
+mutable local checkpoint that binds the stage input and full object stat/hash identity. Use
+`--resume` after an interruption; verified samples are skipped. A completed stage emits one
+content-addressed trace manifest covering exactly the registered split count. `collect`
+offers no `semantic_sealed_test` choice and rechecks the executable source-tree hash before
+loading any model.
+
 Initialization hashes every model shard. The stat-guarded identity cache under
 `.pipeline/model_identity_cache.json` avoids repeating that full pass while the files remain
 unchanged. `--refresh-identity` forces a new full hash pass.
