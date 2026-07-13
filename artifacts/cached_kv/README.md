@@ -45,6 +45,12 @@ The materialization P95 is 3.44x native prefill, versus the 0.70x limit. Mooncak
 leaves unaddressable backing files after API rollback, so the cost evidence is explicitly
 ineligible for approval even though every temporary object key was removed.
 
+`logit_refinement_ab_8b_to_14b_20260713.json` records a rejected first attempt to
+fine-tune all 83,968,000 bridge up-projection and bias parameters through frozen Qwen3-14B
+logits. One 16-prompt pass at learning rate 1e-4 reduces validation task score from
+0.1875 to 0.015625 and greedy continuation match from 0.1572 to 0.0498. The experiment
+remains validation-only and is not selected as the default bridge.
+
 Only a `CachedKVBridgeManifest` whose derived `approved` property is true may be used by
 the runtime materializer. Missing held-out accuracy or Mooncake cost evidence keeps a
 manifest fail closed.
