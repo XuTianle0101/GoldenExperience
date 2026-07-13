@@ -59,6 +59,14 @@ to 13.21%, but remains far below approval thresholds. Because each arm independe
 refit a randomized baseline, the result is screening evidence pending a seeded,
 same-fit pre/post confirmation.
 
+`logit_refinement_paired_confirmation_8b_to_14b_20260713.json` removes that
+confounder with seed 17 and full pre/post validation on one fitted state. Eight
+nonlinear-up-only steps improve task score by 0.0625, greedy continuation match by
+0.0518, and perplexity drift by 11.67 percentage points without materially changing
+KV cosine. All four new task passes are code prompts in the 32/128-token buckets;
+512/2048-token task score and prose/chat task score remain zero. The method is therefore
+confirmed as directionally useful but is not selected as a production bridge.
+
 Only a `CachedKVBridgeManifest` whose derived `approved` property is true may be used by
 the runtime materializer. Missing held-out accuracy or Mooncake cost evidence keeps a
 manifest fail closed.
