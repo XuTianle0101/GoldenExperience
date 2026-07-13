@@ -52,6 +52,7 @@ STAGE_DEPENDENCIES: Mapping[str, tuple[str, ...]] = {
     "fit_risk": ("fit_transport", "collect_selector_train"),
     "calibrate": ("fit_risk", "collect_risk_calibration"),
     "validate": ("calibrate", "collect_validation"),
+    "semantic_sealed": ("validate",),
     "runtime_audit": ("semantic_sealed", "collect_runtime_audit"),
 }
 SCREENING_DIRECTION = "qwen3_4b_to_8b"
@@ -481,6 +482,49 @@ class V5PipelineWorkspace:
         parameters: Mapping[str, Any],
         resume: bool = False,
     ) -> StageLease:
+        return self._begin_stage(
+            direction,
+            stage,
+            parameters=parameters,
+            resume=resume,
+            semantic_guard=None,
+        )
+
+    def begin_semantic_stage(
+        self,
+        direction: str,
+        *,
+        parameters: Mapping[str, Any],
+        open_receipt_sha256: str,
+        snapshot_sha256: str,
+        resume: bool = False,
+    ) -> StageLease:
+        """Lease sealed evaluation only after the immutable one-shot artifacts exist."""
+
+        if not _is_sha256(open_receipt_sha256) or not _is_sha256(snapshot_sha256):
+            raise V5PipelineError("semantic stage guard hashes are invalid")
+        guarded_parameters = {
+            **dict(parameters),
+            "semantic_open_receipt_sha256": open_receipt_sha256,
+            "semantic_snapshot_sha256": snapshot_sha256,
+        }
+        return self._begin_stage(
+            direction,
+            "semantic_sealed",
+            parameters=guarded_parameters,
+            resume=resume,
+            semantic_guard=(open_receipt_sha256, snapshot_sha256),
+        )
+
+    def _begin_stage(
+        self,
+        direction: str,
+        stage: str,
+        *,
+        parameters: Mapping[str, Any],
+        resume: bool,
+        semantic_guard: tuple[str, str] | None,
+    ) -> StageLease:
         self.config.direction(direction)
         if stage not in PIPELINE_STAGES:
             raise V5PipelineError(f"unknown v5 pipeline stage {stage!r}")
@@ -488,12 +532,16 @@ class V5PipelineWorkspace:
             raise V5PipelineError(
                 "transport structure may only be selected on Qwen3 4B-to-8B method dev"
             )
-        if stage == "semantic_sealed":
+        if stage == "semantic_sealed" and semantic_guard is None:
             raise V5PipelineError(
                 "semantic sealed access requires the explicit four-direction validation guard"
             )
+        if stage != "semantic_sealed" and semantic_guard is not None:
+            raise V5PipelineError("semantic stage guard cannot authorize another stage")
         _canonical_json_bytes(parameters)
         with self._locked():
+            if semantic_guard is not None:
+                self._verify_semantic_stage_guard(*semantic_guard)
             state = self._load_state()
             dependencies: dict[str, str] = {}
             for dependency in STAGE_DEPENDENCIES.get(stage, ()):
@@ -579,6 +627,96 @@ class V5PipelineWorkspace:
             stages[key] = record
             self._write_state(replace(state, stages=stages, updated_at=now))
             return StageLease(direction, stage, input_sha256, attempt_id)
+
+    def _verify_semantic_stage_guard(
+        self,
+        open_receipt_sha256: str,
+        snapshot_sha256: str,
+    ) -> None:
+        if snapshot_sha256 != self.config.sealed_payload_sha256:
+            raise V5PipelineError("semantic stage snapshot differs from the frozen payload")
+        receipt_path = self.control / "semantic_sealed_open_receipt.json"
+        snapshot_relative = f".pipeline/semantic_sealed/{self.config.sealed_payload_sha256}.jsonl"
+        snapshot_path = self.root / snapshot_relative
+        guarded_paths = (self.sealed_open_path, receipt_path, snapshot_path)
+        try:
+            if any(path.is_symlink() for path in guarded_paths):
+                raise V5PipelineError("semantic stage guard artifacts cannot be symbolic links")
+            before = tuple(_stat_signature(path) for path in guarded_paths)
+            if any(path.stat().st_mode & 0o222 for path in guarded_paths):
+                raise V5PipelineError("semantic stage guard artifacts must remain read-only")
+            marker = json.loads(self.sealed_open_path.read_text(encoding="utf-8"))
+            receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+            if not isinstance(marker, dict) or not isinstance(receipt, dict):
+                raise V5PipelineError("semantic stage guard metadata must be JSON objects")
+            receipt_content_sha256 = _sha256_bytes(_canonical_json_bytes(receipt))
+            observed_snapshot_sha256 = sha256_file(snapshot_path)
+            after = tuple(_stat_signature(path) for path in guarded_paths)
+        except V5PipelineError:
+            raise
+        except (KeyError, OSError, TypeError, ValueError, json.JSONDecodeError) as exc:
+            raise V5PipelineError("semantic stage guard artifacts are unavailable") from exc
+        if before != after:
+            raise V5PipelineError("semantic stage guard artifacts changed while reading")
+        expected_marker = {
+            "schema_version": "goldenexperience.semantic_sealed_open.v1",
+            "state": "opened",
+            "payload_sha256": self.config.sealed_payload_sha256,
+            "validation_receipt_sha256": receipt.get("validation_gate_receipt_sha256"),
+            "pipeline_id": self.config.pipeline_id,
+            "code_sha256": self.config.code_sha256,
+            "semantic_split_sha256": self.config.split_sha256["semantic_sealed_test"],
+            "snapshot_path": snapshot_relative,
+            "open_receipt_sha256": open_receipt_sha256,
+        }
+        if marker != expected_marker:
+            raise V5PipelineError("semantic stage opened marker binding changed")
+        expected_receipt = {
+            "schema_version": "goldenexperience.v5_semantic_open_receipt.v1",
+            "pipeline_id": self.config.pipeline_id,
+            "benchmark_manifest_sha256": self.config.benchmark_manifest_sha256,
+            "validation_split_sha256": self.config.split_sha256["validation"],
+            "semantic_split_sha256": self.config.split_sha256["semantic_sealed_test"],
+            "sealed_payload_sha256": self.config.sealed_payload_sha256,
+            "code_sha256": self.config.code_sha256,
+            "snapshot_path": snapshot_relative,
+            "opened_once": True,
+        }
+        if any(receipt.get(name) != value for name, value in expected_receipt.items()):
+            raise V5PipelineError("semantic stage open receipt binding changed")
+        raw_directions = receipt.get("directions")
+        if (
+            not isinstance(raw_directions, list)
+            or len(raw_directions) != len(REQUIRED_QWEN3_DIRECTIONS)
+            or {item.get("direction") for item in raw_directions if isinstance(item, dict)}
+            != REQUIRED_QWEN3_DIRECTIONS
+            or any(
+                not isinstance(item, dict)
+                or item.get("passed") is not True
+                or item.get("code_sha256") != self.config.code_sha256
+                or not str(item.get("selective_artifact_id", "")).startswith("selective-kv-")
+                or any(
+                    not _is_sha256(item.get(name))
+                    for name in (
+                        "validation_manifest_sha256",
+                        "validation_report_sha256",
+                        "risk_calibration_manifest_sha256",
+                        "transport_weights_sha256",
+                        "predictor_sha256",
+                        "threshold_sha256",
+                    )
+                )
+                or not _valid_semantic_threshold(item)
+                for item in raw_directions
+            )
+        ):
+            raise V5PipelineError("semantic stage requires four passing direction bindings")
+        if not _is_sha256(receipt.get("validation_gate_receipt_sha256")):
+            raise V5PipelineError("semantic stage validation gate receipt hash is invalid")
+        if receipt_content_sha256 != open_receipt_sha256:
+            raise V5PipelineError("semantic stage open receipt checksum changed")
+        if observed_snapshot_sha256 != snapshot_sha256:
+            raise V5PipelineError("semantic stage snapshot checksum changed")
 
     def complete_stage(
         self,
@@ -943,6 +1081,31 @@ def _fsync_directory(directory: Path) -> None:
         os.fsync(descriptor)
     finally:
         os.close(descriptor)
+
+
+def _stat_signature(path: Path) -> tuple[int, int, int, int, int]:
+    stat = path.stat()
+    return (stat.st_dev, stat.st_ino, stat.st_size, stat.st_mtime_ns, stat.st_ctime_ns)
+
+
+def _valid_semantic_threshold(item: Mapping[str, Any]) -> bool:
+    threshold = item.get("threshold")
+    if (
+        isinstance(threshold, bool)
+        or not isinstance(threshold, (int, float))
+        or not 0 <= threshold <= 1
+    ):
+        return False
+    expected = _sha256_bytes(
+        _canonical_json_bytes(
+            {
+                "direction": item.get("direction"),
+                "threshold": threshold,
+                "risk_calibration_manifest_sha256": item.get("risk_calibration_manifest_sha256"),
+            }
+        )
+    )
+    return item.get("threshold_sha256") == expected
 
 
 def _sha256_bytes(payload: bytes) -> str:

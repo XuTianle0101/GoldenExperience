@@ -37,6 +37,7 @@ from goldenexperience.size_variant.v5_real_method_dev import greedy_decode, teac
 from goldenexperience.size_variant.v5_risk import (
     RISK_LABEL_GENERATION_TOKENS,
     RiskHistory,
+    RiskPrefixTokenBinding,
     RiskTrainingExample,
 )
 
@@ -151,7 +152,7 @@ class RealQwenRiskExampleEvaluator:
     def evaluate(
         self,
         benchmark_record: GroupedPrefixRecord,
-        trace_record: TraceRecord,
+        trace_record: TraceRecord | RiskPrefixTokenBinding,
         sample: RawBenchmarkSample,
         history: RiskHistory,
     ) -> RiskTrainingExample:
@@ -306,6 +307,33 @@ class RealQwenRiskExampleEvaluator:
         )
         del source_kv, target_kv, transformed
         return example
+
+    def bind_semantic_prefix(
+        self,
+        benchmark_record: GroupedPrefixRecord,
+        sample: RawBenchmarkSample,
+    ) -> RiskPrefixTokenBinding:
+        """Tokenize one sealed prefix without inventing a collection trace shard."""
+
+        if self.tokenizer is None:
+            raise V5PipelineError("real risk evaluator tokenizer is not loaded")
+        prefix = self.tokenizer(
+            sample.prefix_text,
+            add_special_tokens=False,
+            return_tensors="pt",
+        ).input_ids[0]
+        if prefix.numel() < benchmark_record.token_bucket:
+            raise V5PipelineError("semantic sample has fewer prefix tokens than registered")
+        prefix = prefix[: benchmark_record.token_bucket].long()
+        binding = RiskPrefixTokenBinding(
+            sample_id=benchmark_record.sample_id,
+            token_count=benchmark_record.token_bucket,
+            token_ids_sha256=token_ids_sha256(prefix.tolist()),
+        )
+        errors = binding.validate(benchmark_record)
+        if errors:
+            raise V5PipelineError("; ".join(errors))
+        return binding
 
 
 def _torch_dtype(name: str) -> Any:

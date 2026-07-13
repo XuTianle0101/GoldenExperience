@@ -52,6 +52,7 @@ from goldenexperience.size_variant.v5_risk import (
     RISK_LABEL_GENERATION_TOKENS,
     RiskExampleEvaluator,
     RiskHistory,
+    RiskPrefixTokenBinding,
     RiskTrainingExample,
     V5RiskFitManifest,
     load_completed_risk_fit,
@@ -77,7 +78,7 @@ class RiskCalibrationMeasurement:
         *,
         predictor: RiskPredictor,
         benchmark_record: GroupedPrefixRecord | None = None,
-        trace_record: TraceRecord | None = None,
+        trace_record: TraceRecord | RiskPrefixTokenBinding | None = None,
         expected_history: RiskHistory | None = None,
     ) -> list[str]:
         errors = self.example.validate(

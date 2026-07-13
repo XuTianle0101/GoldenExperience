@@ -61,6 +61,25 @@ RISK_LABEL_GENERATION_TOKENS = 16
 
 
 @dataclass(frozen=True)
+class RiskPrefixTokenBinding:
+    """Minimal prefix identity required by risk evaluation without a trace shard."""
+
+    sample_id: str
+    token_count: int
+    token_ids_sha256: str
+
+    def validate(self, record: GroupedPrefixRecord) -> list[str]:
+        errors: list[str] = []
+        if self.sample_id != record.sample_id:
+            errors.append("risk prefix binding sample identity changed")
+        if type(self.token_count) is not int or self.token_count != record.token_bucket:
+            errors.append("risk prefix binding token count changed")
+        if not _is_sha256(self.token_ids_sha256):
+            errors.append("risk prefix binding token hash is invalid")
+        return errors
+
+
+@dataclass(frozen=True)
 class RiskTrainingParameters:
     seed: int = 17
     epochs: int = 200
@@ -189,7 +208,7 @@ class RiskTrainingExample:
         self,
         *,
         benchmark_record: GroupedPrefixRecord | None = None,
-        trace_record: TraceRecord | None = None,
+        trace_record: TraceRecord | RiskPrefixTokenBinding | None = None,
         expected_history: RiskHistory | None = None,
     ) -> list[str]:
         errors: list[str] = []
@@ -306,7 +325,7 @@ class RiskExampleEvaluator(Protocol):
     def evaluate(
         self,
         benchmark_record: GroupedPrefixRecord,
-        trace_record: TraceRecord,
+        trace_record: TraceRecord | RiskPrefixTokenBinding,
         sample: RawBenchmarkSample,
         history: RiskHistory,
     ) -> RiskTrainingExample: ...

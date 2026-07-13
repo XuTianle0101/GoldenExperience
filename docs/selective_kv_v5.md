@@ -77,6 +77,11 @@ before decode.
 - `v5_directional_fit.py` consumes that global receipt to train exactly one selected-rank,
   seed-17 deployment transport for each remaining Qwen3 direction; the workspace also binds
   this cross-direction dependency before a fit lease can be issued.
+- `v5_sealed.py` performs the global one-shot transition only after replaying all four passing
+  validations and publishes the immutable, content-addressed sealed snapshot and open receipt.
+- `v5_semantic.py` evaluates that snapshot independently for each direction, resumes from
+  token-identity-bound checkpoints, replays every probability/history/decision/aggregate on
+  load, and grants only `semantic_approved` authority.
 
 Run the implementation smoke independently of every benchmark split:
 
@@ -137,6 +142,15 @@ reading, checks the configured payload hash and every hash-only sample binding, 
 one immutable snapshot and a receipt binding all direction-specific transport, predictor, and
 threshold identities. A failed opening cannot be retried; successful opening permits only the
 frozen semantic evaluation, not production reuse.
+
+Each direction then consumes only that immutable snapshot through a dedicated guarded stage.
+The sealed split has no fabricated trace artifact: its exact tokenizer-derived prefix identity
+is represented by only sample id, registered token count, and token-id hash. Semantic evaluation
+uses the validation gate order and reports the accepted subset plus all five selectors. Loading
+the result independently recomputes token hashes, probabilities, causal histories, decisions,
+quality, and baselines. Passing creates `SemanticSealedEvidence` and a `semantic_approved`
+manifest, while runtime cost/direct-injection fields remain absent and automatic reuse remains
+forbidden.
 
 At runtime, a missing/corrupt sidecar, unseen prefix, insufficient shadow history, OOD score,
 model/tokenizer/transport identity change, predictor failure, or score above threshold falls

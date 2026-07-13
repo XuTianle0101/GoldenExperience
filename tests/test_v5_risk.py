@@ -663,3 +663,43 @@ def test_real_risk_evaluator_fails_before_use_when_unloaded() -> None:
     sample = RawBenchmarkSample("sample", "prefix", "suffix", "answer", {}, {})
     with pytest.raises(V5PipelineError, match="not loaded"):
         evaluator.evaluate(cast(Any, record), cast(Any, record), sample, RiskHistory())
+    with pytest.raises(V5PipelineError, match="tokenizer is not loaded"):
+        evaluator.bind_semantic_prefix(cast(Any, record), sample)
+
+
+def test_real_risk_evaluator_builds_minimal_semantic_prefix_binding() -> None:
+    evaluator = RealQwenRiskExampleEvaluator(
+        workspace=cast(V5PipelineWorkspace, object()),
+        transport_manifest=cast(Any, SimpleNamespace()),
+        candidate=_candidate(),
+        source_path="/tmp/source",
+        target_path="/tmp/target",
+        source_device="cpu",
+        target_device="cpu",
+        identity_cache_path=None,
+    )
+
+    class FakeTokenizer:
+        def __call__(self, _text: str, **_kwargs: Any) -> Any:
+            return SimpleNamespace(input_ids=torch.tensor([[1, 2, 3]]))
+
+    evaluator.tokenizer = FakeTokenizer()
+    record = GroupedPrefixRecord(
+        sample_id="semantic-sample",
+        split="semantic_sealed_test",
+        dataset_id="gsm8k",
+        prefix_group_id="group",
+        prefix_sha256=_digest("prefix"),
+        suffix_query_sha256=_digest("suffix"),
+        content_sha256=_digest("content"),
+        token_bucket=2,
+        task="qa",
+    )
+    sample = RawBenchmarkSample("semantic-sample", "prefix", "suffix", "answer", {}, {})
+
+    binding = evaluator.bind_semantic_prefix(record, sample)
+
+    assert binding.sample_id == record.sample_id
+    assert binding.token_count == 2
+    assert binding.token_ids_sha256 == token_ids_sha256([1, 2])
+    assert binding.validate(record) == []

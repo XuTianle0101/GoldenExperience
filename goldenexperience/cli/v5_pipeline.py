@@ -139,6 +139,18 @@ def build_parser() -> argparse.ArgumentParser:
     open_sealed.add_argument("--workspace", type=Path, required=True)
     open_sealed.add_argument("--payload", type=Path, required=True)
     open_sealed.add_argument("--repository-root", type=Path, default=Path.cwd())
+    semantic = commands.add_parser(
+        "evaluate-semantic",
+        help="evaluate one direction on the immutable one-shot semantic snapshot",
+    )
+    semantic.add_argument("--workspace", type=Path, required=True)
+    semantic.add_argument("--direction", choices=tuple(DIRECTION_SIZES), required=True)
+    semantic.add_argument("--source-device", default="cuda:0")
+    semantic.add_argument("--target-device", default="cuda:1")
+    semantic.add_argument("--identity-cache", type=Path)
+    semantic.add_argument("--repository-root", type=Path, default=Path.cwd())
+    semantic.add_argument("--resume", action="store_true")
+    semantic.add_argument("--progress-every", type=int, default=1)
     return parser
 
 
@@ -476,6 +488,45 @@ def open_semantic_sealed(args: argparse.Namespace) -> dict[str, Any]:
     }
 
 
+def evaluate_semantic(args: argparse.Namespace) -> PipelineStageRecord:
+    from goldenexperience.size_variant.v5_real_risk import RealQwenRiskExampleEvaluator
+    from goldenexperience.size_variant.v5_risk import load_completed_risk_fit
+    from goldenexperience.size_variant.v5_semantic import (
+        run_semantic_stage,
+        stderr_semantic_progress,
+    )
+
+    workspace = V5PipelineWorkspace.open(args.workspace)
+    if source_tree_sha256(args.repository_root) != workspace.config.code_sha256:
+        raise V5PipelineError("executable source tree differs from the pipeline code hash")
+    direction = workspace.config.direction(args.direction)
+    _, _, transport_manifest, candidate = load_completed_risk_fit(
+        workspace,
+        args.direction,
+    )
+    identity_cache = args.identity_cache
+    if identity_cache is None:
+        identity_cache = workspace.control / "model_identity_cache.json"
+    evaluator = RealQwenRiskExampleEvaluator(
+        workspace=workspace,
+        transport_manifest=transport_manifest,
+        candidate=candidate,
+        source_path=direction.source_model_path,
+        target_path=direction.target_model_path,
+        source_device=args.source_device,
+        target_device=args.target_device,
+        identity_cache_path=identity_cache,
+    )
+    return run_semantic_stage(
+        workspace=workspace,
+        direction=args.direction,
+        evaluator_parameters=evaluator.parameters(),
+        evaluator_factory=lambda: evaluator,
+        resume=args.resume,
+        progress=stderr_semantic_progress(args.progress_every),
+    )
+
+
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     if args.command == "open-semantic-sealed":
@@ -488,6 +539,7 @@ def main(argv: list[str] | None = None) -> int:
         "fit-risk": fit_risk,
         "calibrate": calibrate_risk,
         "validate": validate_direction,
+        "evaluate-semantic": evaluate_semantic,
     }
     if args.command in stage_commands:
         record = stage_commands[args.command](args)

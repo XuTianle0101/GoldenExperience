@@ -338,6 +338,48 @@ snapshot makes the subsequent four-direction semantic evaluation resumable witho
 read of the original sealed payload. `status` reports `locked`, `opening`, `opened`, or
 `failed`; an opened snapshot still grants no runtime authority.
 
+## Evaluate The Guarded Snapshot
+
+Evaluate each direction independently after the one-shot opener succeeds:
+
+```bash
+golden-v5-pipeline evaluate-semantic \
+  --workspace artifacts/v5_pipeline \
+  --direction qwen3_8b_to_14b \
+  --source-device cuda:0 \
+  --target-device cuda:1
+```
+
+This command accepts neither a payload/snapshot path nor a quality, threshold, predictor, or
+coverage override. It resolves only the content-addressed read-only snapshot named by the
+open receipt. The generic `begin_stage` API continues to reject `semantic_sealed`; a dedicated
+lease is issued only after the opened marker, open receipt, and snapshot are all read-only,
+stat-stable, mutually bound, and checksum-valid. The receipt must contain exactly four passing
+direction bindings. A direction's completed validation receipt is also a normal stage
+dependency, so an opened global marker cannot substitute for that direction's evidence.
+
+The sealed split intentionally has no collection trace. For each row, the evaluator derives a
+minimal `(sample_id, token_count, token_ids_sha256)` prefix binding with the frozen tokenizer;
+it does not fabricate attention shards or collection metadata. Prefixes are processed in the
+same lexicographic sample-id order as validation, with histories reset for the sealed split.
+Admission applies the same fixed sequence: insufficient shadow history, source OOD, then the
+calibrated predictor threshold. CPU predictor execution and 16-token target-derived labels are
+unchanged.
+
+Per-row checkpoints bind the dedicated stage input, sealed content hash, token identity,
+causal history, source features, target-derived label hashes, predictor probability, and exact
+admission reason. `--resume` revalidates each checkpoint and never reopens the original sealed
+file. It is a recovery path for the immutable snapshot, not a second statistical attempt: stage
+parameters cannot change, and a deterministic quality failure remains failed.
+
+The detailed report contains all 2,048 measurements, accepted-subset quality, and the same five
+selector baselines used in validation. Loading a completed result independently re-hashes the
+snapshot, verifies tokenizer semantics, recomputes every prefix token hash and predictor score,
+reconstructs causal histories and gate decisions, then recomputes quality and baselines. Only a
+fully passing report produces a new content-addressed `SelectiveKVBridgeManifest` in
+`semantic_approved` state with `SemanticSealedEvidence`. That state explicitly carries no
+runtime-cost or direct-injection evidence and cannot authorize automatic reuse.
+
 ## Stage Graph
 
 ```text
@@ -350,8 +392,9 @@ collect_selector_train -> fit_risk -----------------+                         |
 collect_risk_calibration ---------------------------+
 collect_validation -----------------------------------------------------------+
 
-all four validate -> one-shot semantic_sealed
-semantic_sealed + collect_runtime_audit -> runtime_audit
+all four validate -> one-shot open
+one-shot open + each direction validate -> each direction semantic_sealed
+each direction semantic_sealed + collect_runtime_audit -> each direction runtime_audit
 ```
 
 Collection of `semantic_sealed_test` is not a normal stage. The other six public split
@@ -366,6 +409,9 @@ workspace/
     state.json                        lock-serialized mutable state
     state.lock
     semantic_sealed.locked.json       immutable until guarded one-shot access
+    semantic_sealed.opened.json       immutable one-shot terminal marker
+    semantic_sealed_open_receipt.json immutable four-direction binding
+    semantic_sealed/<payload>.jsonl   immutable guarded snapshot
     work/<direction>/fit_transport/   resumable, non-authoritative checkpoints
   objects/<sha256-prefix>/<sha256>.*  immutable content-addressed outputs
   receipts/<direction>/<stage>/<sha256>.json

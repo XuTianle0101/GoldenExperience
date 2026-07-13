@@ -68,6 +68,7 @@ from goldenexperience.size_variant.v5_risk import (
     RISK_LABEL_GENERATION_TOKENS,
     RiskExampleEvaluator,
     RiskHistory,
+    RiskPrefixTokenBinding,
     RiskTrainingExample,
     V5RiskFitManifest,
     load_risk_predictor,
@@ -107,7 +108,7 @@ class RiskValidationMeasurement:
         predictor: RiskPredictor,
         risk_gate: Any,
         benchmark_record: GroupedPrefixRecord | None = None,
-        trace_record: TraceRecord | None = None,
+        trace_record: TraceRecord | RiskPrefixTokenBinding | None = None,
         expected_history: RiskHistory | None = None,
     ) -> list[str]:
         calibration = RiskCalibrationMeasurement(self.example, self.unsafe_probability)
@@ -571,9 +572,13 @@ def aggregate_accepted_quality(
     measurements: Sequence[RiskValidationMeasurement],
     *,
     dataset_sha256: str,
+    expected_count: int | None = None,
 ) -> AcceptedSubsetQualityEvidence:
-    if len(measurements) != SPLIT_COUNTS["validation"]:
-        raise V5PipelineError("validation quality requires the complete registered split")
+    required_count = SPLIT_COUNTS["validation"] if expected_count is None else expected_count
+    if type(required_count) is not int or required_count <= 0:
+        raise V5PipelineError("quality aggregate expected count is invalid")
+    if len(measurements) != required_count:
+        raise V5PipelineError("quality aggregate requires the complete registered split")
     accepted = [item for item in measurements if item.accepted]
     if not accepted:
         raise V5PipelineError("validation calibrated selector accepted no samples")

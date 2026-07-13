@@ -358,6 +358,8 @@ class SemanticSealedEvidence:
         risk_gate: RiskGateSpec,
         thresholds: SelectiveQualityThresholds,
     ) -> list[str]:
+        from goldenexperience.benchmarks.publication import SPLIT_COUNTS
+
         errors: list[str] = []
         for name in ("dataset_sha256", "report_sha256", "code_sha256"):
             if not _is_sha256(getattr(self, name)):
@@ -366,9 +368,10 @@ class SemanticSealedEvidence:
             errors.append("semantic sealed evidence refers to the wrong dataset")
         if self.quality.evaluation_dataset_sha256 != self.dataset_sha256:
             errors.append("semantic sealed quality refers to the wrong dataset")
-        if self.sample_count != 2048:
+        expected_count = SPLIT_COUNTS["semantic_sealed_test"]
+        if self.sample_count != expected_count:
             errors.append("semantic sealed sample count must be 2048")
-        if self.quality.total_count != 2048:
+        if self.quality.total_count != expected_count:
             errors.append("semantic sealed quality must contain 2048 samples")
         if self.transport_weights_sha256 != transport.weights_sha256:
             errors.append("semantic sealed transport hash changed")

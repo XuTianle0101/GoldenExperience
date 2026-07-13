@@ -2,6 +2,7 @@ import hashlib
 import json
 import os
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -15,6 +16,10 @@ from goldenexperience.size_variant.v5_pipeline import (
     V5PipelineError,
     V5PipelineWorkspace,
     source_tree_sha256,
+)
+from goldenexperience.size_variant.v5_sealed import (
+    V5SealedDirectionBinding,
+    V5SemanticOpenReceipt,
 )
 
 
@@ -311,6 +316,119 @@ def test_pipeline_keeps_sealed_stage_outside_generic_resume_path(tmp_path: Path)
             "semantic_sealed",
             parameters={},
         )
+
+
+def test_pipeline_semantic_lease_requires_guard_and_unlocks_runtime_dependency(
+    tmp_path: Path,
+) -> None:
+    payload = b'{"sealed":true}\n'
+    config = replace(_config(tmp_path), sealed_payload_sha256=hashlib.sha256(payload).hexdigest())
+    workspace = V5PipelineWorkspace.create(tmp_path / "workspace", config)
+    direction = "qwen3_4b_to_8b"
+    output = tmp_path / "output.json"
+    output.write_text("{}\n", encoding="utf-8")
+
+    def complete(stage: str) -> None:
+        lease = workspace.begin_stage(direction, stage, parameters={"test": stage})
+        workspace.complete_stage(lease, outputs={"output": output}, metadata={})
+
+    for stage in (
+        "collect_transport_train",
+        "fit_transport",
+        "collect_method_dev",
+        "evaluate_method_dev",
+        "collect_selector_train",
+        "fit_risk",
+        "collect_risk_calibration",
+        "calibrate",
+        "collect_validation",
+        "validate",
+    ):
+        complete(stage)
+
+    bindings = []
+    for item_direction in sorted(item.direction for item in workspace.config.directions):
+        calibration_sha = _digest(f"{item_direction}-calibration")
+        threshold_payload = {
+            "direction": item_direction,
+            "threshold": 0.2,
+            "risk_calibration_manifest_sha256": calibration_sha,
+        }
+        threshold_sha = hashlib.sha256(
+            (json.dumps(threshold_payload, sort_keys=True, separators=(",", ":")) + "\n").encode()
+        ).hexdigest()
+        bindings.append(
+            V5SealedDirectionBinding(
+                direction=item_direction,
+                validation_manifest_sha256=_digest(f"{item_direction}-validation"),
+                validation_report_sha256=_digest(f"{item_direction}-report"),
+                risk_calibration_manifest_sha256=calibration_sha,
+                selective_artifact_id=f"selective-kv-{_digest(item_direction)[:24]}",
+                code_sha256=workspace.config.code_sha256,
+                transport_weights_sha256=_digest(f"{item_direction}-transport"),
+                predictor_sha256=_digest(f"{item_direction}-predictor"),
+                threshold=0.2,
+                threshold_sha256=threshold_sha,
+                passed=True,
+            )
+        )
+    snapshot_relative = f".pipeline/semantic_sealed/{workspace.config.sealed_payload_sha256}.jsonl"
+    receipt = V5SemanticOpenReceipt(
+        pipeline_id=workspace.config.pipeline_id,
+        benchmark_manifest_sha256=workspace.config.benchmark_manifest_sha256,
+        validation_split_sha256=workspace.config.split_sha256["validation"],
+        semantic_split_sha256=workspace.config.split_sha256["semantic_sealed_test"],
+        sealed_payload_sha256=workspace.config.sealed_payload_sha256,
+        code_sha256=workspace.config.code_sha256,
+        validation_gate_receipt_sha256=_digest("validation-gate"),
+        snapshot_path=snapshot_relative,
+        directions=tuple(bindings),
+    )
+    receipt_path = workspace.control / "semantic_sealed_open_receipt.json"
+    receipt_path.write_text(json.dumps(receipt.to_dict(), sort_keys=True) + "\n", encoding="utf-8")
+    snapshot_path = workspace.root / snapshot_relative
+    snapshot_path.parent.mkdir(parents=True)
+    snapshot_path.write_bytes(payload)
+    marker = {
+        "schema_version": "goldenexperience.semantic_sealed_open.v1",
+        "state": "opened",
+        "payload_sha256": workspace.config.sealed_payload_sha256,
+        "validation_receipt_sha256": receipt.validation_gate_receipt_sha256,
+        "pipeline_id": workspace.config.pipeline_id,
+        "code_sha256": workspace.config.code_sha256,
+        "semantic_split_sha256": workspace.config.split_sha256["semantic_sealed_test"],
+        "snapshot_path": snapshot_relative,
+        "open_receipt_sha256": receipt.content_sha256(),
+    }
+    workspace.sealed_open_path.write_text(
+        json.dumps(marker, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    for path in (receipt_path, snapshot_path, workspace.sealed_open_path):
+        os.chmod(path, 0o444)
+
+    with pytest.raises(V5PipelineError, match="opened marker binding changed"):
+        workspace.begin_semantic_stage(
+            direction,
+            parameters={"evaluator": "frozen"},
+            open_receipt_sha256=_digest("wrong-receipt"),
+            snapshot_sha256=workspace.config.sealed_payload_sha256,
+        )
+    semantic = workspace.begin_semantic_stage(
+        direction,
+        parameters={"evaluator": "frozen"},
+        open_receipt_sha256=receipt.content_sha256(),
+        snapshot_sha256=workspace.config.sealed_payload_sha256,
+    )
+    completed = workspace.complete_stage(
+        semantic,
+        outputs={"semantic_report": output},
+        metadata={"authority": "semantic_approved", "runtime_authority": False},
+    )
+    assert completed.status == "completed"
+    complete("collect_runtime_audit")
+    runtime = workspace.begin_stage(direction, "runtime_audit", parameters={"requests": 512})
+    assert runtime.reused is False
 
 
 def test_pipeline_detects_external_manifest_and_artifact_tampering(tmp_path: Path) -> None:
