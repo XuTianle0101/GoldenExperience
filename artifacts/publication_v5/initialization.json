@@ -6,10 +6,10 @@
     "uri": "artifacts/cache/publication_benchmark_v5_bound/benchmark_manifest.json"
   },
   "code": {
-    "git_commit": "4877b669fb55b9744320956b332f07822789fa59",
-    "source_tree_sha256": "74cd65747cd1475e035e7c4f5ec2b93e7be8b7f848fa6a71bb3383796c656fba"
+    "git_commit": "8a55c448d5030b9eeefc680f21eacb79404dbdfb",
+    "source_tree_sha256": "0424fadb7ab7a036028783f69a5cc46949f379bd789da4a4830b4316b836d24c"
   },
-  "created_at": "2026-07-13T21:11:08.451439+00:00",
+  "created_at": "2026-07-13T21:47:35.115550+00:00",
   "directions": [
     "qwen3_14b_to_8b",
     "qwen3_4b_to_8b",
@@ -40,10 +40,10 @@
     }
   },
   "pipeline": {
-    "config_sha256": "eff0cb60853510aaef0a5bfa053e9535441d9ea6f88a59240df8be168f8d8412",
-    "pipeline_id": "v5-pipeline-0bad77b520fc9088e22c1940",
+    "config_sha256": "cbff1e15feed7ae8fc2fdaab5f9d46f6b46387064cc25f88b387fc8aa5802346",
+    "pipeline_id": "v5-pipeline-fcc72c17609ebfb1c14e33c1",
     "semantic_sealed_state": "locked",
-    "workspace_uri": "artifacts/cache/publication_v5_workspace"
+    "workspace_uri": "artifacts/cache/publication_v5_workspace_v2"
   },
   "raw_inputs": {
     "method_dev": {
