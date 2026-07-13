@@ -89,10 +89,31 @@ class HeadAwareKVTransport:
     ) -> HeadAwareKVTransport:
         """Load v5 weights, requiring final approval except in explicit offline mode."""
 
+        path = Path(manifest_path).resolve()
+        manifest = SelectiveKVBridgeManifest.load(path)
+        return cls.from_manifest(
+            manifest,
+            path,
+            device=device,
+            compute_dtype=compute_dtype,
+            offline=offline,
+        )
+
+    @classmethod
+    def from_manifest(
+        cls,
+        manifest: SelectiveKVBridgeManifest,
+        manifest_path: str | Path,
+        *,
+        device: str = "cpu",
+        compute_dtype: Any | None = None,
+        offline: bool = False,
+    ) -> HeadAwareKVTransport:
+        """Load transport tensors bound to one already-validated manifest snapshot."""
+
         from safetensors import safe_open
 
         path = Path(manifest_path).resolve()
-        manifest = SelectiveKVBridgeManifest.load(path)
         errors = manifest.artifact_errors() if offline else manifest.validate()
         if not offline and manifest.state is not ArtifactState.APPROVED:
             errors.append("v5 artifact is not approved for runtime reuse")

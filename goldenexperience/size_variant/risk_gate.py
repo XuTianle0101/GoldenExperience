@@ -641,6 +641,8 @@ class RiskPredictor:
                 raise RiskGateError("risk predictor metadata is invalid")
             for name in handle.keys():  # noqa: SIM118
                 tensors[name] = handle.get_tensor(name)
+        if sha256_file(artifact) != expected_sha256:
+            raise RiskGateError("risk predictor changed while loading")
         return cls(tensors, device=device)
 
 

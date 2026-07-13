@@ -184,7 +184,11 @@ class DirectPagedKVInjector:
             errors.append("running tokenizer hash differs from the v5 artifact")
         if errors:
             raise DirectInjectionError("; ".join(errors))
-        transport = HeadAwareKVTransport.from_artifact(manifest_path, device=device)
+        transport = HeadAwareKVTransport.from_manifest(
+            manifest,
+            manifest_path,
+            device=device,
+        )
         predictor = RiskPredictor.from_artifact(
             manifest.resolve_predictor_path(manifest_path),
             expected_sha256=manifest.risk_gate.predictor_sha256,

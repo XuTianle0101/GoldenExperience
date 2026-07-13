@@ -57,9 +57,11 @@ from goldenexperience.size_variant.head_aware_transport import (
     initialize_head_aware_state,
     sample_attention_positions,
     select_transport_candidate,
+    transport_safetensors_metadata,
 )
 from goldenexperience.size_variant.risk_gate import (
     RISK_CALIBRATION_METHOD,
+    RISK_FEATURE_SCHEMA_VERSION,
     CalibratedRiskGate,
     RiskCalibrationExample,
     RiskGateError,
@@ -424,6 +426,62 @@ def test_trainable_transport_exports_the_exact_runtime_tensor_contract() -> None
     assert any(parameter.grad is not None for parameter in module.parameters())
     assert bool((module.key_normalizer_scale > 0).all())
     assert runtime.transform(source_kv).shape == native.shape
+
+
+def test_transport_loads_from_one_manifest_snapshot(tmp_path: Path, monkeypatch) -> None:
+    manifest = _v5_manifest()
+    weights_path = tmp_path / "transport.safetensors"
+    state = initialize_head_aware_state(manifest.source, manifest.target, manifest.transport)
+    safetensors_torch.save_file(
+        state,
+        weights_path,
+        metadata=transport_safetensors_metadata(manifest),
+    )
+    weights_sha256 = hashlib.sha256(weights_path.read_bytes()).hexdigest()
+    manifest = replace(
+        manifest,
+        artifact_id="",
+        transport=replace(
+            manifest.transport,
+            weights_uri=weights_path.name,
+            weights_sha256=weights_sha256,
+        ),
+    ).with_content_id()
+
+    def fail_reload(cls, path):
+        raise AssertionError("transport loader re-read the manifest")
+
+    monkeypatch.setattr(SelectiveKVBridgeManifest, "load", classmethod(fail_reload))
+
+    loaded = HeadAwareKVTransport.from_manifest(
+        manifest,
+        tmp_path / "manifest.json",
+        offline=True,
+    )
+
+    assert loaded.spec.weights_sha256 == weights_sha256
+
+
+def test_risk_predictor_detects_artifact_change_during_load(tmp_path: Path, monkeypatch) -> None:
+    path = tmp_path / "risk.safetensors"
+    predictor = _predictor()
+    safetensors_torch.save_file(
+        predictor.tensors,
+        path,
+        metadata={
+            "feature_schema_version": RISK_FEATURE_SCHEMA_VERSION,
+            "hidden_size": "64",
+        },
+    )
+    expected = hashlib.sha256(path.read_bytes()).hexdigest()
+    observed = iter((expected, _digest("changed")))
+    monkeypatch.setattr(
+        "goldenexperience.size_variant.risk_gate.sha256_file",
+        lambda artifact: next(observed),
+    )
+
+    with pytest.raises(RiskGateError, match="changed while loading"):
+        RiskPredictor.from_artifact(path, expected_sha256=expected)
 
 
 def test_target_attention_collector_bounds_query_and_output_capture() -> None:
