@@ -1,0 +1,96 @@
+{
+  "automatic_reuse_approved": false,
+  "conclusion": {
+    "mixed_objective_retained": true,
+    "reason": "A 0.25 prompt-tail loss preserves the native-generation task gain while modestly improving next-token agreement and perplexity drift.",
+    "selected_as_production_bridge": false,
+    "status": "validation_only_below_threshold"
+  },
+  "direction": "8b_to_14b",
+  "experiment": {
+    "best_step": 4,
+    "generation_weight": 1.0,
+    "holdout_checkpoint_metric_order": [
+      "free_running_task_score",
+      "free_running_greedy_match_rate",
+      "objective"
+    ],
+    "holdout_greedy_after": 0.87890625,
+    "holdout_greedy_before": 0.171875,
+    "holdout_prompt_count": 16,
+    "holdout_task_after": 1.0,
+    "holdout_task_before": 0.25,
+    "learning_rate": 0.000003,
+    "objective": "mixed",
+    "parameter_count": 41943040,
+    "parameter_group": "nonlinear-up-only",
+    "prompt_tail_weight": 0.25,
+    "rank": 512,
+    "seed": 17,
+    "steps": 4
+  },
+  "implementation_commits": [
+    "53d8524",
+    "d2fb31f"
+  ],
+  "mixed_post_refinement": {
+    "bridge_perplexity": 41.72323583064613,
+    "bridge_task_score": 0.90625,
+    "greedy_continuation_match_rate": 0.837890625,
+    "key_cosine": 0.931664576753974,
+    "next_token_top1_agreement": 0.8232421875,
+    "perplexity_drift_pct": 23.212475785723765,
+    "task_score_drop_pct": 9.375,
+    "value_cosine": 0.7989458534866571
+  },
+  "mixed_vs_native_generation_delta": {
+    "bridge_perplexity": -0.16490611726228366,
+    "bridge_task_score": 0.0,
+    "greedy_continuation_match_rate": -0.0029296875,
+    "key_cosine": 1.6763806343078613e-8,
+    "next_token_top1_agreement": 0.005859375,
+    "perplexity_drift_pct": -0.48698262672073866,
+    "task_score_drop_pct": 0.0,
+    "value_cosine": 5.774199962615967e-8
+  },
+  "paired_delta_vs_unrefined": {
+    "bridge_perplexity": -0.650821126830877,
+    "bridge_task_score": 0.8125,
+    "greedy_continuation_match_rate": 0.755859375,
+    "key_cosine": -1.0151416063308716e-7,
+    "next_token_top1_agreement": 0.0068359375,
+    "perplexity_drift_pct": -1.9219334438962008,
+    "task_score_drop_pct": -81.25,
+    "value_cosine": -0.00003525242209434509
+  },
+  "pre_refinement": {
+    "bridge_perplexity": 42.37405695747701,
+    "bridge_task_score": 0.09375,
+    "greedy_continuation_match_rate": 0.08203125,
+    "key_cosine": 0.9316646782681346,
+    "next_token_top1_agreement": 0.81640625,
+    "perplexity_drift_pct": 25.134409229619965,
+    "task_score_drop_pct": 90.625,
+    "value_cosine": 0.7989811059087515
+  },
+  "raw_results_path": "artifacts/results/qwen3_8b_to_14b_mixed_holdout16_paired_rank512_seed17.results.json",
+  "raw_results_sha256": "ed7e69da1a30434b669557f7500e42bc702cf7b2c6074e556ce7d17fc4afa409",
+  "remaining_approval_failures": [
+    "key cosine is below 0.95",
+    "value cosine is below 0.95",
+    "next-token top-1 agreement is below 0.98",
+    "greedy continuation match rate is below 0.98",
+    "perplexity drift exceeds 2%",
+    "bridge task score is below 0.95",
+    "task score drop exceeds 1%",
+    "sealed-test and eligible Mooncake cost evidence are absent"
+  ],
+  "schema_version": "goldenexperience.cached_kv_mixed_refinement.v1",
+  "sealed_test_opened": false,
+  "validation_contract": {
+    "evaluated_tokens": 1024,
+    "prompt_count": 64,
+    "split": "validation",
+    "split_sha256": "fbcb5a68716be8230945d01c503774f5a733b043822d78aaedeac9816a6b0936"
+  }
+}

@@ -82,6 +82,13 @@ changing one correct exact answer into the wrong marker. Because the four-prompt
 teacher-forced holdout continues improving through that regression, four steps remain
 the selected validation configuration and further step scaling is stopped.
 
+`mixed_refinement_8b_to_14b_20260713.json` adds a 0.25-weight prompt-tail loss to the
+four-step native-generation objective and selects checkpoints with 16 train-only,
+free-running holdout prompts. Relative to pure native-generation it preserves the
+0.90625 validation task score while increasing next-token agreement by 0.00586 and
+reducing perplexity drift by another 0.49 percentage points. The absolute quality gates
+still fail, so the experiment remains validation-only.
+
 Only a `CachedKVBridgeManifest` whose derived `approved` property is true may be used by
 the runtime materializer. Missing held-out accuracy or Mooncake cost evidence keeps a
 manifest fail closed.
