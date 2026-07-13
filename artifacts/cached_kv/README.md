@@ -89,6 +89,13 @@ free-running holdout prompts. Relative to pure native-generation it preserves th
 reducing perplexity drift by another 0.49 percentage points. The absolute quality gates
 still fail, so the experiment remains validation-only.
 
+`mixed_refinement_14b_to_8b_20260713.json` applies the same seed-17, rank-512,
+four-step mixed experiment in the reverse direction. On the paired fitted state it
+preserves the 0.84375 validation task score, raises greedy continuation match by 0.10156,
+and reduces perplexity drift by 5.32 percentage points. It creates no new validation
+task passes, and every production quality gate remains failed, so the reverse bridge is
+also validation-only and the sealed test remains unopened.
+
 Only a `CachedKVBridgeManifest` whose derived `approved` property is true may be used by
 the runtime materializer. Missing held-out accuracy or Mooncake cost evidence keeps a
 manifest fail closed.

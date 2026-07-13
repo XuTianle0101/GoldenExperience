@@ -1,0 +1,105 @@
+{
+  "automatic_reuse_approved": false,
+  "conclusion": {
+    "bidirectional_gain": "partial",
+    "mixed_objective_retained": true,
+    "reason": "On the same fitted reverse bridge, four mixed-objective steps preserve the 0.84375 task score while improving greedy continuation match and perplexity drift. The reverse run does not add any validation task passes, so the large forward task gain is not confirmed in both directions.",
+    "selected_as_production_bridge": false,
+    "status": "validation_only_below_threshold"
+  },
+  "direction": "14b_to_8b",
+  "experiment": {
+    "best_step": 4,
+    "generation_weight": 1.0,
+    "holdout_checkpoint_metric_order": [
+      "free_running_task_score",
+      "free_running_greedy_match_rate",
+      "objective"
+    ],
+    "holdout_greedy_after": 0.8203125,
+    "holdout_greedy_before": 0.6640625,
+    "holdout_prompt_count": 16,
+    "holdout_task_after": 1.0,
+    "holdout_task_before": 1.0,
+    "learning_rate": 0.000003,
+    "objective": "mixed",
+    "parameter_count": 37748736,
+    "parameter_group": "nonlinear-up-only",
+    "prompt_tail_weight": 0.25,
+    "rank": 512,
+    "seed": 17,
+    "steps": 4
+  },
+  "implementation_commits": [
+    "53d8524",
+    "d2fb31f"
+  ],
+  "mixed_post_refinement": {
+    "bridge_perplexity": 91.71076974938445,
+    "bridge_task_score": 0.84375,
+    "greedy_continuation_match_rate": 0.73828125,
+    "key_cosine": 0.9290075469762087,
+    "next_token_top1_agreement": 0.751953125,
+    "perplexity_drift_pct": 35.03220336288109,
+    "task_score_drop_pct": 15.625,
+    "value_cosine": 0.7923242133110762
+  },
+  "paired_delta_vs_unrefined": {
+    "bridge_perplexity": -3.61032283070233,
+    "bridge_task_score": 0.0,
+    "greedy_continuation_match_rate": 0.1015625,
+    "key_cosine": -6.426125764846802e-8,
+    "next_token_top1_agreement": 0.0087890625,
+    "perplexity_drift_pct": -5.315731707554683,
+    "task_score_drop_pct": 0.0,
+    "value_cosine": -0.000022047199308872223
+  },
+  "pre_refinement": {
+    "bridge_perplexity": 95.32109258008678,
+    "bridge_task_score": 0.84375,
+    "greedy_continuation_match_rate": 0.63671875,
+    "key_cosine": 0.9290076112374663,
+    "next_token_top1_agreement": 0.7431640625,
+    "perplexity_drift_pct": 40.347935070435774,
+    "task_score_drop_pct": 15.625,
+    "value_cosine": 0.792346260510385
+  },
+  "prior_validation_candidate_comparison": {
+    "note": "Reference-only comparison against the previously tracked validation candidate; the paired same-fit comparison is authoritative.",
+    "post_refinement_delta": {
+      "bridge_perplexity": -8.659867727480815,
+      "bridge_task_score": 0.0,
+      "greedy_continuation_match_rate": 0.1201171875,
+      "key_cosine": 0.000003382563591003418,
+      "next_token_top1_agreement": 0.005859375,
+      "perplexity_drift_pct": -12.750531080137286,
+      "task_score_drop_pct": 0.0,
+      "value_cosine": -0.00005827657878398895
+    },
+    "summary_path": "artifacts/cached_kv/validation_candidate_14b_to_8b_20260713.json"
+  },
+  "raw_results_path": "artifacts/results/qwen3_14b_to_8b_mixed_holdout16_paired_rank512_seed17.results.json",
+  "raw_results_sha256": "43d6f0ba5c759083f6f846789e276dd5524dc0b7b5fb0ced12bc3652558979ac",
+  "remaining_approval_failures": [
+    "key cosine is below 0.95",
+    "value cosine is below 0.95",
+    "next-token top-1 agreement is below 0.98",
+    "greedy continuation match rate is below 0.98",
+    "perplexity drift exceeds 2%",
+    "bridge task score is below 0.95",
+    "task score drop exceeds 1%",
+    "sealed-test and eligible Mooncake cost evidence are absent"
+  ],
+  "schema_version": "goldenexperience.cached_kv_mixed_refinement.v1",
+  "sealed_test_opened": false,
+  "validation_contract": {
+    "evaluated_tokens": 1024,
+    "prompt_count": 64,
+    "split": "validation",
+    "split_sha256": "fbcb5a68716be8230945d01c503774f5a733b043822d78aaedeac9816a6b0936"
+  },
+  "validation_task_transitions": {
+    "new_passes": 0,
+    "new_regressions": 0
+  }
+}
