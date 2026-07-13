@@ -33,6 +33,21 @@ The names map to the implementation scenarios as follows: `GoldenLoRA` targets
 `model_lora_mutual_reuse`, `GoldenScale` targets `same_model_different_parameter_size`,
 and `GoldenBridge` targets `different_base_model`.
 
+## Selective Cached-KV v5
+
+The current research path is a fail-closed v5 artifact for same-family scale variants:
+
+- head-aware transport supports different source/target KV-head counts;
+- a source-only sidecar and calibrated MLP admit only prefixes whose 95% one-sided risk
+  bound is at most 1%;
+- `validation_candidate` and `semantic_approved` artifacts cannot execute runtime reuse;
+- final `approved` artifacts use `RETRIEVE_TRANSFORM` to scatter directly into vLLM paged
+  KV without publishing target Mooncake objects.
+
+The implementation contract and present evidence boundary are documented in
+`docs/selective_kv_v5.md`. No v5 artifact is currently approved; retained rank-512 Qwen3
+results are development failures, not production or paper claims.
+
 ## Architecture
 
 ```text
@@ -55,8 +70,10 @@ The patch surface is described by `PatchManifest.default()`:
 
 1. `engine_request_metadata`: attach `ModelRef` and prefix metadata before LMCache MP lookup.
 2. `lmcache_cross_model_lookup`: on a same-model miss, query cross-model candidates.
-3. `goldenexperience_materializer`: alias/project/translate KV before returning it.
-4. `quality_gate_accounting`: record confidence, calibration, and fallback reasons.
+3. `calibrated_risk_gate`: evaluate the source sidecar before source KV is read.
+4. `lmcache_retrieve_transform`: batch-read, transform, and atomically scatter paged KV.
+5. `goldenexperience_materializer`: retain the read-compatible v4 materializer path.
+6. `quality_gate_accounting`: record confidence, calibration, and fallback reasons.
 
 ## Repository Layout
 

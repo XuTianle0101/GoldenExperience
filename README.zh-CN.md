@@ -31,6 +31,17 @@ connector 路径进入 lookup/retrieve 逻辑。
 `GoldenScale` 对应 `same_model_different_parameter_size`，`GoldenBridge` 对应
 `different_base_model`。
 
+## Selective Cached-KV v5
+
+当前研究主线是同架构家族尺度变体的 fail-closed v5 artifact：head-aware transport
+支持不同 KV head 数；source-only sidecar 与统计校准 MLP 只接纳 95% 单侧风险上界不超过
+1% 的前缀；`validation_candidate` 和 `semantic_approved` 都不能启动线上复用；只有最终
+`approved` artifact 才能通过 `RETRIEVE_TRANSFORM` 直接写入 vLLM paged KV，且不生成
+target Mooncake object。
+
+完整合同与当前证据边界见 `docs/selective_kv_v5.md`。仓库目前没有获批的 v5 artifact；
+保留的 Qwen3 rank-512 结果只是失败的开发基线，不构成生产或论文主张。
+
 ## 架构
 
 ```text
@@ -53,8 +64,10 @@ client -> vLLM OpenAI-compatible server
 
 1. `engine_request_metadata`：在 LMCache MP 查询前附加 `ModelRef` 和前缀元数据。
 2. `lmcache_cross_model_lookup`：同模型未命中时，查询跨模型候选。
-3. `goldenexperience_materializer`：在返回 KV 前对其进行别名、投影或转换。
-4. `quality_gate_accounting`：记录置信度、校准状态和回退原因。
+3. `calibrated_risk_gate`：读取 source sidecar，在读取 source KV 前执行统计准入。
+4. `lmcache_retrieve_transform`：批量读取、转换并原子 scatter 到 vLLM paged KV。
+5. `goldenexperience_materializer`：保留 v4 artifact 的只读兼容路径。
+6. `quality_gate_accounting`：记录置信度、校准状态和回退原因。
 
 ## 仓库结构
 

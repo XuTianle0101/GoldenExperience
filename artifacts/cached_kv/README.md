@@ -18,6 +18,10 @@ failed all-parameter refinement, constrained teacher-forced refinement, native-g
 step study, and historical runtime experiments are consolidated in
 `docs/paper_outline.md`. Their exact original JSON remains available through Git history.
 
+All records in this directory predate manifest v5 and are deprecated development baselines.
+They cannot serve as publication validation, risk calibration, semantic sealed, runtime audit,
+or approval evidence for selective cross-scale reuse.
+
 The only local raw quality files intentionally retained are the two mixed, holdout-16
 per-prompt results under `artifacts/results/`. They are needed to analyze the remaining
 forward and reverse exact-answer failures; all earlier smoke and refinement outputs were

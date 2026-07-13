@@ -20,13 +20,21 @@
 
 ## Main Contributions
 
-- A model-pair taxonomy for cross-model KV reuse: base/LoRA, same-model size variants, and
-  different base models.
-- A control-plane planner that emits explicit `ReusePlan` metadata, confidence, gates, and
-  fallback reasons.
-- An LMCache MP patch surface for secondary lookup, materialization, and quality accounting.
-- A vLLM-based evaluation path that measures latency gain without modifying inference
-  semantics or replacing the cache/offload mechanics.
+- A head-aware, attention-preserving transport for same-family parameter sizes and unequal
+  KV-head counts. Transport alone is not claimed as novel; see `related_work_matrix.md`.
+- Source-only selective admission whose threshold maximizes coverage subject to an exact
+  95% one-sided behavioral-regression bound on an independent calibration split.
+- A three-state artifact authority model that prevents validation or semantic-only artifacts
+  from enabling runtime reuse.
+- An LMCache MP `RETRIEVE_TRANSFORM` path that writes accepted translations directly into
+  vLLM paged KV, publishes only after all layers succeed, and never creates target Mooncake
+  objects.
+- A grouped-prefix benchmark and one-shot semantic sealed protocol that bind data, code,
+  model, transport, predictor, and threshold hashes.
+
+The provisional paper claim is the conjunction of calibrated request-level safety and direct
+paged materialization for cross-scale translated KV, not the existence of cross-model KV
+translation by itself.
 
 ## Evaluation Questions
 
