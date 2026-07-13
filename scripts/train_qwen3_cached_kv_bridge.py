@@ -274,6 +274,214 @@ _LOGIT_REFINEMENT_PARAMETERS = (
     "value_bias",
 )
 
+_LOGIT_REFINEMENT_PARAMETER_GROUPS = {
+    "all": _LOGIT_REFINEMENT_PARAMETERS,
+    "bias-only": ("key_bias", "value_bias"),
+    "nonlinear-up-only": ("key_nonlinear_up", "value_nonlinear_up"),
+}
+
+
+def _bucket_balanced_samples(
+    samples: tuple[CachedKVPrompt, ...],
+    count: int,
+) -> tuple[CachedKVPrompt, ...]:
+    """Select prompts round-robin across token buckets while preserving bucket order."""
+
+    if count <= 0:
+        return ()
+    buckets: dict[int, list[CachedKVPrompt]] = {}
+    for sample in samples:
+        buckets.setdefault(sample.token_bucket, []).append(sample)
+    ordered_buckets = sorted(buckets)
+    for index, bucket in enumerate(ordered_buckets):
+        bucket_samples = buckets[bucket]
+        rotation = index % len(bucket_samples)
+        buckets[bucket] = bucket_samples[rotation:] + bucket_samples[:rotation]
+    selected: list[CachedKVPrompt] = []
+    offset = 0
+    while len(selected) < count:
+        added = False
+        for bucket in ordered_buckets:
+            bucket_samples = buckets[bucket]
+            if offset < len(bucket_samples):
+                selected.append(bucket_samples[offset])
+                added = True
+                if len(selected) == count:
+                    break
+        if not added:
+            break
+        offset += 1
+    return tuple(selected)
+
+
+def _relative_mse(left: Any, reference: Any) -> Any:
+    scale = reference.detach().float().square().mean().clamp_min(1e-8)
+    return (left.float() - reference.detach().float()).square().mean() / scale
+
+
+def _parameter_anchor_loss(
+    state: dict[str, Any],
+    anchors: dict[str, Any],
+    parameter_names: tuple[str, ...],
+) -> Any:
+    import torch
+
+    return torch.stack(
+        [_relative_mse(state[name], anchors[name]) for name in parameter_names]
+    ).mean()
+
+
+def _kv_anchor_losses(refined: Any, reference: Any) -> tuple[Any, Any, Any]:
+    import torch
+    import torch.nn.functional as functional
+
+    relative_mse = torch.stack(
+        [_relative_mse(refined[index], reference[index]) for index in range(2)]
+    ).mean()
+    cosine_loss = 1 - functional.cosine_similarity(
+        refined.float().reshape(-1, refined.shape[-1]),
+        reference.detach().float().reshape(-1, reference.shape[-1]),
+        dim=-1,
+    ).mean()
+    return (relative_mse + cosine_loss) / 2, relative_mse, cosine_loss
+
+
+def _refinement_prompt_forward(
+    sample: CachedKVPrompt,
+    *,
+    tokenizer: Any,
+    source_model: Any,
+    target_model: Any,
+    state: dict[str, Any],
+    source_device: str,
+    target_device: str,
+    suffix_tokens: int,
+) -> tuple[Any, Any, Any, Any, Any, float]:
+    import torch
+
+    _, token_ids = render_to_token_bucket(sample, tokenizer, suffix_tokens=suffix_tokens)
+    prefix = sample.token_bucket
+    continuation = token_ids[prefix : prefix + suffix_tokens + 1]
+    if len(continuation) != suffix_tokens + 1:
+        raise ValueError("logit refinement prompt has an incomplete continuation")
+
+    source_input = torch.tensor([token_ids[:prefix]], dtype=torch.long)
+    source_out, source_prefill_ms = _run_prefill(source_model, source_input, source_device)
+    source_object = cache_to_object(source_out.past_key_values)
+    del source_out
+    teacher_input = torch.tensor(
+        [token_ids[: prefix + suffix_tokens]],
+        dtype=torch.long,
+        device=target_device,
+    )
+    with torch.inference_mode():
+        teacher_out = target_model(input_ids=teacher_input, use_cache=False)
+        teacher_logits = teacher_out.logits[:, prefix : prefix + suffix_tokens].detach()
+    del teacher_out
+
+    source_config = source_model.config
+    target_config = target_model.config
+    positions = torch.arange(prefix, device=target_device)
+    bridge_object = transform_with_state(
+        source_object,
+        positions,
+        state,
+        source_heads=int(source_config.num_key_value_heads),
+        source_head_dim=int(source_config.head_dim),
+        source_rope_theta=_rope_theta(source_config),
+        target_heads=int(target_config.num_key_value_heads),
+        target_head_dim=int(target_config.head_dim),
+        target_rope_theta=_rope_theta(target_config),
+        device=target_device,
+    )
+    bridge_cache = object_to_dynamic_cache(bridge_object, target_config)
+    student_input = torch.tensor(
+        [continuation[:-1]],
+        dtype=torch.long,
+        device=target_device,
+    )
+    labels = torch.tensor(
+        [continuation[1:]],
+        dtype=torch.long,
+        device=target_device,
+    )
+    student_out = target_model(
+        input_ids=student_input,
+        past_key_values=bridge_cache,
+        use_cache=False,
+    )
+    student_logits = student_out.logits
+    del bridge_cache, student_out
+    return (
+        source_object,
+        bridge_object,
+        student_logits,
+        teacher_logits,
+        labels,
+        source_prefill_ms,
+    )
+
+
+def _measure_refinement_holdout(
+    samples: tuple[CachedKVPrompt, ...],
+    *,
+    tokenizer: Any,
+    source_model: Any,
+    target_model: Any,
+    state: dict[str, Any],
+    source_device: str,
+    target_device: str,
+    suffix_tokens: int,
+    temperature: float,
+    label_weight: float,
+) -> dict[str, float]:
+    import torch
+
+    objectives: list[float] = []
+    distillations: list[float] = []
+    label_losses: list[float] = []
+    agreements: list[float] = []
+    with torch.no_grad():
+        for sample in samples:
+            (
+                source_object,
+                bridge_object,
+                student_logits,
+                teacher_logits,
+                labels,
+                _,
+            ) = _refinement_prompt_forward(
+                sample,
+                tokenizer=tokenizer,
+                source_model=source_model,
+                target_model=target_model,
+                state=state,
+                source_device=source_device,
+                target_device=target_device,
+                suffix_tokens=suffix_tokens,
+            )
+            objective, distillation, label_loss = logit_distillation_loss(
+                student_logits,
+                teacher_logits,
+                labels,
+                temperature=temperature,
+                label_weight=label_weight,
+            )
+            agreement = (
+                student_logits.argmax(dim=-1) == teacher_logits.argmax(dim=-1)
+            ).float().mean()
+            objectives.append(float(objective.item()))
+            distillations.append(float(distillation.item()))
+            label_losses.append(float(label_loss.item()))
+            agreements.append(float(agreement.item()))
+            del source_object, bridge_object, student_logits, teacher_logits, labels
+    return {
+        "objective": sum(objectives) / len(objectives),
+        "distillation_loss": sum(distillations) / len(distillations),
+        "label_loss": sum(label_losses) / len(label_losses),
+        "top1_agreement": sum(agreements) / len(agreements),
+    }
+
 
 def refine_state_with_target_logits(
     samples: tuple[CachedKVPrompt, ...],
@@ -291,6 +499,13 @@ def refine_state_with_target_logits(
     temperature: float,
     label_weight: float,
     anchor_weight: float,
+    parameter_group: str,
+    kv_anchor_weight: float,
+    kv_anchor_max_positions: int,
+    holdout_prompts: int,
+    early_stopping_patience: int,
+    holdout_min_delta: float,
+    holdout_max_top1_drop: float,
     max_grad_norm: float,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     """Refine the existing v4 map against frozen target-model continuation logits."""
@@ -303,149 +518,261 @@ def refine_state_with_target_logits(
         raise ValueError("logit refinement learning rate must be finite and positive")
     if anchor_weight < 0 or not math.isfinite(anchor_weight):
         raise ValueError("logit refinement anchor weight must be finite and non-negative")
+    if parameter_group not in _LOGIT_REFINEMENT_PARAMETER_GROUPS:
+        raise ValueError(f"unsupported logit refinement parameter group: {parameter_group}")
+    if kv_anchor_weight < 0 or not math.isfinite(kv_anchor_weight):
+        raise ValueError("logit refinement KV anchor weight must be finite and non-negative")
+    if kv_anchor_max_positions <= 0:
+        raise ValueError("logit refinement KV anchor positions must be positive")
+    if holdout_prompts < 0 or early_stopping_patience < 0:
+        raise ValueError("logit refinement holdout settings must be non-negative")
+    if early_stopping_patience and not holdout_prompts:
+        raise ValueError("logit refinement early stopping requires holdout prompts")
+    if holdout_min_delta < 0 or not math.isfinite(holdout_min_delta):
+        raise ValueError("logit refinement holdout minimum delta must be non-negative")
+    if not 0 <= holdout_max_top1_drop <= 1 or not math.isfinite(holdout_max_top1_drop):
+        raise ValueError("logit refinement holdout top-1 drop must be between zero and one")
     if max_grad_norm <= 0 or not math.isfinite(max_grad_norm):
         raise ValueError("logit refinement max grad norm must be finite and positive")
-    selected = samples[:max_prompts]
+    selected = _bucket_balanced_samples(samples, max_prompts)
     if not selected:
         raise ValueError("logit refinement received no training prompts")
+    selected_ids = {sample.prompt_id for sample in selected}
+    holdout = _bucket_balanced_samples(
+        tuple(sample for sample in samples if sample.prompt_id not in selected_ids),
+        holdout_prompts,
+    )
+    if len(holdout) != holdout_prompts:
+        raise ValueError("logit refinement received too few disjoint holdout prompts")
 
     target_model.requires_grad_(False)
     state_on_target = {name: tensor.to(target_device) for name, tensor in state.items()}
+    reference_state = {name: tensor.detach() for name, tensor in state_on_target.items()}
+    parameter_names = _LOGIT_REFINEMENT_PARAMETER_GROUPS[parameter_group]
     parameters: list[Any] = []
     anchors: dict[str, Any] = {}
-    for name in _LOGIT_REFINEMENT_PARAMETERS:
-        parameter = torch.nn.Parameter(state_on_target[name].float())
+    for name in parameter_names:
+        anchor = state_on_target[name].float().detach().clone()
+        parameter = torch.nn.Parameter(anchor.clone())
         state_on_target[name] = parameter
+        reference_state[name] = anchor
         parameters.append(parameter)
-        anchors[name] = parameter.detach().clone()
+        anchors[name] = anchor
     optimizer = torch.optim.AdamW(parameters, lr=learning_rate, weight_decay=0.0)
     source_config = source_model.config
     target_config = target_model.config
     records: list[dict[str, Any]] = []
+    holdout_records: list[dict[str, Any]] = []
+    best_step: int | None = None
+    best_holdout_objective: float | None = None
+    best_parameters: dict[str, Any] | None = None
+    stale_steps = 0
+    stopped_reason: str | None = None
+
+    if holdout:
+        initial_holdout = _measure_refinement_holdout(
+            holdout,
+            tokenizer=tokenizer,
+            source_model=source_model,
+            target_model=target_model,
+            state=reference_state,
+            source_device=source_device,
+            target_device=target_device,
+            suffix_tokens=suffix_tokens,
+            temperature=temperature,
+            label_weight=label_weight,
+        )
+        holdout_records.append({"step": 0, **initial_holdout})
+        best_step = 0
+        best_holdout_objective = initial_holdout["objective"]
+        best_parameters = {name: anchors[name].clone() for name in parameter_names}
 
     for step in range(steps):
         sample = selected[step % len(selected)]
-        _, token_ids = render_to_token_bucket(sample, tokenizer, suffix_tokens=suffix_tokens)
-        prefix = sample.token_bucket
-        continuation = token_ids[prefix : prefix + suffix_tokens + 1]
-        if len(continuation) != suffix_tokens + 1:
-            raise ValueError("logit refinement prompt has an incomplete continuation")
-
-        source_input = torch.tensor([token_ids[:prefix]], dtype=torch.long)
-        source_out, source_prefill_ms = _run_prefill(
-            source_model,
-            source_input,
-            source_device,
-        )
-        source_object = cache_to_object(source_out.past_key_values)
-        teacher_input = torch.tensor(
-            [token_ids[: prefix + suffix_tokens]],
-            dtype=torch.long,
-            device=target_device,
-        )
-        with torch.inference_mode():
-            teacher_out = target_model(input_ids=teacher_input, use_cache=False)
-            teacher_logits = teacher_out.logits[:, prefix : prefix + suffix_tokens].detach()
-
-        positions = torch.arange(prefix, device=target_device)
-        bridge_object = transform_with_state(
+        (
             source_object,
-            positions,
-            state_on_target,
-            source_heads=int(source_config.num_key_value_heads),
-            source_head_dim=int(source_config.head_dim),
-            source_rope_theta=_rope_theta(source_config),
-            target_heads=int(target_config.num_key_value_heads),
-            target_head_dim=int(target_config.head_dim),
-            target_rope_theta=_rope_theta(target_config),
-            device=target_device,
-        )
-        bridge_cache = object_to_dynamic_cache(bridge_object, target_config)
-        student_input = torch.tensor(
-            [continuation[:-1]],
-            dtype=torch.long,
-            device=target_device,
-        )
-        labels = torch.tensor(
-            [continuation[1:]],
-            dtype=torch.long,
-            device=target_device,
-        )
-        student_out = target_model(
-            input_ids=student_input,
-            past_key_values=bridge_cache,
-            use_cache=False,
+            bridge_object,
+            student_logits,
+            teacher_logits,
+            labels,
+            source_prefill_ms,
+        ) = _refinement_prompt_forward(
+            sample,
+            tokenizer=tokenizer,
+            source_model=source_model,
+            target_model=target_model,
+            state=state_on_target,
+            source_device=source_device,
+            target_device=target_device,
+            suffix_tokens=suffix_tokens,
         )
         objective, distillation, label_loss = logit_distillation_loss(
-            student_out.logits,
+            student_logits,
             teacher_logits,
             labels,
             temperature=temperature,
             label_weight=label_weight,
         )
-        anchor_loss = torch.stack(
-            [
-                (state_on_target[name] - anchors[name]).square().mean()
-                for name in _LOGIT_REFINEMENT_PARAMETERS
+        parameter_anchor_loss = _parameter_anchor_loss(
+            state_on_target,
+            anchors,
+            parameter_names,
+        )
+        kv_anchor_loss = objective.new_zeros(())
+        kv_anchor_relative_mse = objective.new_zeros(())
+        kv_anchor_cosine_loss = objective.new_zeros(())
+        if kv_anchor_weight:
+            anchor_positions = _sample_positions(
+                sample.token_bucket,
+                kv_anchor_max_positions,
+            )
+            with torch.no_grad():
+                reference_object = transform_with_state(
+                    source_object[:, :, anchor_positions.to(source_object.device), :],
+                    anchor_positions.to(target_device),
+                    reference_state,
+                    source_heads=int(source_config.num_key_value_heads),
+                    source_head_dim=int(source_config.head_dim),
+                    source_rope_theta=_rope_theta(source_config),
+                    target_heads=int(target_config.num_key_value_heads),
+                    target_head_dim=int(target_config.head_dim),
+                    target_rope_theta=_rope_theta(target_config),
+                    device=target_device,
+                )
+            refined_object = bridge_object[
+                :, :, anchor_positions.to(bridge_object.device), :
             ]
-        ).mean()
-        loss = objective + anchor_weight * anchor_loss
+            (
+                kv_anchor_loss,
+                kv_anchor_relative_mse,
+                kv_anchor_cosine_loss,
+            ) = _kv_anchor_losses(refined_object, reference_object)
+        loss = (
+            objective
+            + anchor_weight * parameter_anchor_loss
+            + kv_anchor_weight * kv_anchor_loss
+        )
         top1_agreement = (
-            student_out.logits.argmax(dim=-1) == teacher_logits.argmax(dim=-1)
+            student_logits.argmax(dim=-1) == teacher_logits.argmax(dim=-1)
         ).float().mean()
 
         optimizer.zero_grad(set_to_none=True)
         loss.backward()
         grad_norm = torch.nn.utils.clip_grad_norm_(parameters, max_grad_norm)
         optimizer.step()
-        records.append(
-            {
-                "step": step + 1,
-                "prompt_id": sample.prompt_id,
-                "token_bucket": sample.token_bucket,
-                "source_prefill_ms": source_prefill_ms,
-                "loss": float(loss.detach().item()),
-                "distillation_loss": float(distillation.detach().item()),
-                "label_loss": float(label_loss.detach().item()),
-                "anchor_loss": float(anchor_loss.detach().item()),
-                "top1_agreement": float(top1_agreement.detach().item()),
-                "gradient_norm": float(grad_norm.detach().item()),
-            }
-        )
+        record = {
+            "step": step + 1,
+            "prompt_id": sample.prompt_id,
+            "token_bucket": sample.token_bucket,
+            "source_prefill_ms": source_prefill_ms,
+            "loss": float(loss.detach().item()),
+            "distillation_loss": float(distillation.detach().item()),
+            "label_loss": float(label_loss.detach().item()),
+            "anchor_loss": float(parameter_anchor_loss.detach().item()),
+            "parameter_anchor_loss": float(parameter_anchor_loss.detach().item()),
+            "kv_anchor_loss": float(kv_anchor_loss.detach().item()),
+            "kv_anchor_relative_mse": float(kv_anchor_relative_mse.detach().item()),
+            "kv_anchor_cosine_loss": float(kv_anchor_cosine_loss.detach().item()),
+            "top1_agreement": float(top1_agreement.detach().item()),
+            "gradient_norm": float(grad_norm.detach().item()),
+        }
         del (
-            source_out,
             source_object,
-            teacher_out,
+            student_logits,
             teacher_logits,
             bridge_object,
-            bridge_cache,
-            student_out,
+            labels,
             objective,
             distillation,
             label_loss,
-            anchor_loss,
+            parameter_anchor_loss,
+            kv_anchor_loss,
+            kv_anchor_relative_mse,
+            kv_anchor_cosine_loss,
             loss,
         )
+        if kv_anchor_weight:
+            del reference_object, refined_object
         gc.collect()
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
 
+        if holdout:
+            current_holdout = _measure_refinement_holdout(
+                holdout,
+                tokenizer=tokenizer,
+                source_model=source_model,
+                target_model=target_model,
+                state=state_on_target,
+                source_device=source_device,
+                target_device=target_device,
+                suffix_tokens=suffix_tokens,
+                temperature=temperature,
+                label_weight=label_weight,
+            )
+            holdout_records.append({"step": step + 1, **current_holdout})
+            record["holdout_objective"] = current_holdout["objective"]
+            record["holdout_top1_agreement"] = current_holdout["top1_agreement"]
+            collapsed = current_holdout["top1_agreement"] < (
+                holdout_records[0]["top1_agreement"] - holdout_max_top1_drop
+            )
+            improved = (
+                not collapsed
+                and best_holdout_objective is not None
+                and current_holdout["objective"]
+                < best_holdout_objective - holdout_min_delta
+            )
+            if improved:
+                best_step = step + 1
+                best_holdout_objective = current_holdout["objective"]
+                best_parameters = {
+                    name: state_on_target[name].detach().clone() for name in parameter_names
+                }
+                stale_steps = 0
+            else:
+                stale_steps += 1
+            if collapsed:
+                stopped_reason = "holdout_top1_collapse"
+            elif early_stopping_patience and stale_steps >= early_stopping_patience:
+                stopped_reason = "holdout_objective_patience"
+        records.append(record)
+        if stopped_reason is not None:
+            break
+
+    if best_parameters is not None:
+        with torch.no_grad():
+            for name in parameter_names:
+                state_on_target[name].copy_(best_parameters[name])
+
     refined = {
-        name: tensor.detach().cpu() if name in _LOGIT_REFINEMENT_PARAMETERS else tensor.cpu()
+        name: tensor.detach().cpu() if name in parameter_names else tensor.cpu()
         for name, tensor in state_on_target.items()
     }
     return _quantize_state(refined), {
         "enabled": True,
-        "steps": steps,
+        "steps": len(records),
+        "requested_steps": steps,
         "max_prompts": max_prompts,
         "prompt_ids": [sample.prompt_id for sample in selected],
         "learning_rate": learning_rate,
         "temperature": temperature,
         "label_weight": label_weight,
         "anchor_weight": anchor_weight,
+        "parameter_anchor_kind": "relative_mse",
+        "parameter_group": parameter_group,
+        "kv_anchor_weight": kv_anchor_weight,
+        "kv_anchor_kind": "mean_relative_mse_and_cosine",
+        "kv_anchor_max_positions": kv_anchor_max_positions,
         "max_grad_norm": max_grad_norm,
-        "parameter_names": list(_LOGIT_REFINEMENT_PARAMETERS),
+        "parameter_names": list(parameter_names),
         "parameter_count": sum(parameter.numel() for parameter in parameters),
+        "holdout_prompt_ids": [sample.prompt_id for sample in holdout],
+        "holdout_records": holdout_records,
+        "holdout_min_delta": holdout_min_delta,
+        "holdout_max_top1_drop": holdout_max_top1_drop,
+        "early_stopping_patience": early_stopping_patience,
+        "best_step": best_step,
+        "stopped_reason": stopped_reason,
         "records": records,
     }
 
@@ -777,10 +1104,21 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--greedy-tokens", type=int, default=16)
     parser.add_argument("--logit-refinement-steps", type=int, default=0)
     parser.add_argument("--logit-refinement-prompts", type=int, default=16)
-    parser.add_argument("--logit-refinement-learning-rate", type=float, default=1e-4)
+    parser.add_argument("--logit-refinement-learning-rate", type=float, default=1e-5)
     parser.add_argument("--logit-refinement-temperature", type=float, default=1.0)
     parser.add_argument("--logit-refinement-label-weight", type=float, default=0.1)
-    parser.add_argument("--logit-refinement-anchor-weight", type=float, default=1e-5)
+    parser.add_argument("--logit-refinement-anchor-weight", type=float, default=0.1)
+    parser.add_argument(
+        "--logit-refinement-parameter-group",
+        choices=tuple(_LOGIT_REFINEMENT_PARAMETER_GROUPS),
+        default="bias-only",
+    )
+    parser.add_argument("--logit-refinement-kv-anchor-weight", type=float, default=1.0)
+    parser.add_argument("--logit-refinement-kv-anchor-max-positions", type=int, default=32)
+    parser.add_argument("--logit-refinement-holdout-prompts", type=int, default=4)
+    parser.add_argument("--logit-refinement-early-stopping-patience", type=int, default=2)
+    parser.add_argument("--logit-refinement-holdout-min-delta", type=float, default=1e-4)
+    parser.add_argument("--logit-refinement-holdout-max-top1-drop", type=float, default=0.05)
     parser.add_argument("--logit-refinement-max-grad-norm", type=float, default=1.0)
     parser.add_argument(
         "--smoke-max-validation-prompts",
@@ -941,6 +1279,13 @@ def main() -> int:
             temperature=args.logit_refinement_temperature,
             label_weight=args.logit_refinement_label_weight,
             anchor_weight=args.logit_refinement_anchor_weight,
+            parameter_group=args.logit_refinement_parameter_group,
+            kv_anchor_weight=args.logit_refinement_kv_anchor_weight,
+            kv_anchor_max_positions=args.logit_refinement_kv_anchor_max_positions,
+            holdout_prompts=args.logit_refinement_holdout_prompts,
+            early_stopping_patience=args.logit_refinement_early_stopping_patience,
+            holdout_min_delta=args.logit_refinement_holdout_min_delta,
+            holdout_max_top1_drop=args.logit_refinement_holdout_max_top1_drop,
             max_grad_norm=args.logit_refinement_max_grad_norm,
         )
 
