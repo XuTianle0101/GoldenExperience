@@ -5,6 +5,7 @@ from __future__ import annotations
 import math
 from typing import Any
 
+from goldenexperience.model_config import resolve_head_dim
 from goldenexperience.size_variant.cached_kv_bridge import _apply_rope_flat
 
 
@@ -165,7 +166,7 @@ def object_to_dynamic_cache(kv_object: Any, config: Any) -> Any:
     if kv_object.ndim != 4 or kv_object.shape[0] != 2:
         raise ValueError("KV object must have [2, layer, token, width] layout")
     heads = int(config.num_key_value_heads)
-    head_dim = int(config.head_dim)
+    head_dim = resolve_head_dim(config)
     if int(kv_object.shape[-1]) != heads * head_dim:
         raise ValueError("KV object width does not match target config")
     cache = DynamicCache(config=config)

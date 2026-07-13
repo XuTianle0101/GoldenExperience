@@ -10,6 +10,7 @@ from goldenexperience.cache_core.block import CacheBlock, KVPayload
 from goldenexperience.cache_core.enums import DeviceTier
 from goldenexperience.engine_adapter.base import ModelAdapter
 from goldenexperience.engine_adapter.signature import ArchitectureSignature
+from goldenexperience.model_config import optional_rope_theta, resolve_dtype, resolve_head_dim
 
 
 class TransformersAdapter(ModelAdapter):
@@ -80,7 +81,7 @@ class TransformersAdapter(ModelAdapter):
         hidden_size = int(config.hidden_size)
         num_attention_heads = int(config.num_attention_heads)
         num_key_value_heads = int(getattr(config, "num_key_value_heads", num_attention_heads))
-        head_dim = int(getattr(config, "head_dim", hidden_size // num_attention_heads))
+        head_dim = resolve_head_dim(config)
         tokenizer_id = getattr(tokenizer, "name_or_path", None) if tokenizer is not None else None
         config_payload = config.to_dict() if hasattr(config, "to_dict") else {}
         config_hash = hashlib.sha256(
@@ -96,7 +97,7 @@ class TransformersAdapter(ModelAdapter):
             num_attention_heads=num_attention_heads,
             num_key_value_heads=num_key_value_heads,
             head_dim=head_dim,
-            rope_theta=getattr(config, "rope_theta", None),
+            rope_theta=optional_rope_theta(config),
             rope_scaling=(
                 json.dumps(rope_scaling, sort_keys=True, default=str)
                 if rope_scaling is not None
@@ -104,7 +105,7 @@ class TransformersAdapter(ModelAdapter):
             ),
             sliding_window=getattr(config, "sliding_window", None),
             tokenizer_id=tokenizer_id,
-            dtype=str(getattr(config, "torch_dtype", "float16")).replace("torch.", ""),
+            dtype=resolve_dtype(config, default="float16"),
             vocab_size=getattr(config, "vocab_size", None),
             revision=getattr(config, "_commit_hash", None),
             model_config_hash=config_hash,

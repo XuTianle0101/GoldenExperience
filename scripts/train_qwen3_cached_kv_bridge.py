@@ -20,6 +20,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from goldenexperience.benchmarks.cached_kv_cost import load_cached_kv_cost_evidence
+from goldenexperience.model_config import resolve_head_dim, resolve_rope_theta
 from goldenexperience.size_variant.cached_kv_bridge import safetensors_metadata
 from goldenexperience.size_variant.cached_kv_dataset import (
     CachedKVPrompt,
@@ -75,19 +76,6 @@ def _sync(device: str) -> None:
     parsed = torch.device(device)
     if parsed.type == "cuda":
         torch.cuda.synchronize(parsed)
-
-
-def _rope_theta(config: Any) -> float:
-    direct = getattr(config, "rope_theta", None)
-    if direct is not None:
-        return float(direct)
-    parameters = getattr(config, "rope_parameters", None)
-    if isinstance(parameters, dict) and parameters.get("rope_theta") is not None:
-        return float(parameters["rope_theta"])
-    scaling = getattr(config, "rope_scaling", None)
-    if isinstance(scaling, dict) and scaling.get("rope_theta") is not None:
-        return float(scaling["rope_theta"])
-    raise ValueError("Qwen3 config does not expose rope_theta")
 
 
 def _run_prefill(model: Any, input_ids: Any, device: str) -> tuple[Any, float]:
@@ -159,11 +147,11 @@ def collect_training_data(
             source_layer_ids,
             source_layer_weights,
             source_heads=int(source_config.num_key_value_heads),
-            source_head_dim=int(source_config.head_dim),
-            source_rope_theta=_rope_theta(source_config),
+            source_head_dim=resolve_head_dim(source_config),
+            source_rope_theta=resolve_rope_theta(source_config),
             target_heads=int(target_config.num_key_value_heads),
-            target_head_dim=int(target_config.head_dim),
-            target_rope_theta=_rope_theta(target_config),
+            target_head_dim=resolve_head_dim(target_config),
+            target_rope_theta=resolve_rope_theta(target_config),
         )
         feature_parts.append(features.to(torch.bfloat16))
         key_parts.append(key_residual.to(torch.bfloat16))
@@ -518,11 +506,11 @@ def _refinement_prompt_forward(
         positions,
         state,
         source_heads=int(source_config.num_key_value_heads),
-        source_head_dim=int(source_config.head_dim),
-        source_rope_theta=_rope_theta(source_config),
+        source_head_dim=resolve_head_dim(source_config),
+        source_rope_theta=resolve_rope_theta(source_config),
         target_heads=int(target_config.num_key_value_heads),
-        target_head_dim=int(target_config.head_dim),
-        target_rope_theta=_rope_theta(target_config),
+        target_head_dim=resolve_head_dim(target_config),
+        target_rope_theta=resolve_rope_theta(target_config),
         device=target_device,
     )
     bridge_cache = object_to_dynamic_cache(bridge_object, target_config)
@@ -994,11 +982,11 @@ def refine_state_with_target_logits(
                     anchor_positions.to(target_device),
                     reference_state,
                     source_heads=int(source_config.num_key_value_heads),
-                    source_head_dim=int(source_config.head_dim),
-                    source_rope_theta=_rope_theta(source_config),
+                    source_head_dim=resolve_head_dim(source_config),
+                    source_rope_theta=resolve_rope_theta(source_config),
                     target_heads=int(target_config.num_key_value_heads),
-                    target_head_dim=int(target_config.head_dim),
-                    target_rope_theta=_rope_theta(target_config),
+                    target_head_dim=resolve_head_dim(target_config),
+                    target_rope_theta=resolve_rope_theta(target_config),
                     device=target_device,
                 )
             refined_object = bridge_object[:, :, anchor_positions.to(bridge_object.device), :]
@@ -1302,11 +1290,11 @@ def evaluate_split(
             positions,
             state_on_target,
             source_heads=int(source_config.num_key_value_heads),
-            source_head_dim=int(source_config.head_dim),
-            source_rope_theta=_rope_theta(source_config),
+            source_head_dim=resolve_head_dim(source_config),
+            source_rope_theta=resolve_rope_theta(source_config),
             target_heads=int(target_config.num_key_value_heads),
-            target_head_dim=int(target_config.head_dim),
-            target_rope_theta=_rope_theta(target_config),
+            target_head_dim=resolve_head_dim(target_config),
+            target_rope_theta=resolve_rope_theta(target_config),
             device=target_device,
         )
         _sync(target_device)

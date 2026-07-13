@@ -10,6 +10,7 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from goldenexperience.model_config import resolve_dtype, resolve_head_dim, resolve_rope_theta
 from goldenexperience.reuse.models import KVShape, ModelRef
 
 if TYPE_CHECKING:
@@ -478,13 +479,6 @@ def model_spec_from_path(
         if identity_cache_path is not None:
             _store_identity_digests(identity_cache_path, root, identity_paths, digests)
     architecture = str(config.get("model_type", ""))
-    dtype = str(config.get("torch_dtype") or config.get("dtype") or "")
-    configured_head_dim = config.get("head_dim")
-    if configured_head_dim is None:
-        attention_heads = int(config["num_attention_heads"])
-        head_dim = int(config["hidden_size"]) // attention_heads
-    else:
-        head_dim = int(configured_head_dim)
     use_sliding_window = config.get("use_sliding_window")
     sliding_window = config.get("sliding_window")
     if use_sliding_window is False:
@@ -499,9 +493,9 @@ def model_spec_from_path(
         weights_sha256=digests["weights_sha256"],
         num_layers=int(config["num_hidden_layers"]),
         num_key_value_heads=int(config["num_key_value_heads"]),
-        head_dim=head_dim,
-        dtype=dtype,
-        rope_theta=_rope_theta_from_config(config),
+        head_dim=resolve_head_dim(config),
+        dtype=resolve_dtype(config),
+        rope_theta=resolve_rope_theta(config),
         max_position_embeddings=int(config["max_position_embeddings"]),
         rope_scaling=config.get("rope_scaling"),
         sliding_window=sliding_window,
@@ -620,17 +614,6 @@ def _is_sha256(value: str | None) -> bool:
     except ValueError:
         return False
     return True
-
-
-def _rope_theta_from_config(config: dict[str, Any]) -> float:
-    direct = config.get("rope_theta")
-    if direct is not None:
-        return float(direct)
-    for name in ("rope_parameters", "rope_scaling"):
-        nested = config.get(name)
-        if isinstance(nested, dict) and nested.get("rope_theta") is not None:
-            return float(nested["rope_theta"])
-    raise ValueError("model config does not expose rope_theta")
 
 
 def tokenizer_semantic_sha256(model_path: str | Path) -> str:

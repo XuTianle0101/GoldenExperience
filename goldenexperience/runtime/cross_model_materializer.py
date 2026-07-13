@@ -11,6 +11,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+from goldenexperience.model_config import resolve_head_dim
 from goldenexperience.runtime.mooncake_objects import (
     ExactMooncakeStore,
     MooncakeObjectError,
@@ -793,7 +794,7 @@ def materialize_qwen3_8b_to_14b(request: dict[str, Any]) -> dict[str, Any]:
         2,
         len(large_model.model.layers),
         chunk_size,
-        large_model.config.num_key_value_heads * large_model.config.head_dim,
+        large_model.config.num_key_value_heads * resolve_head_dim(large_model.config),
     ]
     for chunk_index, chunk_hash in enumerate(chunk_hashes[:max_chunks]):
         start = chunk_index * chunk_size

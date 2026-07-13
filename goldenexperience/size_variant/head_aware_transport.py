@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from goldenexperience.model_config import resolve_head_dim
 from goldenexperience.size_variant.cached_kv_manifest import (
     CachedKVModelSpec,
     sha256_file,
@@ -674,7 +675,7 @@ def head_object_to_dynamic_cache(kv_object: Any, config: Any) -> Any:
     if kv_object.ndim != 5 or kv_object.shape[0] != 2:
         raise ValueError("KV object must have [2, layer, head, token, dim] layout")
     heads = int(config.num_key_value_heads)
-    head_dim = int(getattr(config, "head_dim", config.hidden_size // config.num_attention_heads))
+    head_dim = resolve_head_dim(config)
     if int(kv_object.shape[2]) != heads or int(kv_object.shape[4]) != head_dim:
         raise ValueError("KV object does not match target head layout")
     cache = DynamicCache(config=config)
