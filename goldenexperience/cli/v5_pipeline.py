@@ -151,6 +151,27 @@ def build_parser() -> argparse.ArgumentParser:
     semantic.add_argument("--repository-root", type=Path, default=Path.cwd())
     semantic.add_argument("--resume", action="store_true")
     semantic.add_argument("--progress-every", type=int, default=1)
+    runtime = commands.add_parser(
+        "audit-runtime",
+        help="run the isolated real vLLM/LMCache approval audit",
+    )
+    runtime.add_argument("--workspace", type=Path, required=True)
+    runtime.add_argument("--direction", choices=tuple(DIRECTION_SIZES), required=True)
+    runtime.add_argument("--samples", type=Path, required=True)
+    runtime.add_argument("--source-device", default="cuda:0")
+    runtime.add_argument("--target-device", default="cuda:1")
+    runtime.add_argument("--identity-cache", type=Path)
+    runtime.add_argument("--repository-root", type=Path, default=Path.cwd())
+    runtime.add_argument("--resume", action="store_true")
+    runtime.add_argument("--progress-every", type=int, default=1)
+    runtime.add_argument("--lmcache-l1-size-gb", type=float, default=4.0)
+    runtime.add_argument("--lmcache-l1-init-size-gb", type=int, default=1)
+    runtime.add_argument("--lmcache-max-cpu-workers", type=int, default=1)
+    runtime.add_argument("--lmcache-startup-timeout-s", type=float, default=30.0)
+    runtime.add_argument("--lmcache-shutdown-timeout-s", type=float, default=20.0)
+    runtime.add_argument("--retrieve-timeout-s", type=float, default=120.0)
+    runtime.add_argument("--mq-timeout-s", type=float, default=30.0)
+    runtime.add_argument("--telemetry-timeout-s", type=float, default=120.0)
     return parser
 
 
@@ -527,6 +548,53 @@ def evaluate_semantic(args: argparse.Namespace) -> PipelineStageRecord:
     )
 
 
+def audit_runtime(args: argparse.Namespace) -> PipelineStageRecord:
+    from goldenexperience.runtime.lmcache_mp_server import LMCacheMPServerConfig
+    from goldenexperience.size_variant.v5_real_runtime import RealQwenRuntimeAuditEvaluator
+    from goldenexperience.size_variant.v5_runtime import (
+        run_runtime_audit_stage,
+        stderr_runtime_progress,
+    )
+
+    workspace = V5PipelineWorkspace.open(args.workspace)
+    if source_tree_sha256(args.repository_root) != workspace.config.code_sha256:
+        raise V5PipelineError("executable source tree differs from the pipeline code hash")
+    direction = workspace.config.direction(args.direction)
+    identity_cache = args.identity_cache
+    if identity_cache is None:
+        identity_cache = workspace.control / "model_identity_cache.json"
+    lmcache_config = LMCacheMPServerConfig(
+        l1_size_gb=args.lmcache_l1_size_gb,
+        l1_init_size_gb=args.lmcache_l1_init_size_gb,
+        max_cpu_workers=args.lmcache_max_cpu_workers,
+        startup_timeout_s=args.lmcache_startup_timeout_s,
+        shutdown_timeout_s=args.lmcache_shutdown_timeout_s,
+    )
+    evaluator = RealQwenRuntimeAuditEvaluator(
+        workspace=workspace,
+        direction=args.direction,
+        sample_store_path=args.samples,
+        source_path=direction.source_model_path,
+        target_path=direction.target_model_path,
+        source_device=args.source_device,
+        target_device=args.target_device,
+        identity_cache_path=identity_cache,
+        lmcache_config=lmcache_config,
+        retrieve_timeout_s=args.retrieve_timeout_s,
+        mq_timeout_s=args.mq_timeout_s,
+        telemetry_timeout_s=args.telemetry_timeout_s,
+    )
+    return run_runtime_audit_stage(
+        workspace=workspace,
+        direction=args.direction,
+        sample_store_path=args.samples,
+        evaluator_parameters=evaluator.parameters(),
+        evaluator_factory=lambda: evaluator,
+        resume=args.resume,
+        progress=stderr_runtime_progress(args.progress_every),
+    )
+
+
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     if args.command == "open-semantic-sealed":
@@ -540,6 +608,7 @@ def main(argv: list[str] | None = None) -> int:
         "calibrate": calibrate_risk,
         "validate": validate_direction,
         "evaluate-semantic": evaluate_semantic,
+        "audit-runtime": audit_runtime,
     }
     if args.command in stage_commands:
         record = stage_commands[args.command](args)

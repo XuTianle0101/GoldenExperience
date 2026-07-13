@@ -2,13 +2,15 @@ from __future__ import annotations
 
 import hashlib
 import json
+import sys
 from dataclasses import replace
 from pathlib import Path
-from types import SimpleNamespace
+from types import ModuleType, SimpleNamespace
 from typing import Any, cast
 
 import pytest
 
+import goldenexperience.cli.v5_pipeline as cli_module
 import goldenexperience.runtime.lmcache_retrieve_transform as bridge_module
 import goldenexperience.size_variant.v5_runtime as runtime_module
 from goldenexperience.benchmarks.publication import SPLIT_COUNTS, GroupedPrefixRecord
@@ -68,6 +70,119 @@ from goldenexperience.size_variant.v5_runtime import (
 def _digest(value: str | bytes) -> str:
     payload = value if isinstance(value, bytes) else value.encode("utf-8")
     return hashlib.sha256(payload).hexdigest()
+
+
+def test_runtime_cli_wires_only_bound_operational_parameters(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    parser = cli_module.build_parser()
+    runtime_parser = next(
+        action.choices["audit-runtime"]
+        for action in parser._actions
+        if getattr(action, "choices", None) and "audit-runtime" in action.choices
+    )
+    option_strings = {
+        option
+        for action in runtime_parser._actions
+        for option in getattr(action, "option_strings", ())
+    }
+    assert "--resume" in option_strings
+    assert not any(
+        word in option
+        for option in option_strings
+        for word in (
+            "threshold",
+            "quality",
+            "coverage",
+            "accepted",
+            "rejected",
+            "warmup",
+            "measurement",
+            "generation",
+            "failure-policy",
+            "max-model",
+            "kv-cache",
+            "force",
+        )
+    )
+    args = parser.parse_args(
+        [
+            "audit-runtime",
+            "--workspace",
+            str(tmp_path / "workspace"),
+            "--direction",
+            "qwen3_8b_to_14b",
+            "--samples",
+            str(tmp_path / "runtime.jsonl"),
+            "--repository-root",
+            str(tmp_path),
+            "--lmcache-l1-size-gb",
+            "6",
+            "--lmcache-l1-init-size-gb",
+            "2",
+            "--progress-every",
+            "7",
+            "--resume",
+        ]
+    )
+    direction = SimpleNamespace(
+        source_model_path="/models/source",
+        target_model_path="/models/target",
+    )
+    workspace = SimpleNamespace(
+        config=SimpleNamespace(
+            code_sha256=_digest("code"),
+            direction=lambda name: (
+                direction if name == "qwen3_8b_to_14b" else pytest.fail("wrong runtime direction")
+            ),
+        ),
+        control=tmp_path / "workspace/.pipeline",
+    )
+    monkeypatch.setattr(cli_module.V5PipelineWorkspace, "open", lambda _path: workspace)
+    monkeypatch.setattr(cli_module, "source_tree_sha256", lambda _path: _digest("code"))
+    captured: dict[str, Any] = {}
+
+    class FakeEvaluator:
+        def __init__(self, **kwargs: Any) -> None:
+            captured["evaluator_kwargs"] = kwargs
+
+        def parameters(self) -> dict[str, Any]:
+            return {"evaluator_id": "fixed-runtime"}
+
+    sentinel = object()
+
+    def fake_run(**kwargs: Any) -> Any:
+        captured["run_kwargs"] = kwargs
+        captured["factory_result"] = kwargs["evaluator_factory"]()
+        return sentinel
+
+    fake_real_runtime = ModuleType("goldenexperience.size_variant.v5_real_runtime")
+    cast(Any, fake_real_runtime).RealQwenRuntimeAuditEvaluator = FakeEvaluator
+    monkeypatch.setitem(sys.modules, fake_real_runtime.__name__, fake_real_runtime)
+    monkeypatch.setattr(runtime_module, "run_runtime_audit_stage", fake_run)
+    monkeypatch.setattr(
+        runtime_module,
+        "stderr_runtime_progress",
+        lambda every: ("progress", every),
+    )
+
+    assert cli_module.audit_runtime(args) is sentinel
+    evaluator_kwargs = captured["evaluator_kwargs"]
+    lmcache = evaluator_kwargs["lmcache_config"]
+    assert lmcache.host == "127.0.0.1"
+    assert lmcache.port == 0
+    assert lmcache.chunk_size == 128
+    assert lmcache.l1_size_gb == 6
+    assert lmcache.l1_init_size_gb == 2
+    assert evaluator_kwargs["identity_cache_path"] == workspace.control / (
+        "model_identity_cache.json"
+    )
+    run_kwargs = captured["run_kwargs"]
+    assert run_kwargs["evaluator_parameters"] == {"evaluator_id": "fixed-runtime"}
+    assert run_kwargs["resume"] is True
+    assert run_kwargs["progress"] == ("progress", 7)
+    assert captured["factory_result"].parameters() == {"evaluator_id": "fixed-runtime"}
 
 
 def _model(model_id: str, size: float, layers: int) -> CachedKVModelSpec:

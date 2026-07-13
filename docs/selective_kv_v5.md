@@ -222,6 +222,23 @@ at a time are enforced. Only after the vLLM worker is isolated does the parent o
 and the two Transformers models. Four source prefixes (128, 512, 2,048, and 8,192 tokens) are stored
 once and reused by the registered 512-row audit without filesystem staging.
 
+After one direction has completed semantic evaluation, run its bound runtime split with:
+
+```bash
+golden-v5-pipeline audit-runtime \
+  --workspace artifacts/publication-v5 \
+  --direction qwen3_4b_to_8b \
+  --samples artifacts/cache/publication_benchmark_v5_bound/raw/runtime_audit.jsonl \
+  --source-device cuda:0 \
+  --target-device cuda:1 \
+  --resume
+```
+
+The command rechecks the workspace source-tree hash before opening any model. It exposes only
+operational LMCache memory/worker/time-out settings, and records all of them in the stage binding.
+Quality thresholds, sample counts, warmup and measurement counts, connector failure policy, and
+approval gates have no command-line override.
+
 The 512-request approval audit is an isolated paired latency experiment in lexicographic sample-id
 order. For every accepted row it compares native target prefill/TTFT with direct reuse; for every
 rejected row it compares native TTFT with fail-closed fallback, with at least 100 measurements on

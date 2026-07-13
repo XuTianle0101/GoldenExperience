@@ -252,7 +252,8 @@ class RealQwenRuntimeAuditEvaluator:
             self._close(suppress_errors=True)
             raise
 
-    def __exit__(self, exc_type: object, *_args: object) -> None:
+    def __exit__(self, *args: object) -> None:
+        exc_type = args[0] if args else None
         self._close(suppress_errors=exc_type is not None)
 
     def warmup(self, iterations: int) -> None:
