@@ -134,3 +134,26 @@ def test_logit_refinement_cli_defaults_fail_closed_against_collapse() -> None:
     assert args.logit_refinement_kv_anchor_weight == pytest.approx(1.0)
     assert args.logit_refinement_holdout_prompts == 4
     assert args.logit_refinement_early_stopping_patience == 2
+    assert args.seed == 17
+    assert not args.paired_refinement_validation
+
+
+def test_paired_refinement_validation_is_exposed_by_cli() -> None:
+    args = build_parser().parse_args(
+        [
+            "--direction",
+            "8b_to_14b",
+            "--dataset",
+            "prompts.json",
+            "--output",
+            "candidate.json",
+            "--logit-refinement-steps",
+            "8",
+            "--paired-refinement-validation",
+            "--seed",
+            "31",
+        ]
+    )
+
+    assert args.paired_refinement_validation
+    assert args.seed == 31

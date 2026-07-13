@@ -1091,6 +1091,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--source-device", default="cuda:0")
     parser.add_argument("--target-device", default="cuda:1")
     parser.add_argument("--fit-device", default="cuda:1")
+    parser.add_argument("--seed", type=int, default=17)
     parser.add_argument("--rank", type=int, default=512)
     parser.add_argument("--source-window", type=int, default=3)
     parser.add_argument("--layer-plan", choices=("depth", "cka"), default="depth")
@@ -1120,6 +1121,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--logit-refinement-holdout-min-delta", type=float, default=1e-4)
     parser.add_argument("--logit-refinement-holdout-max-top1-drop", type=float, default=0.05)
     parser.add_argument("--logit-refinement-max-grad-norm", type=float, default=1.0)
+    parser.add_argument(
+        "--paired-refinement-validation",
+        action="store_true",
+        help="Evaluate validation before and after refinement on the same fitted state.",
+    )
     parser.add_argument(
         "--smoke-max-validation-prompts",
         type=int,
@@ -1153,6 +1159,11 @@ def main() -> int:
         raise ValueError("layer alignment prompt and sample counts must be positive")
     if args.logit_refinement_steps < 0:
         raise ValueError("--logit-refinement-steps must be non-negative")
+    if args.paired_refinement_validation and not args.logit_refinement_steps:
+        raise ValueError("--paired-refinement-validation requires logit refinement")
+    torch.manual_seed(args.seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(args.seed)
     dataset = CachedKVPromptDataset.load(args.dataset)
     if args.finalize and args.emit_validation_candidate:
         raise ValueError("--finalize and --emit-validation-candidate are mutually exclusive")
@@ -1246,6 +1257,10 @@ def main() -> int:
         suffix_tokens=args.suffix_tokens,
     )
     effective_rank = min(args.rank, int(features.shape[1]) - 1, int(key_residual.shape[-1]))
+    # Reset immediately before the randomized SVD so model loading cannot perturb the fit.
+    torch.manual_seed(args.seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(args.seed)
     state = fit_low_rank_state(
         features,
         key_residual,
@@ -1261,6 +1276,23 @@ def main() -> int:
     del features, key_residual, value_residual
     gc.collect()
     torch.cuda.empty_cache()
+
+    validation_samples = dataset.split("validation")
+    if args.smoke_max_validation_prompts > 0:
+        validation_samples = validation_samples[: args.smoke_max_validation_prompts]
+    pre_refinement_validation: dict[str, Any] | None = None
+    if args.paired_refinement_validation:
+        pre_refinement_validation = evaluate_split(
+            validation_samples,
+            tokenizer=tokenizer,
+            source_model=source_model,
+            target_model=target_model,
+            state=state,
+            source_device=args.source_device,
+            target_device=args.target_device,
+            suffix_tokens=args.suffix_tokens,
+            greedy_tokens=args.greedy_tokens,
+        )
 
     logit_refinement: dict[str, Any] = {"enabled": False, "steps": 0}
     if args.logit_refinement_steps:
@@ -1289,9 +1321,6 @@ def main() -> int:
             max_grad_norm=args.logit_refinement_max_grad_norm,
         )
 
-    validation_samples = dataset.split("validation")
-    if args.smoke_max_validation_prompts > 0:
-        validation_samples = validation_samples[: args.smoke_max_validation_prompts]
     validation = evaluate_split(
         validation_samples,
         tokenizer=tokenizer,
@@ -1314,6 +1343,7 @@ def main() -> int:
         },
         "source_model": asdict(source_spec),
         "target_model": asdict(target_spec),
+        "seed": args.seed,
         "rank": effective_rank,
         "source_window": args.source_window,
         "layer_alignment": layer_alignment,
@@ -1321,8 +1351,26 @@ def main() -> int:
         "nonlinear_ridge_lambda": args.nonlinear_ridge_lambda,
         "training_collection": collection,
         "logit_refinement": logit_refinement,
+        "paired_refinement_validation": args.paired_refinement_validation,
         "validation": validation,
     }
+    if pre_refinement_validation is not None:
+        candidate_summary["pre_refinement_validation"] = pre_refinement_validation
+        comparison_metrics = (
+            "key_cosine",
+            "value_cosine",
+            "next_token_top1_agreement",
+            "greedy_continuation_match_rate",
+            "bridge_perplexity",
+            "perplexity_drift_pct",
+            "bridge_task_score",
+            "task_score_drop_pct",
+            "p95_transform_ms",
+        )
+        candidate_summary["refinement_validation_delta"] = {
+            name: float(validation[name]) - float(pre_refinement_validation[name])
+            for name in comparison_metrics
+        }
     if not args.finalize and not args.emit_validation_candidate:
         _write_json(result_path, candidate_summary)
         print(json.dumps(candidate_summary, indent=2, sort_keys=True))
