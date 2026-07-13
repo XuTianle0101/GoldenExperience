@@ -76,7 +76,7 @@
       "task_score_drop_pct": 0.0,
       "value_cosine": -0.00005827657878398895
     },
-    "summary_path": "artifacts/cached_kv/validation_candidate_14b_to_8b_20260713.json"
+    "source": "Historical validation-candidate metrics are inlined here; the superseded standalone summary was removed during repository cleanup."
   },
   "raw_results_path": "artifacts/results/qwen3_14b_to_8b_mixed_holdout16_paired_rank512_seed17.results.json",
   "raw_results_sha256": "43d6f0ba5c759083f6f846789e276dd5524dc0b7b5fb0ced12bc3652558979ac",
