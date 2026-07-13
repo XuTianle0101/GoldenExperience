@@ -8,6 +8,8 @@ def test_patch_manifest_documents_non_invasive_hooks() -> None:
     assert [hook.name for hook in manifest.ordered_hooks()] == [
         "engine_request_metadata",
         "lmcache_cross_model_lookup",
+        "calibrated_risk_gate",
+        "lmcache_retrieve_transform",
         "goldenexperience_materializer",
         "quality_gate_accounting",
     ]
