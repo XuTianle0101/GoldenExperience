@@ -12,7 +12,7 @@ from collections.abc import Callable, Mapping, Sequence
 from contextlib import suppress
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 
 from goldenexperience.benchmarks.publication import (
     SPLIT_COUNTS,
@@ -86,6 +86,14 @@ VALIDATION_DECISIONS = frozenset(
         "predicted_unsafe",
     }
 )
+
+
+class AdmissionRiskFeatures(Protocol):
+    @property
+    def history_samples(self) -> int: ...
+
+    @property
+    def features(self) -> tuple[float, ...]: ...
 
 
 @dataclass(frozen=True)
@@ -836,7 +844,7 @@ def _load_and_validate_report(
 
 
 def _admission_decision(
-    example: RiskTrainingExample,
+    example: AdmissionRiskFeatures,
     unsafe_probability: float,
     risk_gate: Any,
 ) -> tuple[bool, str]:

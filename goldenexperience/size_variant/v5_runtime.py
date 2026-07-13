@@ -33,7 +33,7 @@ from goldenexperience.runtime.lmcache_retrieve_transform import (
     verify_runtime_stack_identity,
 )
 from goldenexperience.size_variant.cached_kv_manifest import sha256_file
-from goldenexperience.size_variant.risk_gate import RiskPredictor
+from goldenexperience.size_variant.risk_gate import RISK_FEATURE_DIM, RiskPredictor, unsafe_label
 from goldenexperience.size_variant.selective_manifest import (
     ArtifactState,
     DirectInjectionEvidence,
@@ -66,8 +66,8 @@ from goldenexperience.size_variant.v5_pipeline import (
     V5PipelineWorkspace,
 )
 from goldenexperience.size_variant.v5_risk import (
+    RISK_LABEL_GENERATION_TOKENS,
     RiskHistory,
-    RiskTrainingExample,
     V5RiskFitManifest,
     load_risk_predictor,
 )
@@ -75,17 +75,142 @@ from goldenexperience.size_variant.v5_semantic import (
     V5SemanticManifest,
     load_completed_semantic,
 )
-from goldenexperience.size_variant.v5_validation import (
-    RiskValidationMeasurement,
-    _admission_decision,
-)
+from goldenexperience.size_variant.v5_validation import VALIDATION_DECISIONS, _admission_decision
 
-V5_RUNTIME_CHECKPOINT_SCHEMA = "goldenexperience.v5_runtime_checkpoint.v1"
-V5_RUNTIME_REPORT_SCHEMA = "goldenexperience.v5_runtime_report.v1"
-V5_RUNTIME_MANIFEST_SCHEMA = "goldenexperience.v5_runtime_manifest.v1"
+V5_RUNTIME_CHECKPOINT_SCHEMA = "goldenexperience.v5_runtime_checkpoint.v2"
+V5_RUNTIME_REPORT_SCHEMA = "goldenexperience.v5_runtime_report.v2"
+V5_RUNTIME_MANIFEST_SCHEMA = "goldenexperience.v5_runtime_manifest.v2"
 RUNTIME_AUDIT_WARMUP_ITERATIONS = 20
 RUNTIME_AUDIT_MIN_MEASUREMENTS_PER_PATH = 100
 RUNTIME_AUDIT_PREDICTOR_DEVICE = RISK_CALIBRATION_PREDICTOR_DEVICE
+RUNTIME_AUDIT_SHADOW_POLICY = "reference_free_greedy_agreement_lt_0.98_or_perplexity_drift_gt_2pct"
+
+
+@dataclass(frozen=True)
+class RuntimeRiskObservation:
+    """Reference-free shadow outcome used only for causal runtime history."""
+
+    sample_id: str
+    prefix_group_id: str
+    features: tuple[float, ...]
+    shadow_failure: bool
+    greedy_matches: int
+    greedy_tokens: int
+    native_nll: float
+    bridge_nll: float
+    teacher_tokens: int
+    history_samples: int
+    history_failures: int
+    history_greedy_agreement: float
+    sidecar_sha256: str
+    native_tokens_sha256: str
+    bridge_tokens_sha256: str
+
+    @property
+    def greedy_agreement(self) -> float:
+        if type(self.greedy_matches) is not int or type(self.greedy_tokens) is not int:
+            return math.nan
+        if self.greedy_tokens <= 0:
+            return math.nan
+        return self.greedy_matches / self.greedy_tokens
+
+    @property
+    def perplexity_drift_pct(self) -> float:
+        if (
+            type(self.teacher_tokens) is not int
+            or self.teacher_tokens <= 0
+            or not _finite_nonnegative(self.native_nll)
+            or not _finite_nonnegative(self.bridge_nll)
+        ):
+            return math.inf
+        try:
+            drift = abs(math.expm1((self.bridge_nll - self.native_nll) / self.teacher_tokens)) * 100
+        except OverflowError:
+            return sys.float_info.max
+        if not math.isfinite(drift):
+            return math.inf if math.isnan(drift) else sys.float_info.max
+        return min(sys.float_info.max, drift)
+
+    def history(self) -> RiskHistory:
+        agreement_sum = (
+            self.history_greedy_agreement * self.history_samples
+            if type(self.history_samples) is int
+            and _finite_probability(self.history_greedy_agreement)
+            else math.nan
+        )
+        return RiskHistory(
+            samples=self.history_samples,
+            failures=self.history_failures,
+            greedy_agreement_sum=agreement_sum,
+        )
+
+    def update_history(self, history: RiskHistory) -> RiskHistory:
+        return RiskHistory(
+            samples=history.samples + 1,
+            failures=history.failures + int(self.shadow_failure),
+            greedy_agreement_sum=history.greedy_agreement_sum + self.greedy_agreement,
+        )
+
+    def validate(
+        self,
+        *,
+        benchmark_record: GroupedPrefixRecord,
+        trace_record: TraceRecord,
+        expected_history: RiskHistory,
+    ) -> list[str]:
+        errors: list[str] = []
+        if (
+            self.sample_id != benchmark_record.sample_id
+            or self.sample_id != trace_record.sample_id
+            or self.prefix_group_id != benchmark_record.prefix_group_id
+        ):
+            errors.append("runtime shadow observation binding changed")
+        if (
+            not isinstance(self.features, tuple)
+            or len(self.features) != RISK_FEATURE_DIM
+            or any(not _finite_number(item) for item in self.features)
+        ):
+            errors.append("runtime shadow feature vector is invalid")
+        if not _strict_bool(self.shadow_failure):
+            errors.append("runtime shadow failure marker must be boolean")
+        if (
+            type(self.greedy_matches) is not int
+            or type(self.greedy_tokens) is not int
+            or self.greedy_tokens != RISK_LABEL_GENERATION_TOKENS
+            or not 0 <= self.greedy_matches <= self.greedy_tokens
+        ):
+            errors.append("runtime shadow greedy counts are invalid")
+        if (
+            type(self.teacher_tokens) is not int
+            or self.teacher_tokens != RISK_LABEL_GENERATION_TOKENS
+            or not _finite_nonnegative(self.native_nll)
+            or not _finite_nonnegative(self.bridge_nll)
+            or not math.isfinite(self.perplexity_drift_pct)
+        ):
+            errors.append("runtime shadow NLL evidence is invalid")
+        observed_history = self.history()
+        if (
+            observed_history.validate()
+            or expected_history.validate()
+            or (
+                observed_history.samples != expected_history.samples
+                or observed_history.failures != expected_history.failures
+                or abs(observed_history.greedy_agreement - expected_history.greedy_agreement)
+                > 1e-12
+            )
+        ):
+            errors.append("runtime shadow observation uses non-causal history")
+        for name in ("sidecar_sha256", "native_tokens_sha256", "bridge_tokens_sha256"):
+            if not _is_sha256(getattr(self, name)):
+                errors.append(f"runtime shadow {name} is invalid")
+        if _strict_bool(self.shadow_failure) and self.shadow_failure != unsafe_label(
+            native_task_passed=False,
+            bridge_task_passed=False,
+            greedy_agreement=self.greedy_agreement,
+            perplexity_drift_pct=self.perplexity_drift_pct,
+        ):
+            errors.append("runtime reference-free shadow failure is inconsistent")
+        return errors
 
 
 @dataclass(frozen=True)
@@ -162,7 +287,7 @@ class RuntimeExecutionMeasurement:
 
 @dataclass(frozen=True)
 class RuntimeAuditMeasurement:
-    example: RiskTrainingExample
+    observation: RuntimeRiskObservation
     unsafe_probability: float
     accepted: bool
     decision: str
@@ -177,19 +302,37 @@ class RuntimeAuditMeasurement:
         trace_record: TraceRecord,
         expected_history: RiskHistory,
     ) -> list[str]:
-        validation = RiskValidationMeasurement(
-            example=self.example,
-            unsafe_probability=self.unsafe_probability,
-            accepted=self.accepted,
-            decision=self.decision,
-        )
-        errors = validation.validate(
-            predictor=predictor,
-            risk_gate=risk_gate,
+        errors = self.observation.validate(
             benchmark_record=benchmark_record,
             trace_record=trace_record,
             expected_history=expected_history,
         )
+        if not _finite_probability(self.unsafe_probability):
+            errors.append("runtime predictor probability is invalid")
+        else:
+            try:
+                expected_probability = predictor.unsafe_probability(self.observation.features)
+            except (RuntimeError, TypeError, ValueError) as exc:
+                errors.append(f"runtime predictor failed: {type(exc).__name__}")
+            else:
+                if abs(self.unsafe_probability - expected_probability) > 1e-12:
+                    errors.append("runtime probability differs from the frozen predictor")
+        if not _strict_bool(self.accepted):
+            errors.append("runtime admission marker must be boolean")
+        if self.decision not in VALIDATION_DECISIONS:
+            errors.append("runtime admission decision is invalid")
+        else:
+            try:
+                expected_accepted, expected_decision = _admission_decision(
+                    self.observation,
+                    self.unsafe_probability,
+                    risk_gate,
+                )
+            except (TypeError, ValueError, V5PipelineError) as exc:
+                errors.append(f"runtime admission contract is malformed: {type(exc).__name__}")
+            else:
+                if self.accepted != expected_accepted or self.decision != expected_decision:
+                    errors.append("runtime admission differs from the calibrated gate")
         errors.extend(
             self.execution.validate(
                 accepted=self.accepted,
@@ -204,10 +347,10 @@ class RuntimeAuditMeasurement:
 
     @classmethod
     def from_dict(cls, payload: Mapping[str, Any]) -> RuntimeAuditMeasurement:
-        example = dict(payload["example"])
-        example["features"] = tuple(example["features"])
+        observation = dict(payload["observation"])
+        observation["features"] = tuple(observation["features"])
         return cls(
-            example=RiskTrainingExample(**example),
+            observation=RuntimeRiskObservation(**observation),
             unsafe_probability=payload["unsafe_probability"],
             accepted=payload["accepted"],
             decision=str(payload["decision"]),
@@ -278,20 +421,20 @@ class RuntimeAuditEvaluator(Protocol):
 
     def warmup(self, iterations: int) -> None: ...
 
-    def build_example(
+    def build_observation(
         self,
         benchmark_record: GroupedPrefixRecord,
         trace_record: TraceRecord,
         sample: RawBenchmarkSample,
         history: RiskHistory,
-    ) -> RiskTrainingExample: ...
+    ) -> RuntimeRiskObservation: ...
 
     def measure(
         self,
         benchmark_record: GroupedPrefixRecord,
         trace_record: TraceRecord,
         sample: RawBenchmarkSample,
-        example: RiskTrainingExample,
+        observation: RuntimeRiskObservation,
         *,
         accepted: bool,
         decision: str,
@@ -332,6 +475,7 @@ class V5RuntimeManifest:
     measurement_protocol: str
     request_order: str
     arrival_timestamps_replayed: bool
+    shadow_policy: str
     passed: bool = True
     schema_version: str = V5_RUNTIME_MANIFEST_SCHEMA
 
@@ -438,6 +582,8 @@ class V5RuntimeManifest:
             or self.arrival_timestamps_replayed is not SELECTIVE_RUNTIME_ARRIVAL_TIMESTAMPS_REPLAYED
         ):
             errors.append("isolated runtime audit cannot claim arrival-timestamp replay")
+        if self.shadow_policy != RUNTIME_AUDIT_SHADOW_POLICY:
+            errors.append("runtime reference-free shadow policy changed")
         if type(self.passed) is not bool or not self.passed:
             errors.append("runtime manifest does not carry a passing result")
         if semantic_selective.state is not ArtifactState.SEMANTIC_APPROVED:
@@ -504,6 +650,7 @@ class V5RuntimeManifest:
             measurement_protocol=str(payload["measurement_protocol"]),
             request_order=str(payload["request_order"]),
             arrival_timestamps_replayed=payload["arrival_timestamps_replayed"],
+            shadow_policy=str(payload["shadow_policy"]),
             passed=payload.get("passed", False),
             schema_version=str(payload.get("schema_version", "")),
         )
@@ -557,6 +704,7 @@ def run_runtime_audit_stage(
         "measurement_protocol": SELECTIVE_RUNTIME_MEASUREMENT_PROTOCOL,
         "request_order": SELECTIVE_RUNTIME_REQUEST_ORDER,
         "arrival_timestamps_replayed": SELECTIVE_RUNTIME_ARRIVAL_TIMESTAMPS_REPLAYED,
+        "shadow_policy": RUNTIME_AUDIT_SHADOW_POLICY,
         "runtime_stack_sha256": stack.content_sha256(),
         "evaluator": evaluator_payload,
     }
@@ -594,10 +742,15 @@ def run_runtime_audit_stage(
                     risk_gate=calibration.risk_gate,
                 )
                 if measurement is None:
-                    example = evaluator.build_example(record, trace_record, sample, history)
-                    probability = predictor.unsafe_probability(example.features)
+                    observation = evaluator.build_observation(
+                        record,
+                        trace_record,
+                        sample,
+                        history,
+                    )
+                    probability = predictor.unsafe_probability(observation.features)
                     accepted, decision = _admission_decision(
-                        example,
+                        observation,
                         probability,
                         calibration.risk_gate,
                     )
@@ -605,12 +758,12 @@ def run_runtime_audit_stage(
                         record,
                         trace_record,
                         sample,
-                        example,
+                        observation,
                         accepted=accepted,
                         decision=decision,
                     )
                     measurement = RuntimeAuditMeasurement(
-                        example=example,
+                        observation=observation,
                         unsafe_probability=probability,
                         accepted=accepted,
                         decision=decision,
@@ -631,7 +784,7 @@ def run_runtime_audit_stage(
                         benchmark_record=record,
                         measurement=measurement,
                     )
-                histories[record.prefix_group_id] = history.update(measurement.example)
+                histories[record.prefix_group_id] = measurement.observation.update_history(history)
                 measurements.append(measurement)
                 if progress is not None:
                     progress(index, len(samples), sample.sample_id)
@@ -722,6 +875,7 @@ def run_runtime_audit_stage(
             measurement_protocol=SELECTIVE_RUNTIME_MEASUREMENT_PROTOCOL,
             request_order=SELECTIVE_RUNTIME_REQUEST_ORDER,
             arrival_timestamps_replayed=SELECTIVE_RUNTIME_ARRIVAL_TIMESTAMPS_REPLAYED,
+            shadow_policy=RUNTIME_AUDIT_SHADOW_POLICY,
         )
         errors = manifest.validate(
             workspace=workspace,
@@ -966,7 +1120,7 @@ def _load_and_validate_runtime_report(
         )
         if errors:
             raise V5PipelineError("; ".join(errors))
-        histories[record.prefix_group_id] = history.update(measurement.example)
+        histories[record.prefix_group_id] = measurement.observation.update_history(history)
     expected_summary = build_runtime_summary(
         direction=manifest.direction,
         dataset_sha256=workspace.config.split_sha256["runtime_audit"],
@@ -1028,6 +1182,7 @@ def _report_header(
         "measurement_protocol": SELECTIVE_RUNTIME_MEASUREMENT_PROTOCOL,
         "request_order": SELECTIVE_RUNTIME_REQUEST_ORDER,
         "arrival_timestamps_replayed": SELECTIVE_RUNTIME_ARRIVAL_TIMESTAMPS_REPLAYED,
+        "shadow_policy": RUNTIME_AUDIT_SHADOW_POLICY,
         "runtime_stack": {
             **asdict(stack),
             "sources": [asdict(item) for item in stack.sources],
@@ -1182,6 +1337,14 @@ def _finite_probability(value: Any) -> bool:
         and math.isfinite(value)
         and 0 <= value <= 1
     )
+
+
+def _finite_number(value: Any) -> bool:
+    return not isinstance(value, bool) and isinstance(value, (int, float)) and math.isfinite(value)
+
+
+def _finite_nonnegative(value: Any) -> bool:
+    return _finite_number(value) and value >= 0
 
 
 def _finite_positive(value: Any) -> bool:

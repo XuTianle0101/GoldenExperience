@@ -49,7 +49,6 @@ from goldenexperience.size_variant.v5_pipeline import (
 from goldenexperience.size_variant.v5_risk import (
     RISK_LABEL_GENERATION_TOKENS,
     RiskHistory,
-    RiskTrainingExample,
     RiskTrainingMetrics,
     RiskTrainingParameters,
     V5RiskFitManifest,
@@ -57,6 +56,7 @@ from goldenexperience.size_variant.v5_risk import (
 from goldenexperience.size_variant.v5_runtime import (
     RuntimeExecutionMeasurement,
     RuntimeFailureAudit,
+    RuntimeRiskObservation,
     V5RuntimeManifest,
     build_runtime_summary,
     load_completed_runtime_audit,
@@ -305,13 +305,13 @@ class _Evaluator:
     def warmup(self, iterations: int) -> None:
         self.warmups.append(iterations)
 
-    def build_example(
+    def build_observation(
         self,
         record: GroupedPrefixRecord,
         _trace: Any,
         _sample: RawBenchmarkSample,
         history: RiskHistory,
-    ) -> RiskTrainingExample:
+    ) -> RuntimeRiskObservation:
         self.calls += 1
         if self.fail_after is not None and self.calls > self.fail_after:
             raise RuntimeError("synthetic runtime interruption")
@@ -319,26 +319,20 @@ class _Evaluator:
         probability = 0.1 if index <= 101 else 0.9
         features = [0.0] * RISK_FEATURE_DIM
         features[0] = probability
-        return RiskTrainingExample(
+        return RuntimeRiskObservation(
             sample_id=record.sample_id,
             prefix_group_id=record.prefix_group_id,
             features=tuple(features),
-            unsafe=False,
-            native_task_score=0.0,
-            bridge_task_score=0.0,
-            task_pass_threshold=1.0,
+            shadow_failure=False,
             greedy_matches=RISK_LABEL_GENERATION_TOKENS,
             greedy_tokens=RISK_LABEL_GENERATION_TOKENS,
             native_nll=1.0,
             bridge_nll=1.0,
             teacher_tokens=RISK_LABEL_GENERATION_TOKENS,
-            key_cosine=1.0,
             history_samples=history.samples,
             history_failures=history.failures,
             history_greedy_agreement=history.greedy_agreement,
             sidecar_sha256=_digest(f"sidecar-{record.sample_id}"),
-            native_prediction_sha256=_digest(f"native-{record.sample_id}"),
-            bridge_prediction_sha256=_digest(f"bridge-{record.sample_id}"),
             native_tokens_sha256=_digest(f"native-tokens-{record.sample_id}"),
             bridge_tokens_sha256=_digest(f"bridge-tokens-{record.sample_id}"),
         )
@@ -348,7 +342,7 @@ class _Evaluator:
         _record: GroupedPrefixRecord,
         trace: Any,
         _sample: RawBenchmarkSample,
-        _example: RiskTrainingExample,
+        _observation: RuntimeRiskObservation,
         *,
         accepted: bool,
         decision: str,
@@ -415,6 +409,9 @@ class _Workspace:
         assert parameters["measurement_protocol"] == "isolated_paired_request_latency_v1"
         assert parameters["request_order"] == "lexicographic_sample_id"
         assert parameters["arrival_timestamps_replayed"] is False
+        assert parameters["shadow_policy"] == (
+            "reference_free_greedy_agreement_lt_0.98_or_perplexity_drift_gt_2pct"
+        )
         if self.failures:
             assert resume
         return StageLease(direction, stage, _digest("stage-input"), "attempt")
@@ -589,6 +586,11 @@ def test_runtime_stage_resumes_recomputes_and_grants_final_authority(
     assert report["measurement_protocol"] == "isolated_paired_request_latency_v1"
     assert report["request_order"] == "lexicographic_sample_id"
     assert report["arrival_timestamps_replayed"] is False
+    assert report["shadow_policy"] == (
+        "reference_free_greedy_agreement_lt_0.98_or_perplexity_drift_gt_2pct"
+    )
+    assert "native_task_score" not in report["measurements"][0]["observation"]
+    assert "bridge_task_score" not in report["measurements"][0]["observation"]
     manifest = V5RuntimeManifest.from_dict(json.loads(manifest_path.read_text(encoding="utf-8")))
     approved = SelectiveKVBridgeManifest.from_dict(
         json.loads(approved_path.read_text(encoding="utf-8"))
@@ -650,6 +652,25 @@ def test_runtime_stage_resumes_recomputes_and_grants_final_authority(
             ),
             predictor=predictor,
         )
+    report["measurements"][0]["observation"]["shadow_failure"] = True
+    bad_shadow = tmp_path / "tampered-runtime-shadow.json"
+    bad_shadow.write_text(json.dumps(report), encoding="utf-8")
+    with pytest.raises(V5PipelineError, match="reference-free shadow failure"):
+        runtime_module._load_and_validate_runtime_report(
+            bad_shadow,
+            benchmark=cast(Any, benchmark),
+            workspace=cast(V5PipelineWorkspace, workspace),
+            trace=trace,
+            semantic=semantic,
+            semantic_selective=semantic_selective,
+            risk_fit=risk_fit,
+            calibration=calibration,
+            transport_manifest=transport,
+            candidate=candidate,
+            manifest=manifest,
+            predictor=predictor,
+        )
+    report["measurements"][0]["observation"]["shadow_failure"] = False
     report["measurements"][0]["execution"]["source_read_attempted"] = True
     tampered = tmp_path / "tampered-runtime.json"
     tampered.write_text(json.dumps(report), encoding="utf-8")

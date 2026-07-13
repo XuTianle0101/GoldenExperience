@@ -195,6 +195,12 @@ supports request-latency and fallback-cost claims only, not serving throughput, 
 scalability claims. Any timestamp-scaled concurrent replay is separate workload evidence and must
 be reported separately rather than inferred from an `approved` artifact.
 
+Because ShareGPT and BurstGPT runtime rows are trace-only, the runtime report never invents task
+references or task scores. Causal history is updated from a separately named reference-free shadow
+observation: native and bridged 16-token continuations are compared only for greedy agreement and
+teacher-forced perplexity drift, using the registered 0.98 and 2% failure cutoffs. These shadow
+outcomes drive later history features but are not semantic accuracy evidence.
+
 `tokenizer_sha256` identifies token-ID semantics: tokenizer model/vocabulary files, merges,
 special tokens, and semantic tokenizer configuration. Prompt serialization is separate;
 `chat_template_sha256` preserves the exact default chat template for provenance. This split
