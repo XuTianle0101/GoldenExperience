@@ -388,6 +388,73 @@ def _native_generation_teacher(
     )
 
 
+def _bridge_free_running_metrics(
+    target_model: Any,
+    tokenizer: Any,
+    bridge_object: Any,
+    *,
+    seed_token: int,
+    teacher_tokens: Any,
+    target_device: str,
+    expected_answer: str | None,
+) -> dict[str, Any]:
+    """Decode freely from a bridge cache and compare with native greedy labels."""
+
+    import torch
+
+    expected_tokens = [int(token) for token in teacher_tokens.reshape(-1).tolist()]
+    if not expected_tokens:
+        raise ValueError("free-running holdout requires native teacher tokens")
+    cache = object_to_dynamic_cache(bridge_object, target_model.config)
+    input_ids = torch.tensor([[seed_token]], dtype=torch.long, device=target_device)
+    generated_tokens: list[int] = []
+    with torch.inference_mode():
+        for _ in expected_tokens:
+            output = target_model(
+                input_ids=input_ids,
+                past_key_values=cache,
+                use_cache=True,
+            )
+            cache = output.past_key_values
+            next_token = int(output.logits[:, -1].argmax(dim=-1).item())
+            generated_tokens.append(next_token)
+            input_ids = torch.tensor([[next_token]], dtype=torch.long, device=target_device)
+    text = tokenizer.decode(generated_tokens, skip_special_tokens=True)
+    return {
+        "greedy_matches": sum(
+            generated == expected
+            for generated, expected in zip(generated_tokens, expected_tokens, strict=True)
+        ),
+        "greedy_tokens": len(expected_tokens),
+        "task_passed": (
+            None
+            if expected_answer is None
+            else contains_expected_final_answer(text, expected_answer)
+        ),
+        "text": text,
+    }
+
+
+def _holdout_is_better(
+    current: dict[str, Any],
+    best: dict[str, Any],
+    *,
+    min_delta: float,
+) -> bool:
+    """Rank checkpoints by free-running task, greedy match, then teacher objective."""
+
+    for metric in ("free_running_task_score", "free_running_greedy_match_rate"):
+        current_value = current.get(metric)
+        best_value = best.get(metric)
+        if current_value is None or best_value is None:
+            continue
+        if current_value > best_value + min_delta:
+            return True
+        if current_value < best_value - min_delta:
+            return False
+    return current["objective"] < best["objective"] - min_delta
+
+
 def _refinement_prompt_forward(
     sample: CachedKVPrompt,
     *,
@@ -496,13 +563,18 @@ def _measure_refinement_holdout(
     generation_tokens: int,
     temperature: float,
     label_weight: float,
-) -> dict[str, float]:
+) -> dict[str, Any]:
     import torch
 
     objectives: list[float] = []
     distillations: list[float] = []
     label_losses: list[float] = []
     agreements: list[float] = []
+    free_running_matches = 0
+    free_running_tokens = 0
+    free_running_task_passes = 0
+    free_running_task_prompts = 0
+    free_running_prompt_results: list[dict[str, Any]] = []
     with torch.no_grad():
         for sample in samples:
             (
@@ -538,12 +610,51 @@ def _measure_refinement_holdout(
             distillations.append(float(distillation.item()))
             label_losses.append(float(label_loss.item()))
             agreements.append(float(agreement.item()))
+            if objective_mode == "native-generation":
+                _, token_ids = render_to_token_bucket(
+                    sample,
+                    tokenizer,
+                    suffix_tokens=suffix_tokens,
+                )
+                free_running = _bridge_free_running_metrics(
+                    target_model,
+                    tokenizer,
+                    bridge_object,
+                    seed_token=token_ids[-1],
+                    teacher_tokens=labels,
+                    target_device=target_device,
+                    expected_answer=sample.expected_answer,
+                )
+                free_running_matches += int(free_running["greedy_matches"])
+                free_running_tokens += int(free_running["greedy_tokens"])
+                if free_running["task_passed"] is not None:
+                    free_running_task_prompts += 1
+                    free_running_task_passes += int(free_running["task_passed"] is True)
+                free_running_prompt_results.append(
+                    {
+                        "prompt_id": sample.prompt_id,
+                        "greedy_match_rate": int(free_running["greedy_matches"])
+                        / int(free_running["greedy_tokens"]),
+                        "task_passed": free_running["task_passed"],
+                        "text": free_running["text"],
+                    }
+                )
             del source_object, bridge_object, student_logits, teacher_logits, labels
     return {
         "objective": sum(objectives) / len(objectives),
         "distillation_loss": sum(distillations) / len(distillations),
         "label_loss": sum(label_losses) / len(label_losses),
         "top1_agreement": sum(agreements) / len(agreements),
+        "free_running_greedy_match_rate": (
+            free_running_matches / free_running_tokens if free_running_tokens else None
+        ),
+        "free_running_task_score": (
+            free_running_task_passes / free_running_task_prompts
+            if free_running_task_prompts
+            else None
+        ),
+        "free_running_task_prompts": free_running_task_prompts,
+        "free_running_prompt_results": free_running_prompt_results,
     }
 
 
@@ -634,7 +745,7 @@ def refine_state_with_target_logits(
     records: list[dict[str, Any]] = []
     holdout_records: list[dict[str, Any]] = []
     best_step: int | None = None
-    best_holdout_objective: float | None = None
+    best_holdout_metrics: dict[str, Any] | None = None
     best_parameters: dict[str, Any] | None = None
     stale_steps = 0
     stopped_reason: str | None = None
@@ -656,7 +767,7 @@ def refine_state_with_target_logits(
         )
         holdout_records.append({"step": 0, **initial_holdout})
         best_step = 0
-        best_holdout_objective = initial_holdout["objective"]
+        best_holdout_metrics = initial_holdout
         best_parameters = {name: anchors[name].clone() for name in parameter_names}
 
     for step in range(steps):
@@ -789,18 +900,27 @@ def refine_state_with_target_logits(
             holdout_records.append({"step": step + 1, **current_holdout})
             record["holdout_objective"] = current_holdout["objective"]
             record["holdout_top1_agreement"] = current_holdout["top1_agreement"]
+            record["holdout_free_running_greedy_match_rate"] = current_holdout[
+                "free_running_greedy_match_rate"
+            ]
+            record["holdout_free_running_task_score"] = current_holdout[
+                "free_running_task_score"
+            ]
             collapsed = current_holdout["top1_agreement"] < (
                 holdout_records[0]["top1_agreement"] - holdout_max_top1_drop
             )
             improved = (
                 not collapsed
-                and best_holdout_objective is not None
-                and current_holdout["objective"]
-                < best_holdout_objective - holdout_min_delta
+                and best_holdout_metrics is not None
+                and _holdout_is_better(
+                    current_holdout,
+                    best_holdout_metrics,
+                    min_delta=holdout_min_delta,
+                )
             )
             if improved:
                 best_step = step + 1
-                best_holdout_objective = current_holdout["objective"]
+                best_holdout_metrics = current_holdout
                 best_parameters = {
                     name: state_on_target[name].detach().clone() for name in parameter_names
                 }
@@ -848,8 +968,14 @@ def refine_state_with_target_logits(
         "holdout_records": holdout_records,
         "holdout_min_delta": holdout_min_delta,
         "holdout_max_top1_drop": holdout_max_top1_drop,
+        "holdout_checkpoint_metric_order": [
+            "free_running_task_score",
+            "free_running_greedy_match_rate",
+            "objective",
+        ],
         "early_stopping_patience": early_stopping_patience,
         "best_step": best_step,
+        "best_holdout_metrics": best_holdout_metrics,
         "stopped_reason": stopped_reason,
         "records": records,
     }
@@ -1199,7 +1325,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--logit-refinement-kv-anchor-weight", type=float, default=1.0)
     parser.add_argument("--logit-refinement-kv-anchor-max-positions", type=int, default=32)
-    parser.add_argument("--logit-refinement-holdout-prompts", type=int, default=4)
+    parser.add_argument("--logit-refinement-holdout-prompts", type=int, default=16)
     parser.add_argument("--logit-refinement-early-stopping-patience", type=int, default=2)
     parser.add_argument("--logit-refinement-holdout-min-delta", type=float, default=1e-4)
     parser.add_argument("--logit-refinement-holdout-max-top1-drop", type=float, default=0.05)

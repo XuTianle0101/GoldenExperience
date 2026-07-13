@@ -4,6 +4,7 @@ import torch
 from goldenexperience.size_variant.cached_kv_dataset import CachedKVPrompt
 from scripts.train_qwen3_cached_kv_bridge import (
     _bucket_balanced_samples,
+    _holdout_is_better,
     _kv_anchor_losses,
     _native_generation_teacher,
     _parameter_anchor_loss,
@@ -134,7 +135,7 @@ def test_logit_refinement_cli_defaults_fail_closed_against_collapse() -> None:
     assert args.logit_refinement_objective == "native-generation"
     assert args.logit_refinement_anchor_weight == pytest.approx(0.1)
     assert args.logit_refinement_kv_anchor_weight == pytest.approx(1.0)
-    assert args.logit_refinement_holdout_prompts == 4
+    assert args.logit_refinement_holdout_prompts == 16
     assert args.logit_refinement_early_stopping_patience == 2
     assert args.seed == 17
     assert not args.paired_refinement_validation
@@ -167,6 +168,42 @@ def test_native_generation_teacher_collects_autoregressive_greedy_targets() -> N
     assert model.inputs == [[1, 2], [3], [4]]
     assert labels.tolist() == [[3, 4, 5]]
     assert logits.argmax(dim=-1).tolist() == labels.tolist()
+
+
+def test_holdout_checkpoint_selection_prioritizes_free_running_quality() -> None:
+    best = {
+        "free_running_task_score": 0.75,
+        "free_running_greedy_match_rate": 0.80,
+        "objective": 0.4,
+    }
+
+    assert not _holdout_is_better(
+        {
+            "free_running_task_score": 0.70,
+            "free_running_greedy_match_rate": 0.95,
+            "objective": 0.1,
+        },
+        best,
+        min_delta=1e-4,
+    )
+    assert _holdout_is_better(
+        {
+            "free_running_task_score": 0.75,
+            "free_running_greedy_match_rate": 0.85,
+            "objective": 0.5,
+        },
+        best,
+        min_delta=1e-4,
+    )
+    assert _holdout_is_better(
+        {
+            "free_running_task_score": 0.75,
+            "free_running_greedy_match_rate": 0.80,
+            "objective": 0.3,
+        },
+        best,
+        min_delta=1e-4,
+    )
 
 
 def test_paired_refinement_validation_is_exposed_by_cli() -> None:
