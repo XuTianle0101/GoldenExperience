@@ -18,6 +18,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
+from goldenexperience.reuse import CrossModelReusePlanner, ReusePlan, ReuseRequest
 from goldenexperience.runtime.cross_model_reuse import (
     evaluate_runtime_reuse,
     load_lookup_hash_records,
@@ -34,6 +35,11 @@ from goldenexperience.runtime.kv_baseline.services import (
     ProcessGroup,
     validate_runtime_requirements,
 )
+from goldenexperience.runtime.materializer_client import (
+    MaterializerClientError,
+    ResidentMaterializerClient,
+)
+from goldenexperience.size_variant import CachedKVBridgeManifest, model_ref_from_cached_spec
 from scripts.run_cross_model_runtime import _cache_dir_summary, _log_evidence, _metrics, _timing
 
 
@@ -108,6 +114,74 @@ def _candidate_keys(model_name: str, chunk_hashes: list[str]) -> list[str]:
     return [object_key_string(model_name=model_name, chunk_hash=item) for item in chunk_hashes]
 
 
+def _bridge_manifest_path(direction: str) -> str:
+    return os.environ.get(
+        "GE_CACHED_KV_BRIDGE_MANIFEST",
+        str(REPO_ROOT / "artifacts" / "cached_kv" / f"qwen3_{direction}.json"),
+    )
+
+
+def _plan_cached_kv(direction: str) -> tuple[ReusePlan | None, dict[str, Any]]:
+    path = Path(_bridge_manifest_path(direction))
+    try:
+        manifest = CachedKVBridgeManifest.load(path)
+        plan = CrossModelReusePlanner().plan(
+            ReuseRequest(
+                source=model_ref_from_cached_spec(manifest.source),
+                target=model_ref_from_cached_spec(manifest.target),
+                prefix_hash="runtime_exact_prefix_pending",
+                calibration_id=manifest.bridge_id,
+                artifact_uri=str(path),
+            )
+        )
+        return plan, {
+            "success": plan.executable,
+            "manifest_path": str(path),
+            "metadata": plan.as_metadata(),
+            "required_gates": list(plan.required_gates),
+            "notes": list(plan.notes),
+        }
+    except (KeyError, OSError, TypeError, ValueError) as exc:
+        return None, {
+            "success": False,
+            "manifest_path": str(path),
+            "fallback_reason": "cached_kv_planner_artifact_invalid",
+            "error": str(exc),
+        }
+
+
+def _preload_materializer(
+    *,
+    client: ResidentMaterializerClient,
+    config: BaselineConfig,
+    source_config: BaselineConfig,
+    target_config: BaselineConfig,
+) -> dict[str, Any]:
+    direction = os.environ.get("GE_CACHED_KV_DIRECTION", "8b_to_14b")
+    request = {
+        "mode": "preload_cached_kv_bridge",
+        "bridge_manifest_path": _bridge_manifest_path(direction),
+        "source_model_path": source_config.model_path,
+        "target_model_path": target_config.model_path,
+        "direction": direction,
+        "device": os.environ.get("GE_MATERIALIZER_DEVICE", "cuda:0"),
+    }
+    try:
+        result = client.request(request)
+    except MaterializerClientError as exc:
+        result = {
+            "success": False,
+            "fallback_reason": "resident_materializer_preload_failed",
+            "fallback_safe": True,
+            "materialized": False,
+            "injected": False,
+            "error": str(exc),
+        }
+    result["process"] = client.process_info()
+    _write_json(config.run_dir / "materializer_preload_result.json", result)
+    return result
+
+
 def _lookup_source_candidate(
     config: BaselineConfig,
     source_config: BaselineConfig,
@@ -168,6 +242,7 @@ def _run_materializer(
     target_config: BaselineConfig,
     candidate: dict[str, Any],
     external_index_path: Path,
+    client: ResidentMaterializerClient | None = None,
 ) -> dict[str, Any]:
     request_path = config.run_dir / "materializer_request.json"
     output_path = config.run_dir / "materializer_result.json"
@@ -186,10 +261,7 @@ def _run_materializer(
         "hash_algorithm": config.hash_algorithm,
         "chunk_size": config.chunk_size,
         "max_chunks": int(os.environ.get("GE_MATERIALIZER_MAX_CHUNKS", "0")),
-        "bridge_manifest_path": os.environ.get(
-            "GE_CACHED_KV_BRIDGE_MANIFEST",
-            str(REPO_ROOT / "artifacts" / "cached_kv" / f"qwen3_{direction}.json"),
-        ),
+        "bridge_manifest_path": _bridge_manifest_path(direction),
         "direction": direction,
         "allow_unsafe": _env_bool("GE_ALLOW_UNSAFE_CROSS_MODEL_REUSE", "0"),
         "device": os.environ.get("GE_MATERIALIZER_DEVICE", "cuda:0"),
@@ -201,6 +273,27 @@ def _run_materializer(
     }
     _write_json(request_path, request)
     started = time.perf_counter()
+    if client is not None:
+        try:
+            result = client.request(request)
+        except MaterializerClientError as exc:
+            result = {
+                "success": False,
+                "fallback_reason": "resident_materializer_request_failed",
+                "fallback_safe": True,
+                "materialized": False,
+                "injected": False,
+                "error": str(exc),
+            }
+        result["process"] = {
+            **client.process_info(),
+            "elapsed_ms": (time.perf_counter() - started) * 1000,
+            "request_path": str(request_path),
+            "output_path": str(output_path),
+        }
+        _write_json(output_path, result)
+        return result
+
     completed = subprocess.run(
         [
             config.python_bin,
@@ -237,6 +330,8 @@ def _summarize(
     phases: list[str],
     lookup: dict[str, Any],
     materializer: dict[str, Any],
+    materializer_preload: dict[str, Any],
+    planner: dict[str, Any],
     tokenization: dict[str, Any],
     target_key_status_before: dict[str, Any],
     source_key_status: dict[str, Any],
@@ -301,6 +396,8 @@ def _summarize(
         },
         "tokenization": tokenization,
         "goldenexperience_materializer": materializer,
+        "materializer_preload": materializer_preload,
+        "reuse_plan": planner,
         "target_key_status_after_materializer": target_key_status_after_materializer,
         "policy": {
             "quality_gate_required": True,
@@ -408,9 +505,35 @@ def main() -> int:
 
     validate_runtime_requirements(config)
     processes = ProcessGroup(config)
+    reuse_plan, planner_result = _plan_cached_kv(direction)
+    _write_json(config.run_dir / "reuse_plan.json", planner_result)
+    materializer_client: ResidentMaterializerClient | None = None
+    materializer_preload: dict[str, Any] = {
+        "success": False,
+        "fallback_reason": "resident_materializer_disabled",
+        "materialized": False,
+        "injected": False,
+    }
+    if reuse_plan is not None and reuse_plan.executable and _env_bool(
+        "GE_RESIDENT_MATERIALIZER", "1"
+    ):
+        materializer_client = ResidentMaterializerClient(
+            python_bin=config.python_bin,
+            cwd=REPO_ROOT,
+            stderr_path=config.log_dir / "materializer_worker.log",
+            timeout_sec=float(os.environ.get("GE_MATERIALIZER_REQUEST_TIMEOUT_SEC", "1800")),
+        )
     phases = ["source_offload", "target_native"]
     target_phase = "target_fallback"
     try:
+        if materializer_client is not None:
+            materializer_client.start()
+            materializer_preload = _preload_materializer(
+                client=materializer_client,
+                config=config,
+                source_config=source_config,
+                target_config=target_config,
+            )
         processes.start_mooncake_services()
         processes.wait_for_mooncake_ready()
         processes.start_lmcache_mp_server()
@@ -496,23 +619,33 @@ def main() -> int:
                 len(source_token_ids) == seq_len
                 and len(target_token_ids) >= shared_prefix_tokens
             )
-            if tokenization["success"]:
+            if tokenization["success"] and reuse_plan is not None and reuse_plan.executable:
                 materializer = _run_materializer(
                     config=config,
                     source_config=source_config,
                     target_config=target_config,
                     candidate=lookup,
                     external_index_path=external_index_path,
+                    client=materializer_client,
                 )
                 target_key_status_after_materializer = mooncake_key_exists(
                     setup_config=config.l2_adapter(),
                     key_strings=target_keys,
                 )
-            else:
+            elif not tokenization["success"]:
                 materializer = {
                     "success": False,
                     "fallback_reason": "tokenization_mismatch",
                     "injected": False,
+                }
+            else:
+                materializer = {
+                    "success": False,
+                    "fallback_reason": "reuse_planner_blocked",
+                    "fallback_safe": True,
+                    "materialized": False,
+                    "injected": False,
+                    "reuse_plan": planner_result,
                 }
 
         if materializer.get("injected"):
@@ -531,6 +664,8 @@ def main() -> int:
             phases=phases,
             lookup=lookup,
             materializer=materializer,
+            materializer_preload=materializer_preload,
+            planner=planner_result,
             tokenization=tokenization,
             target_key_status_before=target_key_status_before,
             source_key_status=source_key_status,
@@ -543,12 +678,16 @@ def main() -> int:
         processes.stop_server("active")
         processes.stop_lmcache_mp()
         processes.stop_mooncake()
+        if materializer_client is not None:
+            materializer_client.close()
 
     print("Done. Key outputs:")
     for relative in [
         "metadata.json",
         "materializer_request.json",
+        "materializer_preload_result.json",
         "materializer_result.json",
+        "reuse_plan.json",
         "requests/source_offload.json",
         "requests/target_native.json",
         f"requests/{target_phase}.json",

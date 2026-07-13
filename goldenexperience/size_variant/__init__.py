@@ -20,6 +20,7 @@ from goldenexperience.size_variant.cached_kv_manifest import (
     CachedKVQualityEvidence,
     CachedKVQualityThresholds,
     artifact_id_for,
+    model_ref_from_cached_spec,
     model_spec_from_path,
 )
 from goldenexperience.size_variant.cached_kv_training import (
@@ -116,6 +117,7 @@ __all__ = [
     "pair_id_for",
     "qwen3_model_pair",
     "model_spec_from_path",
+    "model_ref_from_cached_spec",
     "object_to_dynamic_cache",
     "render_to_token_bucket",
     "safetensors_metadata",

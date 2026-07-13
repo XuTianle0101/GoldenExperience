@@ -7,11 +7,17 @@ from goldenexperience.runtime.config import (
     build_patch_environment,
     check_runtime,
 )
+from goldenexperience.runtime.materializer_client import (
+    MaterializerClientError,
+    ResidentMaterializerClient,
+)
 
 __all__ = [
     "RuntimeConfig",
     "RuntimeDependency",
     "RuntimeStatus",
+    "MaterializerClientError",
+    "ResidentMaterializerClient",
     "build_patch_environment",
     "check_runtime",
 ]

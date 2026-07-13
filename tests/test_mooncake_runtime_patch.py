@@ -273,6 +273,46 @@ def test_mooncake_runtime_patch_upgrades_previous_adapter_block(tmp_path: Path) 
     assert "bytes_read == requested_size == indexed_size" in upgraded
 
 
+def test_mooncake_runtime_patch_upgrades_markerless_adapter_block(tmp_path: Path) -> None:
+    patch_module = _load_patch_module()
+    site_packages = _write_fake_site_packages(tmp_path)
+    patch_module.patch_runtime(site_packages=[site_packages])
+    adapter = (
+        site_packages
+        / "lmcache"
+        / "v1"
+        / "distributed"
+        / "l2_adapters"
+        / "mooncake_store_l2_adapter.py"
+    )
+    text = adapter.read_text(encoding="utf-8")
+    start = text.index(patch_module.PYTHON_ADAPTER_MARKER)
+    end = text.index(patch_module.PYTHON_ADAPTER_END_MARKER, start) + len(
+        patch_module.PYTHON_ADAPTER_END_MARKER
+    )
+    old_block = text[start:end]
+    old_block = old_block.replace(patch_module.PYTHON_ADAPTER_MARKER + "\n", "", 1)
+    old_block = old_block.replace("\n" + patch_module.PYTHON_ADAPTER_END_MARKER, "", 1)
+    old_block = old_block.replace(
+        patch_module.PYTHON_ADAPTER_VERSION_MARKER + "\n\n\n",
+        "",
+        1,
+    ).replace(
+        "if bytes_read == requested_size == indexed_size:",
+        "if bytes_read > 0:",
+        1,
+    )
+    adapter.write_text(text[:start] + old_block + text[end:], encoding="utf-8")
+
+    results = patch_module.patch_runtime(site_packages=[site_packages])
+
+    assert any(result.changed for result in results)
+    upgraded = adapter.read_text(encoding="utf-8")
+    assert upgraded.count("class MooncakePythonL2Adapter") == 1
+    assert patch_module.PYTHON_ADAPTER_VERSION_MARKER in upgraded
+    assert "bytes_read == requested_size == indexed_size" in upgraded
+
+
 def test_mooncake_runtime_patch_cli_check(tmp_path: Path) -> None:
     patch_module = _load_patch_module()
     site_packages = _write_fake_site_packages(tmp_path)

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import math
 from dataclasses import dataclass
 from pathlib import Path
@@ -14,6 +15,11 @@ from goldenexperience.reuse.models import (
     ReuseRequest,
     ReuseScenario,
     ReuseStrategy,
+)
+from goldenexperience.size_variant.cached_kv_manifest import (
+    CACHED_KV_SCHEMA_VERSION,
+    CachedKVBridgeManifest,
+    CachedKVModelSpec,
 )
 from goldenexperience.size_variant.models import (
     CalibrationManifest,
@@ -154,6 +160,10 @@ class CrossModelReusePlanner:
         )
 
     def _plan_size_variant(self, request: ReuseRequest) -> ReusePlan:
+        cached_manifest = self._load_cached_kv_manifest(request)
+        if cached_manifest is not None:
+            return self._plan_cached_kv(request, cached_manifest)
+
         same_layout = request.source.kv_shape.same_layout(request.target.kv_shape)
         manifest = self._load_size_variant_manifest(request)
         manifest_errors: list[str] = []
@@ -265,6 +275,76 @@ class CrossModelReusePlanner:
             fallback_reason=fallback_reason,
         )
 
+    def _plan_cached_kv(
+        self,
+        request: ReuseRequest,
+        manifest: CachedKVBridgeManifest,
+    ) -> ReusePlan:
+        artifact_errors = manifest.artifact_errors()
+        identity_errors: list[str] = []
+        if request.calibration_id != manifest.bridge_id:
+            identity_errors.append("calibration_id must equal the cached-KV bridge_id")
+        if manifest.source.model_id != request.source.model_id:
+            identity_errors.append("source model differs from cached-KV artifact")
+        if manifest.target.model_id != request.target.model_id:
+            identity_errors.append("target model differs from cached-KV artifact")
+        identity_errors.extend(
+            self._cached_model_contract_errors(request.source, manifest.source, "source")
+        )
+        identity_errors.extend(
+            self._cached_model_contract_errors(request.target, manifest.target, "target")
+        )
+        quality_errors = manifest.quality.gate_errors(manifest.thresholds)
+        errors = artifact_errors + identity_errors + quality_errors
+        if artifact_errors or identity_errors:
+            fallback_reason = FallbackReason.ARTIFACT_HASH_MISMATCH.value
+        elif quality_errors:
+            fallback_reason = FallbackReason.QUALITY_GATE_FAILED.value
+        else:
+            fallback_reason = None
+        status = PlanStatus.BLOCKED if errors else PlanStatus.READY
+        confidence = 0.0 if errors else min(
+            manifest.quality.key_cosine,
+            manifest.quality.value_cosine,
+            manifest.quality.next_token_top1_agreement,
+            manifest.quality.bridge_task_score,
+            manifest.quality.greedy_continuation_match_rate,
+        )
+        materialization_ms = manifest.quality.p95_source_read_transform_put_ms
+        target_prefill_ms = manifest.quality.p95_target_prefill_ms
+        saved_ms = None
+        if materialization_ms is not None and target_prefill_ms is not None:
+            saved_ms = max(0.0, target_prefill_ms - materialization_ms)
+        notes = [
+            "Using approved cached-KV translation without loading either model in the materializer.",
+        ]
+        notes.extend(errors)
+        return self._make_plan(
+            request=request,
+            scenario=ReuseScenario.SAME_MODEL_SIZE_VARIANT,
+            strategy=ReuseStrategy.CACHED_KV_TRANSLATION,
+            status=status,
+            confidence=confidence,
+            required_gates=(
+                "same_family_architecture",
+                "tokenizer_alignment",
+                "cached_kv_artifact_identity",
+                "held_out_quality",
+                "mooncake_cost",
+                "exact_prompt_prefix",
+            ),
+            notes=tuple(notes),
+            direction=manifest.direction,
+            pair_id=pair_id_for(request.source, request.target),
+            artifact_uri=request.artifact_uri,
+            cached_kv_bridge_id=manifest.bridge_id,
+            state_kind="kv",
+            target_kv_layout=manifest.layout,
+            estimated_prefill_saved_ms=saved_ms,
+            estimated_materialization_ms=materialization_ms,
+            fallback_reason=fallback_reason,
+        )
+
     def _plan_cross_base(self, request: ReuseRequest) -> ReusePlan:
         status = PlanStatus.NEEDS_CALIBRATION
         confidence = 0.0
@@ -311,6 +391,7 @@ class CrossModelReusePlanner:
         layer_map_id: str | None = None,
         projection_id: str | None = None,
         hidden_bridge_id: str | None = None,
+        cached_kv_bridge_id: str | None = None,
         restore_id: str | None = None,
         state_kind: str | None = None,
         hidden_contract: str | None = None,
@@ -339,7 +420,12 @@ class CrossModelReusePlanner:
                 f"Measured confidence {confidence:.4f} is below quality floor "
                 f"{request.quality_floor:.4f}.",
             )
-        transform_id = hidden_bridge_id or projection_id or self._transform_id(request, scenario, strategy)
+        transform_id = (
+            cached_kv_bridge_id
+            or hidden_bridge_id
+            or projection_id
+            or self._transform_id(request, scenario, strategy)
+        )
         return ReusePlan(
             request=request,
             scenario=scenario,
@@ -361,6 +447,7 @@ class CrossModelReusePlanner:
             layer_map_id=layer_map_id,
             projection_id=projection_id,
             hidden_bridge_id=hidden_bridge_id,
+            cached_kv_bridge_id=cached_kv_bridge_id,
             restore_id=restore_id,
             state_kind=state_kind,
             hidden_contract=hidden_contract,
@@ -381,6 +468,48 @@ class CrossModelReusePlanner:
             return CalibrationManifest.load(path)
         except (KeyError, TypeError, ValueError, OSError):
             return None
+
+    def _load_cached_kv_manifest(
+        self,
+        request: ReuseRequest,
+    ) -> CachedKVBridgeManifest | None:
+        if request.artifact_uri is None:
+            return None
+        path = Path(request.artifact_uri)
+        if not path.is_file():
+            return None
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            if payload.get("schema_version") != CACHED_KV_SCHEMA_VERSION:
+                return None
+            return CachedKVBridgeManifest.from_dict(payload)
+        except (json.JSONDecodeError, KeyError, TypeError, ValueError, OSError):
+            return None
+
+    @staticmethod
+    def _cached_model_contract_errors(
+        model: ModelRef,
+        artifact: CachedKVModelSpec,
+        label: str,
+    ) -> list[str]:
+        expected = artifact
+        errors: list[str] = []
+        shape = model.kv_shape
+        for name, actual, recorded in (
+            ("num_layers", shape.num_layers, expected.num_layers),
+            ("num_key_value_heads", shape.num_key_value_heads, expected.num_key_value_heads),
+            ("head_dim", shape.head_dim, expected.head_dim),
+            ("dtype", shape.dtype, expected.dtype),
+            ("rope_theta", shape.rope_theta, expected.rope_theta),
+            ("sliding_window", shape.sliding_window, expected.sliding_window),
+        ):
+            if actual != recorded:
+                errors.append(f"{label} {name} differs from cached-KV artifact")
+        if shape.model_config_hash and shape.model_config_hash != expected.config_sha256:
+            errors.append(f"{label} config hash differs from cached-KV artifact")
+        if shape.tokenizer_hash and shape.tokenizer_hash != expected.tokenizer_sha256:
+            errors.append(f"{label} tokenizer hash differs from cached-KV artifact")
+        return errors
 
     def _manifest_errors(
         self,

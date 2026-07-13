@@ -20,6 +20,7 @@ class ReuseStrategy(str, Enum):
     ADAPTER_DELTA_GATED_ALIAS = "adapter_delta_gated_alias"
     DIRECT_SHAPE_ALIAS = "direct_shape_alias"
     HIDDEN_STATE_BRIDGE = "hidden_state_bridge"
+    CACHED_KV_TRANSLATION = "cached_kv_translation"
     LAYERWISE_PROJECTION = "layerwise_projection"
     KV_PROJECTION_BASELINE = "kv_projection_baseline"
     LEARNED_CROSS_BASE_TRANSLATOR = "learned_cross_base_translator"
@@ -146,6 +147,7 @@ class ReusePlan:
     layer_map_id: str | None = None
     projection_id: str | None = None
     hidden_bridge_id: str | None = None
+    cached_kv_bridge_id: str | None = None
     restore_id: str | None = None
     state_kind: str | None = None
     hidden_contract: str | None = None
@@ -181,6 +183,7 @@ class ReusePlan:
             "ge_layer_map_id": self.layer_map_id,
             "ge_projection_id": self.projection_id,
             "ge_hidden_bridge_id": self.hidden_bridge_id,
+            "ge_cached_kv_bridge_id": self.cached_kv_bridge_id,
             "ge_restore_id": self.restore_id,
             "ge_state_kind": self.state_kind,
             "ge_hidden_contract": self.hidden_contract,

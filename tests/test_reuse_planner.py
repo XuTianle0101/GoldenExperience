@@ -1,3 +1,5 @@
+from dataclasses import replace
+
 from goldenexperience.lmcache_patch import CrossModelCacheKey
 from goldenexperience.reuse import (
     CrossModelReusePlanner,
@@ -8,7 +10,14 @@ from goldenexperience.reuse import (
     ReuseScenario,
     ReuseStrategy,
 )
-from goldenexperience.size_variant import QualityGateResult, build_calibration_manifest
+from goldenexperience.size_variant import (
+    CachedKVBridgeManifest,
+    CachedKVModelSpec,
+    CachedKVQualityEvidence,
+    QualityGateResult,
+    artifact_id_for,
+    build_calibration_manifest,
+)
 
 
 def make_model(
@@ -49,6 +58,90 @@ def passing_quality() -> QualityGateResult:
         perplexity_drift_pct=0.0,
         task_score_drop_pct=0.0,
     )
+
+
+def cached_kv_artifact(tmp_path, *, include_cost: bool = True):
+    tokenizer_hash = "a" * 64
+    source_config_hash = "b" * 64
+    target_config_hash = "c" * 64
+    source = make_model("Qwen/Qwen3-8B", 8, layers=36)
+    target = make_model("Qwen/Qwen3-14B", 14, layers=40)
+    source = replace(
+        source,
+        kv_shape=replace(
+            source.kv_shape,
+            model_config_hash=source_config_hash,
+            tokenizer_hash=tokenizer_hash,
+        ),
+    )
+    target = replace(
+        target,
+        kv_shape=replace(
+            target.kv_shape,
+            model_config_hash=target_config_hash,
+            tokenizer_hash=tokenizer_hash,
+        ),
+    )
+    source_spec = CachedKVModelSpec(
+        model_id=source.model_id,
+        parameter_count_b=8,
+        revision="content-addressed",
+        architecture="qwen3",
+        config_sha256=source_config_hash,
+        tokenizer_sha256=tokenizer_hash,
+        weights_sha256="d" * 64,
+        num_layers=36,
+        num_key_value_heads=8,
+        head_dim=128,
+        dtype="bfloat16",
+        rope_theta=1_000_000.0,
+        max_position_embeddings=40960,
+    )
+    target_spec = replace(
+        source_spec,
+        model_id=target.model_id,
+        parameter_count_b=14,
+        config_sha256=target_config_hash,
+        weights_sha256="e" * 64,
+        num_layers=40,
+    )
+    quality = CachedKVQualityEvidence(
+        evaluation_dataset_sha256="3" * 64,
+        held_out_prompts=64,
+        evaluated_tokens=4096,
+        token_buckets=(32, 128, 512, 2048),
+        key_cosine=0.99,
+        value_cosine=0.99,
+        next_token_top1_agreement=0.99,
+        perplexity_drift_pct=1.0,
+        task_prompts=64,
+        native_task_score=1.0,
+        bridge_task_score=0.99,
+        task_score_drop_pct=1.0,
+        greedy_continuation_match_rate=0.99,
+        cost_report_sha256="4" * 64 if include_cost else None,
+        cost_candidate_manifest_sha256="5" * 64 if include_cost else None,
+        p95_source_read_transform_put_ms=40.0 if include_cost else None,
+        p95_target_prefill_ms=100.0 if include_cost else None,
+    )
+    manifest = CachedKVBridgeManifest(
+        bridge_id="pending",
+        direction="8b_to_14b",
+        source=source_spec,
+        target=target_spec,
+        weights_uri="bridge.safetensors",
+        weights_sha256="f" * 64,
+        rank=64,
+        source_window=3,
+        train_dataset_sha256="1" * 64,
+        validation_dataset_sha256="2" * 64,
+        test_dataset_sha256="3" * 64,
+        quality=quality,
+    )
+    manifest = replace(manifest, bridge_id=artifact_id_for(manifest))
+    path = tmp_path / "cached-kv.json"
+    manifest.save(path)
+    return source, target, manifest, path
 
 
 def test_lora_pair_requires_measured_quality_evidence() -> None:
@@ -134,6 +227,47 @@ def test_size_variant_with_calibration_id_still_needs_artifact() -> None:
 
     assert plan.status == PlanStatus.NEEDS_CALIBRATION
     assert not plan.executable
+
+
+def test_size_variant_uses_approved_cached_kv_artifact(tmp_path) -> None:
+    source, target, manifest, path = cached_kv_artifact(tmp_path)
+
+    plan = CrossModelReusePlanner().plan(
+        ReuseRequest(
+            source=source,
+            target=target,
+            prefix_hash="shared",
+            calibration_id=manifest.bridge_id,
+            artifact_uri=str(path),
+        )
+    )
+
+    assert plan.status == PlanStatus.READY
+    assert plan.strategy == ReuseStrategy.CACHED_KV_TRANSLATION
+    assert plan.cached_kv_bridge_id == manifest.bridge_id
+    assert plan.transform_id == manifest.bridge_id
+    assert plan.estimated_materialization_ms == 40.0
+    assert plan.estimated_prefill_saved_ms == 60.0
+    assert plan.as_metadata()["ge_cached_kv_bridge_id"] == manifest.bridge_id
+
+
+def test_size_variant_rejects_cached_kv_artifact_without_cost(tmp_path) -> None:
+    source, target, manifest, path = cached_kv_artifact(tmp_path, include_cost=False)
+
+    plan = CrossModelReusePlanner().plan(
+        ReuseRequest(
+            source=source,
+            target=target,
+            prefix_hash="shared",
+            calibration_id=manifest.bridge_id,
+            artifact_uri=str(path),
+        )
+    )
+
+    assert plan.status == PlanStatus.BLOCKED
+    assert plan.strategy == ReuseStrategy.CACHED_KV_TRANSLATION
+    assert plan.fallback_reason == "quality_gate_failed"
+    assert "p95_source_read_transform_put_ms is required" in " ".join(plan.notes)
 
 
 def test_size_variant_with_hidden_bridge_artifact_is_executable(tmp_path) -> None:

@@ -522,10 +522,18 @@ def patch_mooncake_store_adapter(
         elif "import ctypes" in text:
             text = _insert_after_once(text, "import ctypes\n", "import json\n", path)
 
-    if PYTHON_ADAPTER_MARKER in text and PYTHON_ADAPTER_VERSION_MARKER not in text:
-        start = text.index(PYTHON_ADAPTER_MARKER)
-        end = text.index(PYTHON_ADAPTER_END_MARKER, start) + len(PYTHON_ADAPTER_END_MARKER)
-        text = text[:start] + MOONCAKE_PYTHON_ADAPTER_BLOCK.rstrip("\n") + text[end:]
+    if "class MooncakePythonL2Adapter" in text and PYTHON_ADAPTER_VERSION_MARKER not in text:
+        if PYTHON_ADAPTER_MARKER in text:
+            start = text.index(PYTHON_ADAPTER_MARKER)
+            end = text.index(PYTHON_ADAPTER_END_MARKER, start) + len(
+                PYTHON_ADAPTER_END_MARKER
+            )
+        else:
+            # Early patch versions had no markers. Replace the complete adapter section
+            # rather than leaving an old class that happens to share the same name.
+            start = text.index("def _env_enabled(")
+            end = text.index("def _create_mooncake_store_l2_adapter(", start)
+        text = text[:start] + MOONCAKE_PYTHON_ADAPTER_BLOCK + "\n" + text[end:]
 
     if "class MooncakePythonL2Adapter" not in text:
         typing_anchor = "from typing import (\n    TYPE_CHECKING,\n    cast,\n)\n"

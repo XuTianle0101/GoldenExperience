@@ -10,6 +10,8 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
+from goldenexperience.reuse.models import KVShape, ModelRef
+
 CACHED_KV_SCHEMA_VERSION = "goldenexperience.qwen3_cached_kv_bridge.v4"
 _SHA256_LENGTH = 64
 _TOKENIZER_FILES = (
@@ -448,6 +450,30 @@ def model_spec_from_path(
         max_position_embeddings=int(config["max_position_embeddings"]),
         rope_scaling=config.get("rope_scaling"),
         sliding_window=config.get("sliding_window"),
+    )
+
+
+def model_ref_from_cached_spec(spec: CachedKVModelSpec) -> ModelRef:
+    """Expose a cached-KV model identity to the shared reuse planner."""
+
+    return ModelRef(
+        model_id=spec.model_id,
+        family="qwen",
+        architecture=spec.architecture,
+        tokenizer_id=spec.tokenizer_sha256,
+        parameter_count_b=spec.parameter_count_b,
+        revision=spec.revision,
+        kv_shape=KVShape(
+            num_layers=spec.num_layers,
+            num_key_value_heads=spec.num_key_value_heads,
+            head_dim=spec.head_dim,
+            dtype=spec.dtype,
+            rope_theta=spec.rope_theta,
+            sliding_window=spec.sliding_window,
+            model_config_hash=spec.config_sha256,
+            tokenizer_hash=spec.tokenizer_sha256,
+        ),
+        metadata={"weights_sha256": spec.weights_sha256},
     )
 
 
