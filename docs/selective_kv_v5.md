@@ -58,6 +58,11 @@ before decode.
   `LOOKUP`/`QUERY_PREFETCH_STATUS`/`PREPARE_RETRIEVE`/`COMMIT_RETRIEVE` protocols, restores
   source-model CPU chunks to explicit head layout, preserves standard LMCache connector metadata,
   and forwards failed page ids to vLLM 0.24.0's native-recompute contract.
+- `vllm_retrieve_transform_connector.py` is the audit-only external vLLM connector. Its scheduler
+  re-evaluates the frozen CPU gate before creating source metadata; its worker orders every target
+  layer explicitly, injects synchronously, and reports invalid blocks through vLLM's recompute API.
+- `runtime_audit_telemetry.py` carries gate and worker observations over authenticated loopback
+  sockets, without filesystem staging or translated target-cache objects.
 - `publication.py` enforces fixed split sizes, group isolation, hash-only sealed metadata,
   license/source provenance, four-direction validation receipts, one-shot sealed access, and
   immutable content-addressed sealed reports.
@@ -176,18 +181,29 @@ identity. The writer uses exact fixed-size CPU chunks, records each checksum bef
 publishes no translated target object. The bridge then registers a bounded non-GPU read context,
 issues exact one-chunk prepare/commit operations, rejects missing, oversized, wrong-shape,
 wrong-dtype, or wrong-checksum payloads, and reshapes `[K/V, layer, token, heads*dim]` into the
-transport's explicit head layout. The
-registered v5 experiment uses one source worker and one target worker per direction; tensor
+transport's explicit head layout. The registered v5 experiment uses one source worker and one
+target worker per direction; tensor
 parallel source layouts are deliberately rejected. No filesystem staging or translated target
 object is part of this path.
 
-On the target worker, ordinary LMCache metadata is still passed to the upstream connector.
-Selective requests use the dedicated bridge: all target blocks are marked invalid before the
-first scatter, every layer must finish before one load-complete publication, and any read,
-transform, scatter, synchronization, or publication failure returns the invalid block ids via
-vLLM's `get_block_ids_with_load_errors`. vLLM then discards that step's output and natively
-recomputes from the first invalid block. This recovery behavior is measured again in the final
-runtime audit rather than inferred only from source inspection.
+The reusable low-level bridge preserves ordinary metadata when it wraps an upstream LMCache
+connector. The audit-only external connector instead has no target-store path at all. In both
+cases, all target blocks are marked invalid before the first scatter, every layer must finish
+before one load-complete publication, and any read, transform, scatter, synchronization, or
+publication failure returns the invalid block ids via vLLM's
+`get_block_ids_with_load_errors`. vLLM then discards that step's output and natively recomputes
+from the first invalid block. This recovery behavior is measured again in the final runtime audit
+rather than inferred only from source inspection.
+
+The audit connector receives only a read-only `semantic_approved` artifact plus immutable
+workspace objects. The scheduler deserializes and rechecks the source sidecar, compares its gate
+result with the orchestrator's frozen decision, verifies exact prefix token IDs, and only then
+allocates external-prefix slots. The reusable LMCache source-store request ID remains separate from
+the per-row audit and vLLM target request IDs. Rejected rows produce an authenticated gate event and
+no worker load metadata. Accepted rows are re-gated on the worker before LMCache lookup; success and
+failure observations are authenticated back to the audit process. A dedicated failure probe writes
+the first target layer and then raises, so the reported block set must be invalidated and natively
+recomputed before vLLM may return a token.
 
 The 512-request approval audit is an isolated paired latency experiment in lexicographic sample-id
 order. For every accepted row it compares native target prefill/TTFT with direct reuse; for every
