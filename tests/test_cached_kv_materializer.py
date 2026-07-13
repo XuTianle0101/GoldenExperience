@@ -10,6 +10,7 @@ import torch
 from goldenexperience.benchmarks.cached_kv_cost import (
     CACHED_KV_COST_SCHEMA_VERSION,
     NATIVE_PREFILL_COST_SCHEMA_VERSION,
+    build_native_prefill_report,
     load_cached_kv_cost_evidence,
     load_native_prefill_evidence,
     run_cached_kv_cost_benchmark,
@@ -490,6 +491,9 @@ def test_native_prefill_evidence_binds_target_identity_and_runtime(tmp_path: Pat
                 "token_count": 512,
                 "backend": "vllm_native_target",
                 "eligible_for_approval": True,
+                "model_identity_verified": True,
+                "prefix_caching_disabled": True,
+                "exact_token_count_verified": True,
                 "samples_ms": [100.0] * 20,
             }
         ),
@@ -513,6 +517,34 @@ def test_native_prefill_evidence_binds_target_identity_and_runtime(tmp_path: Pat
             bridge=bridge,
             expected_tokens=256,
         )
+
+
+def test_native_prefill_report_requires_isolated_vllm_evidence() -> None:
+    report = build_native_prefill_report(
+        direction="8b_to_14b",
+        target_model_weights_sha256="c" * 64,
+        token_count=512,
+        samples_ms=[100.0] * 20,
+        warmup_iterations=3,
+        model_identity_verified=True,
+        prefix_caching_disabled=True,
+        exact_token_count_verified=True,
+    )
+
+    assert report["eligible_for_approval"] is True
+    assert report["p95_target_prefill_ms"] == 100.0
+
+    report = build_native_prefill_report(
+        direction="8b_to_14b",
+        target_model_weights_sha256="c" * 64,
+        token_count=512,
+        samples_ms=[100.0] * 20,
+        warmup_iterations=3,
+        model_identity_verified=True,
+        prefix_caching_disabled=False,
+        exact_token_count_verified=True,
+    )
+    assert report["eligible_for_approval"] is False
 
 
 def test_cost_evidence_recomputes_p95_and_binds_exact_weights(tmp_path: Path) -> None:

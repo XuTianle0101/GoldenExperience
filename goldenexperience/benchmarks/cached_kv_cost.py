@@ -28,6 +28,50 @@ class NativePrefillEvidence:
     report_sha256: str
 
 
+def build_native_prefill_report(
+    *,
+    direction: str,
+    target_model_weights_sha256: str,
+    token_count: int,
+    samples_ms: Sequence[float],
+    warmup_iterations: int,
+    model_identity_verified: bool,
+    prefix_caching_disabled: bool,
+    exact_token_count_verified: bool,
+) -> dict[str, Any]:
+    """Build approval evidence from isolated vLLM TTFT measurements."""
+
+    samples = _positive_finite_samples(samples_ms, "native prefill")
+    if direction not in {"8b_to_14b", "14b_to_8b"}:
+        raise ValueError("native prefill direction is invalid")
+    if not _is_sha256(target_model_weights_sha256):
+        raise ValueError("native prefill target model identity is invalid")
+    if token_count <= 0 or warmup_iterations < 0:
+        raise ValueError("native prefill token or warmup count is invalid")
+    eligible = (
+        len(samples) >= MIN_COST_SAMPLES
+        and model_identity_verified
+        and prefix_caching_disabled
+        and exact_token_count_verified
+    )
+    return {
+        "schema_version": NATIVE_PREFILL_COST_SCHEMA_VERSION,
+        "generated_at_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "direction": direction,
+        "target_model_weights_sha256": target_model_weights_sha256,
+        "token_count": token_count,
+        "backend": "vllm_native_target",
+        "eligible_for_approval": eligible,
+        "model_identity_verified": model_identity_verified,
+        "prefix_caching_disabled": prefix_caching_disabled,
+        "exact_token_count_verified": exact_token_count_verified,
+        "warmup_iterations": warmup_iterations,
+        "iterations": len(samples),
+        "samples_ms": samples,
+        "p95_target_prefill_ms": _percentile(samples, 0.95),
+    }
+
+
 def run_cached_kv_cost_benchmark(
     bridge: Any,
     *,
@@ -224,7 +268,12 @@ def load_native_prefill_evidence(
     backend = str(payload.get("backend", ""))
     eligible = bool(payload.get("eligible_for_approval"))
     eligible = (
-        eligible and backend == "vllm_native_target" and len(parsed_samples) >= MIN_COST_SAMPLES
+        eligible
+        and backend == "vllm_native_target"
+        and len(parsed_samples) >= MIN_COST_SAMPLES
+        and payload.get("model_identity_verified") is True
+        and payload.get("prefix_caching_disabled") is True
+        and payload.get("exact_token_count_verified") is True
     )
     return NativePrefillEvidence(
         samples_ms=tuple(parsed_samples),
