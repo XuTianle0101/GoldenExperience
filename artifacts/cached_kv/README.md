@@ -31,6 +31,12 @@ both directions, especially 8B to 14B, but neither direction is approved.
 with train-only monotonic linear-CKA alignment. CKA improves forward generation metrics
 but regresses reverse generation and tensor metrics, so it remains an opt-in experiment.
 
+`validation_candidate_8b_to_14b_20260713.json` records the first full validation
+candidate emitted by the production-gated training path. The rank-512 v4 bridge is
+bound to content-addressed local Qwen3-8B and Qwen3-14B weights, but it fails every
+output-quality gate and remains validation-only. Raw candidate manifests, per-prompt
+results, and generated weights stay local and are ignored by Git.
+
 Only a `CachedKVBridgeManifest` whose derived `approved` property is true may be used by
 the runtime materializer. Missing held-out accuracy or Mooncake cost evidence keeps a
 manifest fail closed.

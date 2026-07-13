@@ -18,6 +18,8 @@ artifacts/results/
 *.bin
 *.safetensors
 /artifacts/cached_kv/.model_identity_cache.json
+/artifacts/cached_kv/qwen3_*.candidate.json
+/artifacts/cached_kv/qwen3_*.candidate.results.json
 models/
 *.data
 
