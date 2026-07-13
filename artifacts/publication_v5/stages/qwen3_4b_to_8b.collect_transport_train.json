@@ -1,0 +1,55 @@
+{
+  "authority": "verified_pipeline_stage_receipt",
+  "benchmark_manifest_sha256": "557cfe1eccd522d19e6a06177b2d86e6b1a55587b8a84cba65732fad4d2bcd4a",
+  "code_sha256": "0424fadb7ab7a036028783f69a5cc46949f379bd789da4a4830b4316b836d24c",
+  "collector": {
+    "attention_implementation": "sdpa",
+    "collector_id": "qwen3_grouped_prefix_attention_trace_v2",
+    "cuda_version": "13.0",
+    "logit_tail_tokens": 8,
+    "max_keys": 256,
+    "max_queries": 32,
+    "seed": 17,
+    "source_device_name": "NVIDIA A100-SXM4-80GB",
+    "target_device_name": "NVIDIA A100-SXM4-80GB",
+    "torch_version": "2.11.0+cu130",
+    "transformers_version": "5.13.0"
+  },
+  "completed_at": "2026-07-13T21:53:15.800278+00:00",
+  "direction": "qwen3_4b_to_8b",
+  "input_sha256": "f31d731ef4a622b349f33f7575ce9c274e17e57d7782e1347c1aa4c9a4a3d3fd",
+  "pipeline_id": "v5-pipeline-fcc72c17609ebfb1c14e33c1",
+  "raw_sample_store_sha256": "911f377094b540163a9fe2cd6dd2f055e4b5376ca541bb914200cd6fe5d16e58",
+  "schema_version": "goldenexperience.publication_v5_verified_stage.v1",
+  "stage": "collect_transport_train",
+  "stage_receipt": {
+    "sha256": "6a567c18192ae6f2b0cfafa7ec23def4a2c02a51c3d54c0e25f20f8963977f12",
+    "workspace_path": "receipts/qwen3_4b_to_8b/collect_transport_train/6a567c18192ae6f2b0cfafa7ec23def4a2c02a51c3d54c0e25f20f8963977f12.json"
+  },
+  "trace_manifest": {
+    "content_sha256": "985abafaf5bf18d6771acb2d9beb82129f13c282e9c3f705555c3c43aea97879",
+    "file_sha256": "7758833d1ad00ebd4ee350252299e24403760355f9b561444ae6fda6b10f983a",
+    "size_bytes": 4028235,
+    "workspace_path": "objects/77/7758833d1ad00ebd4ee350252299e24403760355f9b561444ae6fda6b10f983a.json"
+  },
+  "verification": {
+    "all_unique_shards_loaded": true,
+    "bucket_groups": {
+      "128": 25,
+      "512": 25,
+      "2048": 25,
+      "8192": 17
+    },
+    "bucket_records": {
+      "128": 1024,
+      "512": 1024,
+      "2048": 1024,
+      "8192": 1024
+    },
+    "prefix_groups": 92,
+    "records": 4096,
+    "shard_bytes": 9475919040,
+    "unique_shards": 92,
+    "verified_at": "2026-07-13T21:56:55.079557+00:00"
+  }
+}
