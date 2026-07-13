@@ -26,7 +26,7 @@ from goldenexperience.runtime.direct_paged_kv import (
 from goldenexperience.size_variant.cached_kv_manifest import CachedKVModelSpec, sha256_file
 
 LMCACHE_RETRIEVE_TRANSFORM_SCHEMA = "goldenexperience.lmcache_retrieve_transform.v1"
-RUNTIME_STACK_SCHEMA = "goldenexperience.runtime_stack_identity.v1"
+RUNTIME_STACK_SCHEMA = "goldenexperience.runtime_stack_identity.v2"
 EXPECTED_LMCACHE_VERSION = "0.4.6"
 EXPECTED_VLLM_VERSION = "0.24.0"
 EXPECTED_TORCH_VERSION_PREFIX = "2.11.0"
@@ -75,7 +75,8 @@ class RuntimeStackIdentity:
     cuda_version: str | None
     sources: tuple[RuntimeSourceIdentity, ...]
     connector_class: str = "lmcache.integration.vllm.lmcache_mp_connector.LMCacheMPConnector"
-    retrieve_protocol: str = "PREPARE_RETRIEVE+COMMIT_RETRIEVE"
+    store_protocol: str = "PREPARE_STORE+COMMIT_STORE"
+    retrieve_protocol: str = "LOOKUP+QUERY_PREFETCH_STATUS+PREPARE_RETRIEVE+COMMIT_RETRIEVE"
     failure_policy: str = "vllm_invalid_block_native_recompute"
     schema_version: str = RUNTIME_STACK_SCHEMA
 
@@ -93,7 +94,11 @@ class RuntimeStackIdentity:
             "lmcache.integration.vllm.lmcache_mp_connector.LMCacheMPConnector"
         ):
             errors.append("runtime connector class changed")
-        if self.retrieve_protocol != "PREPARE_RETRIEVE+COMMIT_RETRIEVE":
+        if self.store_protocol != "PREPARE_STORE+COMMIT_STORE":
+            errors.append("runtime source store protocol changed")
+        if self.retrieve_protocol != (
+            "LOOKUP+QUERY_PREFETCH_STATUS+PREPARE_RETRIEVE+COMMIT_RETRIEVE"
+        ):
             errors.append("runtime source retrieval protocol changed")
         if self.failure_policy != "vllm_invalid_block_native_recompute":
             errors.append("runtime failure recovery policy changed")
@@ -174,6 +179,55 @@ class LMCacheRetrieveTransformMetadata:
 
 
 @dataclass(frozen=True)
+class LMCacheStoredSourcePrefix:
+    request_id: str
+    token_ids: tuple[int, ...]
+    source_ranges: tuple[tuple[int, int], ...]
+    source_keys: tuple[str, ...]
+    source_checksums: tuple[str, ...]
+    source_model_name: str
+    source_world_size: int
+    source_worker_id: int
+    cache_salt: str
+
+    def build_retrieve_metadata(
+        self,
+        *,
+        slot_mapping: Sequence[int],
+        prefix_hash: str,
+        sidecar: Any,
+        timeout_s: float = 5.0,
+    ) -> LMCacheRetrieveTransformMetadata:
+        request = RetrieveTransformRequest(
+            request_id=self.request_id,
+            source_keys=self.source_keys,
+            source_checksums=self.source_checksums,
+            chunk_token_counts=tuple(end - start for start, end in self.source_ranges),
+            slot_mapping=tuple(slot_mapping),
+            prefix_hash=prefix_hash,
+            sidecar=sidecar,
+            timeout_s=timeout_s,
+        )
+        metadata = LMCacheRetrieveTransformMetadata(
+            request=request,
+            token_ids=self.token_ids,
+            source_ranges=self.source_ranges,
+            source_model_name=self.source_model_name,
+            source_world_size=self.source_world_size,
+            source_worker_id=self.source_worker_id,
+            cache_salt=self.cache_salt,
+        )
+        errors = metadata.validate(
+            chunk_size=self.source_ranges[0][1] - self.source_ranges[0][0]
+            if self.source_ranges
+            else None
+        )
+        if errors:
+            raise LMCacheRetrieveTransformError("; ".join(errors))
+        return metadata
+
+
+@dataclass(frozen=True)
 class LMCacheRetrieveTransformBatch:
     requests: tuple[LMCacheRetrieveTransformMetadata, ...]
     standard_metadata: Any | None = None
@@ -222,6 +276,202 @@ class RuntimeBlockValidityTracker:
         return result
 
 
+class LMCacheMPSourceChunkWriter:
+    """Store full source-model KV chunks through LMCache MP's non-GPU protocol."""
+
+    def __init__(
+        self,
+        *,
+        server_url: str,
+        source_model_name: str,
+        source_world_size: int,
+        source_worker_id: int,
+        source: CachedKVModelSpec,
+        mq_timeout_s: float = 30.0,
+    ) -> None:
+        if mq_timeout_s <= 0 or not math.isfinite(mq_timeout_s):
+            raise LMCacheRetrieveTransformError("LMCache MQ timeout must be finite and positive")
+        if not source_model_name or source_world_size != 1 or source_worker_id != 0:
+            raise LMCacheRetrieveTransformError("LMCache source writer identity is invalid")
+        self.stack_identity = probe_runtime_stack()
+        self.server_url = server_url
+        self.source_model_name = source_model_name
+        self.source_world_size = source_world_size
+        self.source_worker_id = source_worker_id
+        self.source = source
+        self.mq_timeout_s = mq_timeout_s
+        self.source_put_count = 0
+        self._lock = threading.RLock()
+        self._closed = False
+
+        import zmq
+        from lmcache.integration.vllm.vllm_multi_process_adapter import (  # type: ignore[import-untyped]
+            get_lmcache_chunk_size,
+            send_lmcache_request,
+        )
+        from lmcache.v1.multiprocess.custom_types import (  # type: ignore[import-untyped]
+            RegisterNonGpuContextPayload,
+        )
+        from lmcache.v1.multiprocess.mq import (  # type: ignore[import-untyped]
+            MessageQueueClient,
+        )
+        from lmcache.v1.multiprocess.protocol import RequestType  # type: ignore[import-untyped]
+
+        self._send_request = send_lmcache_request
+        self._request_type = RequestType
+        self._client = MessageQueueClient(server_url, zmq.Context.instance())
+        try:
+            self.chunk_size = int(get_lmcache_chunk_size(self._client, timeout=mq_timeout_s))
+            if self.chunk_size <= 0:
+                raise LMCacheRetrieveTransformError("LMCache returned an invalid chunk size")
+            self.instance_id = (os.getpid() << 32) | (uuid.uuid4().int & 0xFFFFFFFF)
+            payload = RegisterNonGpuContextPayload(
+                instance_id=self.instance_id,
+                model_name=source_model_name,
+                world_size=source_world_size,
+                block_size=self.chunk_size,
+                num_layers=source.num_layers,
+                hidden_dim_size=source.num_key_value_heads * source.head_dim,
+                dtype_str=_torch_dtype_name(source.dtype),
+                use_mla=False,
+            )
+            self._send_request(
+                self._client,
+                self._request_type.REGISTER_KV_CACHE_NON_GPU_CONTEXT,
+                [payload],
+            ).result(timeout=mq_timeout_s)
+        except Exception:
+            self._client.close()
+            raise
+
+    def store_prefix(
+        self,
+        *,
+        request_id: str,
+        token_ids: Sequence[int],
+        source_kv: Any,
+        cache_salt: str = "",
+    ) -> LMCacheStoredSourcePrefix:
+        import torch
+        from lmcache.v1.multiprocess.custom_types import IPCCacheEngineKey
+
+        tokens = tuple(token_ids)
+        if (
+            not request_id
+            or not tokens
+            or any(type(item) is not int or item < 0 for item in tokens)
+            or not _valid_cache_salt(cache_salt)
+        ):
+            raise LMCacheRetrieveTransformError("LMCache source store metadata is invalid")
+        expected_shape = (
+            2,
+            self.source.num_layers,
+            self.source.num_key_value_heads,
+            len(tokens),
+            self.source.head_dim,
+        )
+        if (
+            not isinstance(source_kv, torch.Tensor)
+            or tuple(source_kv.shape) != expected_shape
+            or source_kv.dtype != _torch_dtype(self.source.dtype)
+            or len(tokens) % self.chunk_size
+        ):
+            raise LMCacheRetrieveTransformError("LMCache source KV tensor identity is invalid")
+        ranges = tuple(
+            (start, start + self.chunk_size) for start in range(0, len(tokens), self.chunk_size)
+        )
+        keys: list[str] = []
+        checksums: list[str] = []
+        with self._lock:
+            if self._closed:
+                raise LMCacheRetrieveTransformError("LMCache source writer is closed")
+            try:
+                for start, end in ranges:
+                    explicit = (
+                        source_kv[:, :, :, start:end, :].detach().to(device="cpu").contiguous()
+                    )
+                    checksum = source_chunk_checksums((explicit,))[0]
+                    flat = (
+                        explicit.permute(0, 1, 3, 2, 4)
+                        .reshape(
+                            2,
+                            self.source.num_layers,
+                            self.chunk_size,
+                            self.source.num_key_value_heads * self.source.head_dim,
+                        )
+                        .contiguous()
+                    )
+                    key = IPCCacheEngineKey(
+                        model_name=self.source_model_name,
+                        world_size=self.source_world_size,
+                        worker_id=self.source_worker_id,
+                        token_ids=tokens,
+                        start=start,
+                        end=end,
+                        request_id=request_id,
+                        cache_salt=cache_salt,
+                    )
+                    self._send_request(
+                        self._client,
+                        self._request_type.PREPARE_STORE,
+                        [key, self.instance_id],
+                    ).result(timeout=self.mq_timeout_s)
+                    encoded = pickle.dumps([flat])
+                    if len(encoded) > flat.numel() * flat.element_size() + 1024 * 1024:
+                        raise LMCacheRetrieveTransformError(
+                            "LMCache source store payload exceeds its tensor bound"
+                        )
+                    committed = self._send_request(
+                        self._client,
+                        self._request_type.COMMIT_STORE,
+                        [key, self.instance_id, encoded],
+                    ).result(timeout=self.mq_timeout_s)
+                    if committed is not True:
+                        raise LMCacheRetrieveTransformError(
+                            "LMCache source chunk could not be committed"
+                        )
+                    self.source_put_count += 1
+                    keys.append(lmcache_source_key(request_id, start, end))
+                    checksums.append(checksum)
+            finally:
+                self._send_request(
+                    self._client,
+                    self._request_type.END_SESSION,
+                    [request_id],
+                ).result(timeout=self.mq_timeout_s)
+        return LMCacheStoredSourcePrefix(
+            request_id=request_id,
+            token_ids=tokens,
+            source_ranges=ranges,
+            source_keys=tuple(keys),
+            source_checksums=tuple(checksums),
+            source_model_name=self.source_model_name,
+            source_world_size=self.source_world_size,
+            source_worker_id=self.source_worker_id,
+            cache_salt=cache_salt,
+        )
+
+    def close(self) -> None:
+        with self._lock:
+            if self._closed:
+                return
+            self._closed = True
+        try:
+            self._send_request(
+                self._client,
+                self._request_type.UNREGISTER_KV_CACHE,
+                [self.instance_id],
+            ).result(timeout=self.mq_timeout_s)
+        finally:
+            self._client.close()
+
+    def __enter__(self) -> LMCacheMPSourceChunkWriter:
+        return self
+
+    def __exit__(self, *_args: object) -> None:
+        self.close()
+
+
 class LMCacheMPSourceChunkReader:
     """Read source-model chunks through LMCache MP's pinned non-GPU protocol."""
 
@@ -249,17 +499,17 @@ class LMCacheMPSourceChunkReader:
         self._closed = False
 
         import zmq
-        from lmcache.integration.vllm.vllm_multi_process_adapter import (  # type: ignore[import-untyped]
+        from lmcache.integration.vllm.vllm_multi_process_adapter import (
             get_lmcache_chunk_size,
             send_lmcache_request,
         )
-        from lmcache.v1.multiprocess.custom_types import (  # type: ignore[import-untyped]
+        from lmcache.v1.multiprocess.custom_types import (
             RegisterNonGpuContextPayload,
         )
-        from lmcache.v1.multiprocess.mq import (  # type: ignore[import-untyped]
+        from lmcache.v1.multiprocess.mq import (
             MessageQueueClient,
         )
-        from lmcache.v1.multiprocess.protocol import RequestType  # type: ignore[import-untyped]
+        from lmcache.v1.multiprocess.protocol import RequestType
 
         self._send_request = send_lmcache_request
         self._request_type = RequestType
@@ -318,6 +568,37 @@ class LMCacheMPSourceChunkReader:
             if tuple(keys) != metadata.request.source_keys:
                 raise LMCacheRetrieveTransformError("LMCache source read keys changed")
             deadline = time.monotonic() + min(timeout_s, self.mq_timeout_s)
+            first_start = metadata.source_ranges[0][0]
+            final_end = metadata.source_ranges[-1][1]
+            lookup_key = IPCCacheEngineKey(
+                model_name=self.source_model_name,
+                world_size=self.source_world_size,
+                worker_id=None,
+                token_ids=metadata.token_ids,
+                start=first_start,
+                end=final_end,
+                request_id=metadata.request.request_id,
+                cache_salt=metadata.cache_salt,
+            )
+            self._send_request(
+                self._client,
+                self._request_type.LOOKUP,
+                [lookup_key, 1],
+            ).result(timeout=max(0.001, deadline - time.monotonic()))
+            while True:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise LMCacheRetrieveTransformError("LMCache source lookup timed out")
+                matched_chunks = self._send_request(
+                    self._client,
+                    self._request_type.QUERY_PREFETCH_STATUS,
+                    [metadata.request.request_id],
+                ).result(timeout=remaining)
+                if matched_chunks is not None:
+                    break
+                time.sleep(min(0.001, max(0.0, deadline - time.monotonic())))
+            if type(matched_chunks) is not int or matched_chunks != len(metadata.source_ranges):
+                raise LMCacheRetrieveTransformError("LMCache source prefix lookup was incomplete")
             chunks: list[Any] = []
             for key_text, (start, end) in zip(keys, metadata.source_ranges, strict=True):
                 if key_text != lmcache_source_key(metadata.request.request_id, start, end):
@@ -408,7 +689,7 @@ class LMCacheMPSourceChunkReader:
             self._client,
             self._request_type.END_SESSION,
             [request_id],
-        )
+        ).result(timeout=self.mq_timeout_s)
 
     def close(self) -> None:
         with self._lock:
@@ -562,6 +843,10 @@ def probe_runtime_stack() -> RuntimeStackIdentity:
 
     required_protocols = {
         "REGISTER_KV_CACHE_NON_GPU_CONTEXT",
+        "PREPARE_STORE",
+        "COMMIT_STORE",
+        "LOOKUP",
+        "QUERY_PREFETCH_STATUS",
         "PREPARE_RETRIEVE",
         "COMMIT_RETRIEVE",
         "END_SESSION",

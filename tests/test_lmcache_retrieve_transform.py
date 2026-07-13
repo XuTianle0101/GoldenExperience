@@ -17,6 +17,7 @@ from goldenexperience.runtime.direct_paged_kv import (
 )
 from goldenexperience.runtime.lmcache_retrieve_transform import (
     LMCacheMPSourceChunkReader,
+    LMCacheMPSourceChunkWriter,
     LMCacheRetrieveTransformBatch,
     LMCacheRetrieveTransformBridge,
     LMCacheRetrieveTransformError,
@@ -155,6 +156,8 @@ def test_source_reader_uses_prepare_commit_and_restores_head_layout() -> None:
         source_worker_id=metadata.source_worker_id,
     )
     request_types = SimpleNamespace(
+        LOOKUP="lookup",
+        QUERY_PREFETCH_STATUS="query",
         PREPARE_RETRIEVE="prepare",
         COMMIT_RETRIEVE="commit",
         END_SESSION="end",
@@ -163,6 +166,8 @@ def test_source_reader_uses_prepare_commit_and_restores_head_layout() -> None:
 
     def send(_client: Any, request_type: Any, payload: list[Any]) -> _Future:
         calls.append((request_type, payload))
+        if request_type == "query":
+            return _Future(1)
         if request_type == "prepare":
             return _Future(SimpleNamespace(success=True, data=pickle.dumps([flat])))
         return _Future(True)
@@ -188,9 +193,78 @@ def test_source_reader_uses_prepare_commit_and_restores_head_layout() -> None:
 
     assert len(chunks) == 1
     torch.testing.assert_close(chunks[0], expected)
-    assert [item[0] for item in calls] == ["prepare", "commit", "end"]
+    assert [item[0] for item in calls] == ["lookup", "query", "prepare", "commit", "end"]
     assert calls[0][1][0].model_name == "source-model"
-    assert calls[0][1][0].token_ids == metadata.token_ids
+    assert calls[0][1][0].worker_id is None
+    assert calls[2][1][0].token_ids == metadata.token_ids
+
+
+def test_source_writer_uses_prepare_commit_and_binds_retrieval() -> None:
+    pytest.importorskip("lmcache")
+    source = _model()
+    source_kv = torch.arange(2 * 2 * 2 * 4 * 4, dtype=torch.bfloat16).reshape(2, 2, 2, 4, 4)
+    request_types = SimpleNamespace(
+        PREPARE_STORE="prepare-store",
+        COMMIT_STORE="commit-store",
+        END_SESSION="end",
+    )
+    calls: list[tuple[Any, list[Any]]] = []
+
+    def send(_client: Any, request_type: Any, payload: list[Any]) -> _Future:
+        calls.append((request_type, payload))
+        return _Future(True)
+
+    writer = object.__new__(LMCacheMPSourceChunkWriter)
+    writer.source_model_name = "source-model"
+    writer.source_world_size = 1
+    writer.source_worker_id = 0
+    writer.source = source
+    writer.mq_timeout_s = 5.0
+    writer.chunk_size = 2
+    writer.instance_id = 456
+    writer.source_put_count = 0
+    writer._lock = threading.RLock()
+    writer._closed = False
+    writer._send_request = send
+    writer._request_type = request_types
+    writer._client = object()
+
+    stored = writer.store_prefix(
+        request_id="stored",
+        token_ids=(1, 2, 3, 4),
+        source_kv=source_kv,
+        cache_salt="pipeline",
+    )
+
+    assert [item[0] for item in calls] == [
+        "prepare-store",
+        "commit-store",
+        "prepare-store",
+        "commit-store",
+        "end",
+    ]
+    first_flat = pickle.loads(calls[1][1][2])[0]
+    expected_first = (
+        source_kv[:, :, :, :2, :].permute(0, 1, 3, 2, 4).reshape(2, 2, 2, 8).contiguous()
+    )
+    torch.testing.assert_close(first_flat, expected_first)
+    assert writer.source_put_count == 2
+    assert stored.source_checksums == source_chunk_checksums(
+        (
+            source_kv[:, :, :, :2, :].contiguous(),
+            source_kv[:, :, :, 2:, :].contiguous(),
+        )
+    )
+    metadata = stored.build_retrieve_metadata(
+        slot_mapping=(0, 1, 2, 3),
+        prefix_hash=_digest("prefix"),
+        sidecar=None,
+    )
+    assert metadata.validate(chunk_size=2) == []
+    assert metadata.request.source_keys == (
+        lmcache_source_key("stored", 0, 2),
+        lmcache_source_key("stored", 2, 4),
+    )
 
 
 class _UpstreamConnector:

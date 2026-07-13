@@ -54,9 +54,10 @@ before decode.
   exact reads, pinned asynchronous H2D on a dedicated CUDA stream, common vLLM page layouts,
   block invalidation, and atomic load-complete publication.
 - `lmcache_retrieve_transform.py` binds that path to the LMCache MP 0.4.6
-  `PREPARE_RETRIEVE`/`COMMIT_RETRIEVE` protocol, restores source-model CPU chunks to explicit
-  head layout, preserves standard LMCache connector metadata, and forwards failed page ids to
-  vLLM 0.24.0's native-recompute contract.
+  non-GPU `PREPARE_STORE`/`COMMIT_STORE` and
+  `LOOKUP`/`QUERY_PREFETCH_STATUS`/`PREPARE_RETRIEVE`/`COMMIT_RETRIEVE` protocols, restores
+  source-model CPU chunks to explicit head layout, preserves standard LMCache connector metadata,
+  and forwards failed page ids to vLLM 0.24.0's native-recompute contract.
 - `publication.py` enforces fixed split sizes, group isolation, hash-only sealed metadata,
   license/source provenance, four-direction validation receipts, one-shot sealed access, and
   immutable content-addressed sealed reports.
@@ -170,10 +171,12 @@ surface, and vLLM invalid-block native-recompute path. It records content hashes
 upstream source files and rechecks that identity after measurement. A version string alone is
 not accepted as compatibility evidence.
 
-Source chunks are read from the same LMCache MP server under the source model's key identity.
-The bridge registers a bounded non-GPU read context, issues exact one-chunk prepare/commit
-operations, rejects missing, oversized, wrong-shape, wrong-dtype, or wrong-checksum payloads,
-and reshapes `[K/V, layer, token, heads*dim]` into the transport's explicit head layout. The
+Full source prefixes are first written to the same LMCache MP server under the source model's key
+identity. The writer uses exact fixed-size CPU chunks, records each checksum before storing, and
+publishes no translated target object. The bridge then registers a bounded non-GPU read context,
+issues exact one-chunk prepare/commit operations, rejects missing, oversized, wrong-shape,
+wrong-dtype, or wrong-checksum payloads, and reshapes `[K/V, layer, token, heads*dim]` into the
+transport's explicit head layout. The
 registered v5 experiment uses one source worker and one target worker per direction; tensor
 parallel source layouts are deliberately rejected. No filesystem staging or translated target
 object is part of this path.
