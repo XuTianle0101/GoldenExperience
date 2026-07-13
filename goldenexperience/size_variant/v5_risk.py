@@ -703,6 +703,25 @@ def load_completed_risk_fit(
     return manifest, trace, transport_manifest, candidate
 
 
+def load_risk_predictor(
+    workspace: V5PipelineWorkspace,
+    manifest: V5RiskFitManifest,
+    *,
+    device: str = "cpu",
+) -> RiskPredictor:
+    """Load the immutable predictor referenced by a validated risk-fit manifest."""
+
+    path = _verify_workspace_ref(workspace, manifest.predictor)
+    try:
+        return RiskPredictor.from_artifact(
+            path,
+            expected_sha256=manifest.predictor.sha256,
+            device=device,
+        )
+    except Exception as exc:
+        raise V5PipelineError("risk predictor artifact contract is invalid") from exc
+
+
 def _risk_training_metrics(
     probabilities: Sequence[float],
     labels: Sequence[int],

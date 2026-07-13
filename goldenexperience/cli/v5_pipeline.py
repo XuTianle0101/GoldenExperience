@@ -105,6 +105,19 @@ def build_parser() -> argparse.ArgumentParser:
     fit_risk.add_argument("--repository-root", type=Path, default=Path.cwd())
     fit_risk.add_argument("--resume", action="store_true")
     fit_risk.add_argument("--progress-every", type=int, default=1)
+    calibrate = commands.add_parser(
+        "calibrate",
+        help="freeze one selector threshold on independent risk calibration data",
+    )
+    calibrate.add_argument("--workspace", type=Path, required=True)
+    calibrate.add_argument("--direction", choices=tuple(DIRECTION_SIZES), required=True)
+    calibrate.add_argument("--samples", type=Path, required=True)
+    calibrate.add_argument("--source-device", default="cuda:0")
+    calibrate.add_argument("--target-device", default="cuda:1")
+    calibrate.add_argument("--identity-cache", type=Path)
+    calibrate.add_argument("--repository-root", type=Path, default=Path.cwd())
+    calibrate.add_argument("--resume", action="store_true")
+    calibrate.add_argument("--progress-every", type=int, default=1)
     return parser
 
 
@@ -332,6 +345,46 @@ def fit_risk(args: argparse.Namespace) -> PipelineStageRecord:
     )
 
 
+def calibrate_risk(args: argparse.Namespace) -> PipelineStageRecord:
+    from goldenexperience.size_variant.v5_calibration import (
+        run_calibrate_stage,
+        stderr_calibration_progress,
+    )
+    from goldenexperience.size_variant.v5_real_risk import RealQwenRiskExampleEvaluator
+    from goldenexperience.size_variant.v5_risk import load_completed_risk_fit
+
+    workspace = V5PipelineWorkspace.open(args.workspace)
+    if source_tree_sha256(args.repository_root) != workspace.config.code_sha256:
+        raise V5PipelineError("executable source tree differs from the pipeline code hash")
+    direction = workspace.config.direction(args.direction)
+    _, _, transport_manifest, candidate = load_completed_risk_fit(
+        workspace,
+        args.direction,
+    )
+    identity_cache = args.identity_cache
+    if identity_cache is None:
+        identity_cache = workspace.control / "model_identity_cache.json"
+    evaluator = RealQwenRiskExampleEvaluator(
+        workspace=workspace,
+        transport_manifest=transport_manifest,
+        candidate=candidate,
+        source_path=direction.source_model_path,
+        target_path=direction.target_model_path,
+        source_device=args.source_device,
+        target_device=args.target_device,
+        identity_cache_path=identity_cache,
+    )
+    return run_calibrate_stage(
+        workspace=workspace,
+        direction=args.direction,
+        sample_store_path=args.samples,
+        evaluator_parameters=evaluator.parameters(),
+        evaluator_factory=lambda: evaluator,
+        resume=args.resume,
+        progress=stderr_calibration_progress(args.progress_every),
+    )
+
+
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     stage_commands = {
@@ -339,6 +392,7 @@ def main(argv: list[str] | None = None) -> int:
         "fit-transport": fit_transport,
         "evaluate-method-dev": evaluate_method_dev,
         "fit-risk": fit_risk,
+        "calibrate": calibrate_risk,
     }
     if args.command in stage_commands:
         record = stage_commands[args.command](args)

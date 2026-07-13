@@ -153,7 +153,7 @@ def select_calibrated_threshold(
 ) -> RiskCalibrationResult:
     """Choose maximum coverage under a simultaneous exact one-sided risk bound."""
 
-    rows = sorted(list(examples), key=lambda item: item.unsafe_probability)
+    rows = list(examples)
     if not rows:
         raise RiskGateError("risk calibration set is empty")
     if min_accepted < 1:
@@ -163,8 +163,11 @@ def select_calibrated_threshold(
     if not 0 < confidence < 1:
         raise ValueError("confidence must be between zero and one")
     for row in rows:
-        if not math.isfinite(row.unsafe_probability) or not 0 <= row.unsafe_probability <= 1:
+        if not _valid_probability(row.unsafe_probability):
             raise RiskGateError("risk calibration probabilities must be finite in [0, 1]")
+        if not _strict_bool(row.unsafe):
+            raise RiskGateError("risk calibration labels must be boolean")
+    rows.sort(key=lambda item: item.unsafe_probability)
 
     candidate_count = 0
     cumulative = 0
@@ -796,6 +799,19 @@ def _binomial_cdf(k: int, n: int, probability: float) -> float:
     ]
     maximum = max(logs)
     return math.exp(maximum) * sum(math.exp(value - maximum) for value in logs)
+
+
+def _valid_probability(value: Any) -> bool:
+    return (
+        not isinstance(value, bool)
+        and isinstance(value, (int, float))
+        and math.isfinite(value)
+        and 0 <= value <= 1
+    )
+
+
+def _strict_bool(value: Any) -> bool:
+    return type(value) is bool
 
 
 def _digest_bytes(value: str) -> bytes:

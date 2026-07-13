@@ -119,7 +119,10 @@ Predictor fitting is independently frozen before calibration. Each direction use
 native-target execution contributes labels only and cannot enter the current row's feature
 vector. Per-prefix history contains only outcomes from lexicographically earlier rows in the
 frozen split. The fit artifact has no threshold and is rejected if either label class is
-absent. Calibration then freezes the predictor and reads only `risk_calibration`.
+absent. Calibration then freezes the predictor, reads only `risk_calibration`, scores on CPU,
+and fails rather than publishing when no eligible threshold meets the simultaneous bound.
+Reloading the artifact recomputes every per-row score, causal history, tied candidate group,
+Bonferroni correction, and selected threshold from the detailed immutable report.
 
 At runtime, a missing/corrupt sidecar, unseen prefix, insufficient shadow history, OOD score,
 model/tokenizer/transport identity change, predictor failure, or score above threshold falls

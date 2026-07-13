@@ -213,6 +213,49 @@ cannot authorize reuse. Its report, predictor, selected transport object, raw sa
 trace manifest, split hash, code hash, and pipeline identity are all content-bound. The later
 `calibrate` stage alone may choose an admission threshold on `risk_calibration`.
 
+## Calibrate The Frozen Predictor
+
+After collecting the independent 2,048-example calibration trace for the same direction,
+freeze its admission threshold:
+
+```bash
+golden-v5-pipeline calibrate \
+  --workspace artifacts/v5_pipeline \
+  --direction qwen3_4b_to_8b \
+  --samples datasets/publication/risk_calibration.jsonl \
+  --source-device cuda:0 \
+  --target-device cuda:1
+```
+
+Calibration reloads the selector-trained predictor by its immutable object hash and always
+scores it on CPU. It never updates predictor tensors and accepts only `risk_calibration` raw
+rows/traces. Label generation, quantized sidecar round trips, and per-prefix causal history
+use the same frozen evaluator as predictor fitting. The command exposes no threshold,
+confidence, accepted-count, risk-bound, predictor-device, or label override.
+
+Every distinct predictor score that would accept at least 300 rows is a candidate threshold.
+All rows tied at a score enter or leave together. For each candidate, the stage computes an
+exact one-sided Clopper-Pearson regression-risk upper bound using pointwise confidence
+`1 - (1 - 0.95) / candidate_count`; this Bonferroni correction provides simultaneous 95%
+family-wise coverage across the complete eligible threshold search. The selected threshold
+maximizes coverage subject to at least 300 accepted rows and an upper bound no greater than
+1%. If no threshold satisfies both constraints, the stage fails without a calibrated
+artifact.
+
+Each sample checkpoint binds the stage input, current causal history, frozen predictor,
+transport, trace, raw store, and target-derived label. The detailed report records every
+source-only probability and unsafe label. Loading a completed calibration replays all 2,048
+predictor scores on CPU, reconstructs histories in frozen sample order, repeats the complete
+threshold search, and requires exact agreement with the summary. This prevents a modified
+threshold, count, tie group, or risk bound from becoming authoritative through summary-only
+metadata.
+
+The calibration manifest contains a runtime `RiskGateSpec` with fixed sidecar feature schema,
+hidden width 64, OOD threshold 6.0, one required prior shadow sample, the predictor object,
+split/report/evaluator hashes, selected threshold, all counts, coverage, simultaneous upper
+bound, method, and confidence. It records `calibrated=true`, but remains only validation input;
+it does not grant semantic-sealed or production authority.
+
 There is deliberately no CLI option for a semantic sealed payload. Initialization records
 only its expected hash and publishes `.pipeline/semantic_sealed.locked.json`. The generic
 resume API rejects the `semantic_sealed` stage; a later one-shot guard must first verify
