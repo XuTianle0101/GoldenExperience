@@ -98,6 +98,7 @@ def _trace(source: CachedKVModelSpec, target: CachedKVModelSpec) -> V5TraceManif
     records = tuple(
         TraceRecord(
             sample_id=f"sample-{index}",
+            prefix_group_id=f"group-{index}",
             dataset_id="synthetic",
             task="qa",
             token_bucket=128,

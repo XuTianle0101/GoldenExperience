@@ -9,7 +9,7 @@ import math
 import os
 import sys
 from collections.abc import Callable, Mapping
-from contextlib import suppress
+from contextlib import ExitStack, suppress
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Protocol
@@ -42,10 +42,10 @@ from goldenexperience.size_variant.v5_pipeline import (
 )
 
 RAW_BENCHMARK_SAMPLE_SCHEMA = "goldenexperience.publication_raw_sample.v1"
-V5_TRACE_MANIFEST_SCHEMA = "goldenexperience.v5_trace_manifest.v1"
-V5_TRACE_SHARD_SCHEMA = "goldenexperience.v5_trace_shard.v1"
-V5_TRACE_CHECKPOINT_SCHEMA = "goldenexperience.v5_trace_checkpoint.v1"
-V5_COLLECTOR_ID = "qwen3_prefix_attention_trace_v1"
+V5_TRACE_MANIFEST_SCHEMA = "goldenexperience.v5_trace_manifest.v2"
+V5_TRACE_SHARD_SCHEMA = "goldenexperience.v5_trace_shard.v2"
+V5_TRACE_CHECKPOINT_SCHEMA = "goldenexperience.v5_trace_checkpoint.v2"
+V5_COLLECTOR_ID = "qwen3_grouped_prefix_attention_trace_v2"
 REQUIRED_TRACE_TENSORS = frozenset(
     {
         "source_kv",
@@ -231,6 +231,7 @@ class TraceObjectRef:
 @dataclass(frozen=True)
 class TraceRecord:
     sample_id: str
+    prefix_group_id: str
     dataset_id: str
     task: str
     token_bucket: int
@@ -247,6 +248,7 @@ class TraceRecord:
         errors = self.shard.validate()
         expected = {
             "sample_id": record.sample_id,
+            "prefix_group_id": record.prefix_group_id,
             "dataset_id": record.dataset_id,
             "task": record.task,
             "token_bucket": record.token_bucket,
@@ -268,6 +270,18 @@ class TraceRecord:
         return errors
 
 
+def _trace_group_binding(record: TraceRecord) -> tuple[Any, ...]:
+    return (
+        record.prefix_group_id,
+        record.prefix_sha256,
+        record.token_ids_sha256,
+        record.token_count,
+        record.query_sample_count,
+        record.key_sample_count,
+        record.shard,
+    )
+
+
 def trace_shard_metadata(
     record: TraceRecord,
     source: CachedKVModelSpec,
@@ -276,11 +290,12 @@ def trace_shard_metadata(
     return {
         "schema_version": V5_TRACE_SHARD_SCHEMA,
         "collector_id": V5_COLLECTOR_ID,
-        "sample_id": record.sample_id,
-        "content_sha256": record.content_sha256,
+        "prefix_group_id": record.prefix_group_id,
         "prefix_sha256": record.prefix_sha256,
-        "suffix_query_sha256": record.suffix_query_sha256,
         "token_ids_sha256": record.token_ids_sha256,
+        "token_count": str(record.token_count),
+        "query_sample_count": str(record.query_sample_count),
+        "key_sample_count": str(record.key_sample_count),
         "source_config_sha256": source.config_sha256,
         "source_weights_sha256": source.weights_sha256,
         "target_config_sha256": target.config_sha256,
@@ -455,6 +470,8 @@ class V5TraceManifest:
         if len(self.records) != SPLIT_COUNTS.get(self.split, -1):
             errors.append("trace manifest record count differs from the registered split")
         observed: set[str] = set()
+        grouped: dict[str, tuple[Any, ...]] = {}
+        shard_bindings: dict[str, tuple[Any, ...]] = {}
         for trace in self.records:
             if trace.sample_id in observed:
                 errors.append(f"duplicate trace sample {trace.sample_id!r}")
@@ -465,6 +482,15 @@ class V5TraceManifest:
                 errors.append(f"trace sample {trace.sample_id!r} is outside the split")
                 continue
             errors.extend(trace.validate(record))
+            binding = _trace_group_binding(trace)
+            previous = grouped.setdefault(trace.prefix_group_id, binding)
+            if previous != binding:
+                errors.append(
+                    f"prefix group {trace.prefix_group_id!r} refers to multiple trace objects"
+                )
+            previous_shard_binding = shard_bindings.setdefault(trace.shard.sha256, binding)
+            if previous_shard_binding != binding:
+                errors.append("one trace object is bound to multiple prefix identities")
         if observed != set(expected):
             errors.append("trace manifest sample ids differ from the frozen split")
         return errors
@@ -591,7 +617,12 @@ def run_collect_stage(
     checkpoints.mkdir(parents=True, exist_ok=True)
     local_shards.mkdir(parents=True, exist_ok=True)
     trace_records: list[TraceRecord] = []
-    missing: list[tuple[GroupedPrefixRecord, RawBenchmarkSample, Path]] = []
+    missing_by_group: dict[
+        str,
+        list[tuple[GroupedPrefixRecord, RawBenchmarkSample, Path]],
+    ] = {}
+    group_assets: dict[str, tuple[TraceRecord, PipelineArtifact]] = {}
+    verified_artifacts: dict[str, PipelineArtifact] = {}
     try:
         for benchmark_record, sample in samples:
             checkpoint = checkpoints / f"{_text_sha256(benchmark_record.sample_id)}.json"
@@ -600,45 +631,88 @@ def run_collect_stage(
                 workspace=workspace,
                 input_sha256=lease.input_sha256,
                 record=benchmark_record,
+                verified_artifacts=verified_artifacts,
             )
             if restored is None:
-                missing.append((benchmark_record, sample, checkpoint))
+                missing_by_group.setdefault(benchmark_record.prefix_group_id, []).append(
+                    (benchmark_record, sample, checkpoint)
+                )
             else:
-                trace_records.append(restored)
-        if missing:
-            with collector_factory() as collector:
-                for index, (benchmark_record, sample, checkpoint) in enumerate(missing, start=1):
-                    shard_path = local_shards / (
-                        f"{_text_sha256(benchmark_record.sample_id)}.safetensors"
-                    )
-                    collected = collector.collect(benchmark_record, sample, shard_path)
-                    artifact = workspace.publish_file(collected.path, logical_name="trace_shard")
-                    trace_record = TraceRecord(
-                        sample_id=benchmark_record.sample_id,
-                        dataset_id=benchmark_record.dataset_id,
-                        task=benchmark_record.task,
-                        token_bucket=benchmark_record.token_bucket,
-                        content_sha256=benchmark_record.content_sha256,
-                        prefix_sha256=benchmark_record.prefix_sha256,
-                        suffix_query_sha256=benchmark_record.suffix_query_sha256,
-                        token_ids_sha256=collected.token_ids_sha256,
-                        token_count=collected.token_count,
-                        query_sample_count=collected.query_sample_count,
-                        key_sample_count=collected.key_sample_count,
-                        shard=TraceObjectRef.from_artifact(artifact),
-                    )
-                    errors = trace_record.validate(benchmark_record)
-                    if errors:
-                        raise V5PipelineError("; ".join(errors))
-                    _write_trace_checkpoint(
-                        checkpoint,
-                        input_sha256=lease.input_sha256,
-                        record=trace_record,
-                        artifact=artifact,
-                    )
-                    trace_records.append(trace_record)
-                    if progress is not None:
-                        progress(index, len(missing), benchmark_record.sample_id)
+                trace, artifact = restored
+                previous_group_asset = group_assets.setdefault(
+                    benchmark_record.prefix_group_id,
+                    (trace, artifact),
+                )
+                if _trace_group_binding(previous_group_asset[0]) != _trace_group_binding(trace):
+                    raise V5PipelineError("trace checkpoints disagree within one prefix group")
+                trace_records.append(trace)
+        missing_count = sum(len(items) for items in missing_by_group.values())
+        if missing_count:
+            needs_collection = any(group not in group_assets for group in missing_by_group)
+            completed = 0
+            with ExitStack() as stack:
+                collector = stack.enter_context(collector_factory()) if needs_collection else None
+                for group_id, group_missing in sorted(missing_by_group.items()):
+                    template = group_assets.get(group_id)
+                    if template is None:
+                        if collector is None:
+                            raise V5PipelineError(
+                                "trace collector was not opened for a missing group"
+                            )
+                        representative, sample, _ = group_missing[0]
+                        shard_path = local_shards / f"{_text_sha256(group_id)}.safetensors"
+                        collected = collector.collect(representative, sample, shard_path)
+                        artifact = workspace.publish_file(
+                            collected.path,
+                            logical_name="trace_shard",
+                        )
+                        token_ids_sha256_value = collected.token_ids_sha256
+                        token_count = collected.token_count
+                        query_sample_count = collected.query_sample_count
+                        key_sample_count = collected.key_sample_count
+                    else:
+                        previous_trace, artifact = template
+                        token_ids_sha256_value = previous_trace.token_ids_sha256
+                        token_count = previous_trace.token_count
+                        query_sample_count = previous_trace.query_sample_count
+                        key_sample_count = previous_trace.key_sample_count
+                    for benchmark_record, _sample, checkpoint in group_missing:
+                        trace_record = TraceRecord(
+                            sample_id=benchmark_record.sample_id,
+                            prefix_group_id=benchmark_record.prefix_group_id,
+                            dataset_id=benchmark_record.dataset_id,
+                            task=benchmark_record.task,
+                            token_bucket=benchmark_record.token_bucket,
+                            content_sha256=benchmark_record.content_sha256,
+                            prefix_sha256=benchmark_record.prefix_sha256,
+                            suffix_query_sha256=benchmark_record.suffix_query_sha256,
+                            token_ids_sha256=token_ids_sha256_value,
+                            token_count=token_count,
+                            query_sample_count=query_sample_count,
+                            key_sample_count=key_sample_count,
+                            shard=TraceObjectRef.from_artifact(artifact),
+                        )
+                        errors = trace_record.validate(benchmark_record)
+                        if errors:
+                            raise V5PipelineError("; ".join(errors))
+                        registered_group_asset = group_assets.setdefault(
+                            group_id,
+                            (trace_record, artifact),
+                        )
+                        if _trace_group_binding(registered_group_asset[0]) != _trace_group_binding(
+                            trace_record
+                        ):
+                            raise V5PipelineError("collected prefix group trace is inconsistent")
+                        _write_trace_checkpoint(
+                            checkpoint,
+                            input_sha256=lease.input_sha256,
+                            record=trace_record,
+                            artifact=artifact,
+                        )
+                        trace_records.append(trace_record)
+                        completed += 1
+                        if progress is not None:
+                            progress(completed, missing_count, benchmark_record.sample_id)
         if _stat_signature(store_path) != before or sha256_file(store_path) != store_sha256:
             raise V5PipelineError("raw sample store changed during collection")
         direction_config = workspace.config.direction(direction)
@@ -882,11 +956,12 @@ class RealQwenTraceCollector:
         metadata = {
             "schema_version": V5_TRACE_SHARD_SCHEMA,
             "collector_id": V5_COLLECTOR_ID,
-            "sample_id": record.sample_id,
-            "content_sha256": record.content_sha256,
+            "prefix_group_id": record.prefix_group_id,
             "prefix_sha256": record.prefix_sha256,
-            "suffix_query_sha256": record.suffix_query_sha256,
             "token_ids_sha256": token_hash,
+            "token_count": str(record.token_bucket),
+            "query_sample_count": str(int(trace.query_positions.numel())),
+            "key_sample_count": str(int(trace.key_positions.numel())),
             "source_config_sha256": self.source.config_sha256,
             "source_weights_sha256": self.source.weights_sha256,
             "target_config_sha256": self.target.config_sha256,
@@ -968,7 +1043,8 @@ def _load_trace_checkpoint(
     workspace: V5PipelineWorkspace,
     input_sha256: str,
     record: GroupedPrefixRecord,
-) -> TraceRecord | None:
+    verified_artifacts: dict[str, PipelineArtifact],
+) -> tuple[TraceRecord, PipelineArtifact] | None:
     if not path.is_file():
         return None
     try:
@@ -978,7 +1054,14 @@ def _load_trace_checkpoint(
         if payload.get("input_sha256") != input_sha256:
             raise V5PipelineError("trace checkpoint input binding mismatch")
         artifact = PipelineArtifact(**payload["artifact"])
-        workspace.artifact_path(artifact, verify_hash=True)
+        verified = verified_artifacts.get(artifact.sha256)
+        if verified is None:
+            workspace.artifact_path(artifact, verify_hash=True)
+            verified_artifacts[artifact.sha256] = artifact
+        else:
+            if verified != artifact:
+                raise V5PipelineError("trace checkpoints disagree on shared artifact identity")
+            workspace.artifact_path(artifact, verify_hash=False)
         raw_record = dict(payload["record"])
         raw_record["shard"] = TraceObjectRef(**raw_record["shard"])
         trace = TraceRecord(**raw_record)
@@ -987,7 +1070,7 @@ def _load_trace_checkpoint(
             raise V5PipelineError("; ".join(errors))
         if trace.shard != TraceObjectRef.from_artifact(artifact):
             raise V5PipelineError("trace checkpoint artifact binding mismatch")
-        return trace
+        return trace, artifact
     except (OSError, KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
         if isinstance(exc, V5PipelineError):
             raise

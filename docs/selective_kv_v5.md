@@ -78,11 +78,13 @@ before decode.
   state, stable dependency bindings, and atomic content-addressed object/receipt store. The
   workspace contract is detailed in `docs/v5_pipeline.md`.
 - `v5_collect.py` validates one raw split at a time, runs real source/target prefill, writes
-  bounded safetensors KV/query/attention shards, and resumes from fully verified per-sample
-  checkpoints. Generic collection cannot name or load the semantic sealed split.
+  one bounded immutable safetensors KV/query/attention shard per unique prefix group, and
+  resumes from fully verified per-sample checkpoints. Generic collection cannot name or load
+  the semantic sealed split.
 - `v5_fit.py` fits the fixed 3-rank by 3-seed 4B-to-8B screening matrix in one synchronized
-  trace pass, checkpoints model plus AdamW state atomically, and emits runtime-loadable
-  candidate weights. Its production entry point cannot override the registered matrix.
+  trace pass, verifies and deserializes each shared shard once, checkpoints model plus AdamW
+  state atomically, and emits runtime-loadable candidate weights. Its production entry point
+  cannot override the registered matrix.
 - `publication_eval.py`, `v5_method_dev.py`, and `v5_real_method_dev.py` provide explicit
   deterministic semantic scorers, real shared-prefix evaluation of all nine candidates,
   resumable per-sample evidence, three-seed rank aggregation, and a seed-17 frozen structure
@@ -98,6 +100,14 @@ before decode.
 - `v5_runtime.py` runs the fixed 512-row paired latency audit, verifies every checkpoint and
   aggregate on reload, binds the pinned runtime source identity and failure-recovery probe, and
   grants `approved` authority only when both accepted and rejected paths meet their gates.
+
+Trace sharing is restricted to prefix-derived tensors. Each direction and split still carries
+one ordered manifest record and checkpoint per benchmark row, including its independent sample,
+suffix/query, content, history, label, and score bindings. Method development and risk evaluation
+reuse source/target prefix prefill only while equal prefix groups are contiguous; transforms and
+timing measurements, causal history updates, semantic scoring, labels, and row weights remain
+independent for every row. Thus grouped execution changes storage and redundant prefill cost, not
+the frozen sample order or statistical estimand.
 
 Run the implementation smoke independently of every benchmark split:
 

@@ -40,6 +40,7 @@ from goldenexperience.size_variant.v5_collect import (
     load_bound_benchmark,
     load_completed_trace_manifest,
     load_trace_shard,
+    trace_shard_metadata,
 )
 from goldenexperience.size_variant.v5_pipeline import (
     PipelineStageRecord,
@@ -434,8 +435,19 @@ class _TraceLoader:
         self.workspace = workspace
         self.trace = trace
         self.verified: set[str] = set()
+        self.cache: dict[
+            str,
+            tuple[TraceObjectRef, dict[str, str], dict[str, Any]],
+        ] = {}
 
     def load(self, record: TraceRecord) -> dict[str, Any]:
+        metadata = trace_shard_metadata(record, self.trace.source, self.trace.target)
+        cached = self.cache.get(record.shard.sha256)
+        if cached is not None:
+            cached_ref, cached_metadata, tensors = cached
+            if cached_ref != record.shard or cached_metadata != metadata:
+                raise V5PipelineError("shared trace shard has inconsistent identity bindings")
+            return tensors
         relative = Path(record.shard.path)
         if relative.is_absolute() or ".." in relative.parts:
             raise V5PipelineError("trace object path escapes the pipeline workspace")
@@ -450,11 +462,12 @@ class _TraceLoader:
             verify_hash=record.shard.sha256 not in self.verified,
         )
         self.verified.add(record.shard.sha256)
+        self.cache[record.shard.sha256] = (record.shard, metadata, tensors)
         return tensors
 
 
 class SynchronousTransportTrainer:
-    """Train all registered rank/seed candidates from one trace read per sample."""
+    """Train every candidate with one verified tensor load per unique trace shard."""
 
     def __init__(
         self,

@@ -51,6 +51,13 @@ def tiny_contract(monkeypatch):
     monkeypatch.setattr(publication_module, "REQUIRED_DATASETS", frozenset({"gsm8k"}))
 
 
+@pytest.fixture
+def grouped_contract(monkeypatch):
+    for split in tuple(SPLIT_COUNTS):
+        monkeypatch.setitem(SPLIT_COUNTS, split, 8)
+    monkeypatch.setattr(publication_module, "REQUIRED_DATASETS", frozenset({"gsm8k"}))
+
+
 def _model(model_id: str, size: float, layers: int) -> CachedKVModelSpec:
     return CachedKVModelSpec(
         model_id=model_id,
@@ -71,7 +78,7 @@ def _model(model_id: str, size: float, layers: int) -> CachedKVModelSpec:
 
 
 def _raw_payload(record: GroupedPrefixRecord) -> dict:
-    prefix = f"prefix for {record.sample_id}"
+    prefix = f"prefix for {record.prefix_group_id}"
     suffix = f"query for {record.sample_id}"
     reference = f"answer for {record.sample_id}"
     evaluation = {"metric": "exact_match"}
@@ -86,12 +93,17 @@ def _raw_payload(record: GroupedPrefixRecord) -> dict:
     }
 
 
-def _benchmark(tmp_path: Path) -> tuple[PublicationBenchmarkManifest, Path]:
+def _benchmark(
+    tmp_path: Path,
+    *,
+    grouped_prefixes: bool = False,
+) -> tuple[PublicationBenchmarkManifest, Path]:
     records = []
     for split, count in SPLIT_COUNTS.items():
         for index in range(count):
             sample_id = f"{split}-{index}"
-            group = f"{split}-group-{index}"
+            group_index = index // 2 if grouped_prefixes else index
+            group = f"{split}-group-{group_index}"
             provisional = GroupedPrefixRecord(
                 sample_id=sample_id,
                 split=split,
@@ -100,7 +112,7 @@ def _benchmark(tmp_path: Path) -> tuple[PublicationBenchmarkManifest, Path]:
                 prefix_sha256="",
                 suffix_query_sha256="",
                 content_sha256="",
-                token_bucket=PREFIX_BUCKETS[index % len(PREFIX_BUCKETS)],
+                token_bucket=PREFIX_BUCKETS[group_index % len(PREFIX_BUCKETS)],
                 task="qa",
             )
             raw = _raw_payload(provisional)
@@ -278,6 +290,7 @@ def test_trace_shard_loader_verifies_tensor_and_metadata_contract(tmp_path: Path
     )
     provisional = TraceRecord(
         sample_id="sample",
+        prefix_group_id="group",
         dataset_id="gsm8k",
         task="qa",
         token_bucket=128,
@@ -378,6 +391,98 @@ def test_collect_stage_checkpoints_and_publishes_trace_manifest(
     )
     assert reused.receipt_sha256 == stage.receipt_sha256
     assert reused_collector.entered == 0
+
+
+def test_collect_stage_materializes_one_shard_per_prefix_group(
+    tmp_path: Path,
+    grouped_contract,
+) -> None:
+    manifest, manifest_path = _benchmark(tmp_path, grouped_prefixes=True)
+    workspace = _workspace(tmp_path, manifest, manifest_path)
+    store = _sample_store(tmp_path, manifest, "transport_train")
+    collector = _FakeCollector()
+
+    stage = run_collect_stage(
+        workspace=workspace,
+        direction="qwen3_4b_to_8b",
+        split="transport_train",
+        sample_store_path=store,
+        collector_parameters={"collector_id": "fake-v2"},
+        collector_factory=lambda: collector,
+    )
+
+    assert len(collector.calls) == 4
+    assert stage.outputs is not None
+    trace = V5TraceManifest.load(
+        workspace.artifact_path(stage.outputs["trace_manifest"]),
+        workspace=workspace,
+        benchmark=manifest,
+    )
+    grouped: dict[str, set[str]] = {}
+    for record in trace.records:
+        grouped.setdefault(record.prefix_group_id, set()).add(record.shard.sha256)
+    assert len(grouped) == 4
+    assert all(len(shards) == 1 for shards in grouped.values())
+    first_group = trace.records[0].prefix_group_id
+    second_group = next(
+        record.prefix_group_id for record in trace.records if record.prefix_group_id != first_group
+    )
+    first_shard = trace.records[0].shard
+    incompatible = replace(
+        trace,
+        records=tuple(
+            replace(record, shard=first_shard) if record.prefix_group_id == second_group else record
+            for record in trace.records
+        ),
+    )
+    assert "one trace object is bound to multiple prefix identities" in incompatible.validate(
+        workspace=workspace,
+        benchmark=manifest,
+    )
+
+
+def test_collect_resume_reuses_a_completed_peer_checkpoint_in_the_same_group(
+    tmp_path: Path,
+    grouped_contract,
+) -> None:
+    manifest, manifest_path = _benchmark(tmp_path, grouped_prefixes=True)
+    workspace = _workspace(tmp_path, manifest, manifest_path)
+    store = _sample_store(tmp_path, manifest, "transport_train")
+    interrupted = _FakeCollector()
+
+    def interrupt_after_peer_checkpoint(
+        completed: int,
+        _total: int,
+        _sample_id: str,
+    ) -> None:
+        if completed == 3:
+            raise RuntimeError("synthetic checkpoint interruption")
+
+    with pytest.raises(RuntimeError, match="checkpoint interruption"):
+        run_collect_stage(
+            workspace=workspace,
+            direction="qwen3_4b_to_8b",
+            split="transport_train",
+            sample_store_path=store,
+            collector_parameters={"collector_id": "fake-v2"},
+            collector_factory=lambda: interrupted,
+            progress=interrupt_after_peer_checkpoint,
+        )
+
+    resumed = _FakeCollector()
+    stage = run_collect_stage(
+        workspace=workspace,
+        direction="qwen3_4b_to_8b",
+        split="transport_train",
+        sample_store_path=store,
+        collector_parameters={"collector_id": "fake-v2"},
+        collector_factory=lambda: resumed,
+        resume=True,
+    )
+
+    assert stage.status == "completed"
+    assert len(interrupted.calls) == 2
+    assert len(resumed.calls) == 2
 
 
 def test_collect_resume_reuses_verified_per_sample_checkpoints(

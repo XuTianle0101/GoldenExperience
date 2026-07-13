@@ -5,6 +5,7 @@ from __future__ import annotations
 import gc
 import math
 import time
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -31,6 +32,14 @@ from goldenexperience.size_variant.v5_method_dev import (
 from goldenexperience.size_variant.v5_pipeline import V5PipelineError, V5PipelineWorkspace
 
 V5_REAL_METHOD_DEV_EVALUATOR_ID = "qwen3_real_method_dev_v1"
+
+
+@dataclass(frozen=True)
+class _MethodDevPrefixAsset:
+    prefix_group_id: str
+    token_ids: tuple[int, ...]
+    source_kv: Any
+    target_kv: Any
 
 
 class RealQwenMethodDevEvaluator:
@@ -62,6 +71,7 @@ class RealQwenMethodDevEvaluator:
         self.source_model: Any | None = None
         self.target_model: Any | None = None
         self.transports: dict[str, HeadAwareKVTransport] = {}
+        self._prefix_asset: _MethodDevPrefixAsset | None = None
 
     def parameters(self) -> dict[str, Any]:
         import torch
@@ -72,6 +82,7 @@ class RealQwenMethodDevEvaluator:
             "generation_tokens": METHOD_DEV_GENERATION_TOKENS,
             "seed": self.seed,
             "attention_implementation": self.attention_implementation,
+            "prefix_prefill_reuse": "contiguous_prefix_group_v1",
             "torch_version": torch.__version__,
             "transformers_version": transformers.__version__,
             "cuda_version": torch.version.cuda,
@@ -130,6 +141,7 @@ class RealQwenMethodDevEvaluator:
         import torch
 
         self.transports.clear()
+        self._prefix_asset = None
         self.tokenizer = None
         self.source_model = None
         self.target_model = None
@@ -146,18 +158,7 @@ class RealQwenMethodDevEvaluator:
 
         if self.tokenizer is None or self.source_model is None or self.target_model is None:
             raise V5PipelineError("real method-dev evaluator is not loaded")
-        prefix = self.tokenizer(
-            sample.prefix_text,
-            add_special_tokens=False,
-            return_tensors="pt",
-        ).input_ids[0]
-        if prefix.numel() < record.token_count:
-            raise V5PipelineError(
-                f"method-dev sample {record.sample_id!r} has fewer prefix tokens than registered"
-            )
-        prefix = prefix[: record.token_count].long()
-        if token_ids_sha256(prefix.tolist()) != record.token_ids_sha256:
-            raise V5PipelineError("method-dev prefix tokens differ from collected traces")
+        asset = self._prefix_asset_for(record, sample)
         suffix = (
             self.tokenizer(
                 sample.suffix_query,
@@ -169,31 +170,15 @@ class RealQwenMethodDevEvaluator:
         )
         if suffix.numel() <= 0:
             raise V5PipelineError("method-dev suffix/query tokenization is empty")
-        if prefix.numel() + suffix.numel() + METHOD_DEV_GENERATION_TOKENS > min(
+        if len(asset.token_ids) + suffix.numel() + METHOD_DEV_GENERATION_TOKENS > min(
             self.fit.source.max_position_embeddings,
             self.fit.target.max_position_embeddings,
         ):
             raise V5PipelineError("method-dev request exceeds the model position contract")
-        with torch.inference_mode():
-            source_output = self.source_model(
-                input_ids=prefix.unsqueeze(0).to(self.source_device),
-                use_cache=True,
-                logits_to_keep=1,
-            )
-            target_output = self.target_model(
-                input_ids=prefix.unsqueeze(0).to(self.target_device),
-                use_cache=True,
-                logits_to_keep=1,
-            )
-        source_kv = dynamic_cache_to_head_object(source_output.past_key_values).to(
-            self.target_device
-        )
-        target_kv = dynamic_cache_to_head_object(target_output.past_key_values)
-        del source_output, target_output
         native_tokens, native_text, native_nll = greedy_decode(
             self.target_model,
             self.tokenizer,
-            target_kv,
+            asset.target_kv,
             suffix,
             device=self.target_device,
             generation_tokens=METHOD_DEV_GENERATION_TOKENS,
@@ -212,7 +197,7 @@ class RealQwenMethodDevEvaluator:
                 raise V5PipelineError("real method-dev evaluator lacks a fitted candidate")
             _synchronize(self.target_device)
             started = time.perf_counter()
-            transformed = transport.transform(source_kv, position_ids=positions)
+            transformed = transport.transform(asset.source_kv, position_ids=positions)
             _synchronize(self.target_device)
             transform_ms = (time.perf_counter() - started) * 1000
             bridge_tokens, bridge_text, _ = greedy_decode(
@@ -260,8 +245,57 @@ class RealQwenMethodDevEvaluator:
                 )
             )
             del transformed
-        del source_kv, target_kv
         return tuple(measurements)
+
+    def _prefix_asset_for(
+        self,
+        record: TraceRecord,
+        sample: RawBenchmarkSample,
+    ) -> _MethodDevPrefixAsset:
+        import torch
+
+        if self.tokenizer is None or self.source_model is None or self.target_model is None:
+            raise V5PipelineError("real method-dev evaluator is not loaded")
+        prefix = self.tokenizer(
+            sample.prefix_text,
+            add_special_tokens=False,
+            return_tensors="pt",
+        ).input_ids[0]
+        if prefix.numel() < record.token_count:
+            raise V5PipelineError(
+                f"method-dev sample {record.sample_id!r} has fewer prefix tokens than registered"
+            )
+        prefix = prefix[: record.token_count].long()
+        token_ids = tuple(int(value) for value in prefix.tolist())
+        if token_ids_sha256(list(token_ids)) != record.token_ids_sha256:
+            raise V5PipelineError("method-dev prefix tokens differ from collected traces")
+        cached = self._prefix_asset
+        if cached is not None and cached.prefix_group_id == record.prefix_group_id:
+            if cached.token_ids != token_ids:
+                raise V5PipelineError("method-dev prefix group changed token identity")
+            return cached
+        with torch.inference_mode():
+            source_output = self.source_model(
+                input_ids=prefix.unsqueeze(0).to(self.source_device),
+                use_cache=True,
+                logits_to_keep=1,
+            )
+            target_output = self.target_model(
+                input_ids=prefix.unsqueeze(0).to(self.target_device),
+                use_cache=True,
+                logits_to_keep=1,
+            )
+        asset = _MethodDevPrefixAsset(
+            prefix_group_id=record.prefix_group_id,
+            token_ids=token_ids,
+            source_kv=dynamic_cache_to_head_object(source_output.past_key_values).to(
+                self.target_device
+            ),
+            target_kv=dynamic_cache_to_head_object(target_output.past_key_values),
+        )
+        del source_output, target_output
+        self._prefix_asset = asset
+        return asset
 
 
 def greedy_decode(

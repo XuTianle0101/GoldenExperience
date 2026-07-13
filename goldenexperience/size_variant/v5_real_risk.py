@@ -6,6 +6,7 @@ import gc
 import hashlib
 import math
 import sys
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
@@ -44,6 +45,17 @@ from goldenexperience.size_variant.v5_risk import (
 V5_REAL_RISK_EVALUATOR_ID = "qwen3_real_risk_examples_v1"
 
 
+@dataclass(frozen=True)
+class _RiskPrefixAsset:
+    prefix_group_id: str
+    prefix_hash: str
+    token_ids: tuple[int, ...]
+    native_target_kv: Any
+    transformed_target_kv: Any
+    base_sidecar: SourceKVSidecar
+    key_cosine: float
+
+
 class RealQwenRiskExampleEvaluator:
     """Build quantized-runtime-equivalent source features and target-derived labels."""
 
@@ -75,6 +87,7 @@ class RealQwenRiskExampleEvaluator:
         self.source_model: Any | None = None
         self.target_model: Any | None = None
         self.transport: HeadAwareKVTransport | None = None
+        self._prefix_asset: _RiskPrefixAsset | None = None
 
     def parameters(self) -> dict[str, Any]:
         import torch
@@ -85,6 +98,7 @@ class RealQwenRiskExampleEvaluator:
             "label_generation_tokens": RISK_LABEL_GENERATION_TOKENS,
             "sidecar_round_trip_before_features": True,
             "history_order": "lexicographic_sample_id_within_frozen_split",
+            "prefix_prefill_reuse": "contiguous_prefix_group_v1",
             "seed": self.seed,
             "attention_implementation": self.attention_implementation,
             "torch_version": torch.__version__,
@@ -142,6 +156,7 @@ class RealQwenRiskExampleEvaluator:
         import torch
 
         self.transport = None
+        self._prefix_asset = None
         self.tokenizer = None
         self.source_model = None
         self.target_model = None
@@ -156,9 +171,6 @@ class RealQwenRiskExampleEvaluator:
         sample: RawBenchmarkSample,
         history: RiskHistory,
     ) -> RiskTrainingExample:
-        import torch
-        import torch.nn.functional as functional
-
         if (
             self.tokenizer is None
             or self.source_model is None
@@ -166,16 +178,7 @@ class RealQwenRiskExampleEvaluator:
             or self.transport is None
         ):
             raise V5PipelineError("real risk evaluator is not loaded")
-        prefix = self.tokenizer(
-            sample.prefix_text,
-            add_special_tokens=False,
-            return_tensors="pt",
-        ).input_ids[0]
-        if prefix.numel() < trace_record.token_count:
-            raise V5PipelineError("risk sample has fewer prefix tokens than registered")
-        prefix = prefix[: trace_record.token_count].long()
-        if token_ids_sha256(prefix.tolist()) != trace_record.token_ids_sha256:
-            raise V5PipelineError("risk sample prefix tokens differ from collected traces")
+        asset = self._prefix_asset_for(benchmark_record, trace_record, sample)
         suffix = (
             self.tokenizer(
                 sample.suffix_query,
@@ -187,32 +190,13 @@ class RealQwenRiskExampleEvaluator:
         )
         if suffix.numel() <= 0:
             raise V5PipelineError("risk sample suffix/query tokenization is empty")
-        if prefix.numel() + suffix.numel() + RISK_LABEL_GENERATION_TOKENS > min(
+        if len(asset.token_ids) + suffix.numel() + RISK_LABEL_GENERATION_TOKENS > min(
             self.transport_manifest.source.max_position_embeddings,
             self.transport_manifest.target.max_position_embeddings,
         ):
             raise V5PipelineError("risk request exceeds the model position contract")
-        with torch.inference_mode():
-            source_output = self.source_model(
-                input_ids=prefix.unsqueeze(0).to(self.source_device),
-                use_cache=True,
-                logits_to_keep=1,
-            )
-            target_output = self.target_model(
-                input_ids=prefix.unsqueeze(0).to(self.target_device),
-                use_cache=True,
-                logits_to_keep=1,
-            )
-        source_kv = dynamic_cache_to_head_object(source_output.past_key_values).to(
-            self.target_device
-        )
-        target_kv = dynamic_cache_to_head_object(target_output.past_key_values)
-        del source_output, target_output
-        sidecar = build_transport_source_sidecar(
-            source_kv,
-            self.transport,
-            model_pair_id=self.transport_manifest.direction,
-            prefix_hash=benchmark_record.prefix_sha256,
+        sidecar = replace(
+            asset.base_sidecar,
             history_samples=history.samples,
             history_failures=history.failures,
             history_greedy_agreement=history.greedy_agreement,
@@ -220,12 +204,10 @@ class RealQwenRiskExampleEvaluator:
         sidecar_payload = sidecar.to_bytes()
         runtime_sidecar = SourceKVSidecar.from_bytes(sidecar_payload)
         features = runtime_sidecar.risk_features()
-        positions = torch.arange(trace_record.token_count, device=self.target_device)
-        transformed = self.transport.transform(source_kv, position_ids=positions)
         native_tokens, native_text, native_nll = greedy_decode(
             self.target_model,
             self.tokenizer,
-            target_kv,
+            asset.native_target_kv,
             suffix,
             device=self.target_device,
             generation_tokens=RISK_LABEL_GENERATION_TOKENS,
@@ -233,14 +215,14 @@ class RealQwenRiskExampleEvaluator:
         bridge_tokens, bridge_text, _ = greedy_decode(
             self.target_model,
             self.tokenizer,
-            transformed,
+            asset.transformed_target_kv,
             suffix,
             device=self.target_device,
             generation_tokens=RISK_LABEL_GENERATION_TOKENS,
         )
         bridge_nll = teacher_nll(
             self.target_model,
-            transformed,
+            asset.transformed_target_kv,
             suffix,
             native_tokens,
             device=self.target_device,
@@ -267,16 +249,6 @@ class RealQwenRiskExampleEvaluator:
             perplexity_drift = min(sys.float_info.max, perplexity_drift)
         except OverflowError:
             perplexity_drift = sys.float_info.max
-        key_cosine = float(
-            functional.cosine_similarity(
-                transformed[0].float().reshape(-1, transformed.shape[-1]),
-                target_kv[0].float().reshape(-1, target_kv.shape[-1]),
-                dim=-1,
-            )
-            .mean()
-            .item()
-        )
-        key_cosine = min(1.0, max(-1.0, key_cosine))
         example = RiskTrainingExample(
             sample_id=trace_record.sample_id,
             prefix_group_id=benchmark_record.prefix_group_id,
@@ -295,7 +267,7 @@ class RealQwenRiskExampleEvaluator:
             native_nll=native_nll,
             bridge_nll=bridge_nll,
             teacher_tokens=RISK_LABEL_GENERATION_TOKENS,
-            key_cosine=key_cosine,
+            key_cosine=asset.key_cosine,
             history_samples=history.samples,
             history_failures=history.failures,
             history_greedy_agreement=history.greedy_agreement,
@@ -305,8 +277,91 @@ class RealQwenRiskExampleEvaluator:
             native_tokens_sha256=token_ids_sha256(native_tokens),
             bridge_tokens_sha256=token_ids_sha256(bridge_tokens),
         )
-        del source_kv, target_kv, transformed
         return example
+
+    def _prefix_asset_for(
+        self,
+        benchmark_record: GroupedPrefixRecord,
+        trace_record: TraceRecord | RiskPrefixTokenBinding,
+        sample: RawBenchmarkSample,
+    ) -> _RiskPrefixAsset:
+        import torch
+        import torch.nn.functional as functional
+
+        if (
+            self.tokenizer is None
+            or self.source_model is None
+            or self.target_model is None
+            or self.transport is None
+        ):
+            raise V5PipelineError("real risk evaluator is not loaded")
+        prefix = self.tokenizer(
+            sample.prefix_text,
+            add_special_tokens=False,
+            return_tensors="pt",
+        ).input_ids[0]
+        if prefix.numel() < trace_record.token_count:
+            raise V5PipelineError("risk sample has fewer prefix tokens than registered")
+        prefix = prefix[: trace_record.token_count].long()
+        token_ids = tuple(int(value) for value in prefix.tolist())
+        if token_ids_sha256(list(token_ids)) != trace_record.token_ids_sha256:
+            raise V5PipelineError("risk sample prefix tokens differ from collected traces")
+        cached = self._prefix_asset
+        if cached is not None and cached.prefix_group_id == benchmark_record.prefix_group_id:
+            if (
+                cached.prefix_hash != benchmark_record.prefix_sha256
+                or cached.token_ids != token_ids
+            ):
+                raise V5PipelineError("risk prefix group changed content identity")
+            return cached
+        with torch.inference_mode():
+            source_output = self.source_model(
+                input_ids=prefix.unsqueeze(0).to(self.source_device),
+                use_cache=True,
+                logits_to_keep=1,
+            )
+            target_output = self.target_model(
+                input_ids=prefix.unsqueeze(0).to(self.target_device),
+                use_cache=True,
+                logits_to_keep=1,
+            )
+        source_kv = dynamic_cache_to_head_object(source_output.past_key_values).to(
+            self.target_device
+        )
+        target_kv = dynamic_cache_to_head_object(target_output.past_key_values).detach()
+        del source_output, target_output
+        positions = torch.arange(trace_record.token_count, device=self.target_device)
+        transformed = self.transport.transform(source_kv, position_ids=positions).detach()
+        base_sidecar = build_transport_source_sidecar(
+            source_kv,
+            self.transport,
+            model_pair_id=self.transport_manifest.direction,
+            prefix_hash=benchmark_record.prefix_sha256,
+            history_samples=0,
+            history_failures=0,
+            history_greedy_agreement=1.0,
+        )
+        key_cosine = float(
+            functional.cosine_similarity(
+                transformed[0].float().reshape(-1, transformed.shape[-1]),
+                target_kv[0].float().reshape(-1, target_kv.shape[-1]),
+                dim=-1,
+            )
+            .mean()
+            .item()
+        )
+        asset = _RiskPrefixAsset(
+            prefix_group_id=benchmark_record.prefix_group_id,
+            prefix_hash=benchmark_record.prefix_sha256,
+            token_ids=token_ids,
+            native_target_kv=target_kv,
+            transformed_target_kv=transformed,
+            base_sidecar=base_sidecar,
+            key_cosine=min(1.0, max(-1.0, key_cosine)),
+        )
+        del source_kv
+        self._prefix_asset = asset
+        return asset
 
     def bind_semantic_prefix(
         self,

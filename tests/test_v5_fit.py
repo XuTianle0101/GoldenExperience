@@ -11,6 +11,7 @@ import torch
 from safetensors import safe_open
 from safetensors.torch import save_file
 
+import goldenexperience.size_variant.v5_fit as v5_fit_module
 from goldenexperience.size_variant.attention_collection import causal_sample_mask
 from goldenexperience.size_variant.cached_kv_manifest import CachedKVModelSpec, sha256_file
 from goldenexperience.size_variant.head_aware_transport import (
@@ -33,6 +34,7 @@ from goldenexperience.size_variant.v5_fit import (
     TransportCandidateArtifact,
     TransportTrainingParameters,
     V5TransportFitManifest,
+    _TraceLoader,
     _validate_progress,
     run_fit_transport_stage,
 )
@@ -77,6 +79,7 @@ def _synthetic_trace(
         sample_id = f"sample-{index}"
         provisional = TraceRecord(
             sample_id=sample_id,
+            prefix_group_id=f"group-{index}",
             dataset_id="synthetic",
             task="qa",
             token_bucket=128,
@@ -222,6 +225,38 @@ def test_synchronous_transport_fit_emits_runtime_loadable_weights(tmp_path: Path
     transformed = runtime.transform(source_kv, position_ids=torch.arange(4))
     assert transformed.shape == (2, 3, 1, 4, 32)
     assert bool(torch.isfinite(transformed).all())
+
+
+def test_trace_loader_reuses_only_compatibly_bound_shared_shards(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    workspace, trace = _synthetic_trace(tmp_path, record_count=1)
+    real_load = v5_fit_module.load_trace_shard
+    calls = 0
+
+    def counted_load(*args: Any, **kwargs: Any) -> dict[str, Any]:
+        nonlocal calls
+        calls += 1
+        return real_load(*args, **kwargs)
+
+    monkeypatch.setattr(v5_fit_module, "load_trace_shard", counted_load)
+    loader = _TraceLoader(workspace, trace)
+    first = trace.records[0]
+    compatible = replace(
+        first,
+        sample_id="sample-shared",
+        content_sha256=_digest("shared-content"),
+        suffix_query_sha256=_digest("shared-suffix"),
+    )
+
+    loaded = loader.load(first)
+
+    assert loader.load(compatible) is loaded
+    assert calls == 1
+    with pytest.raises(V5PipelineError, match="inconsistent identity bindings"):
+        loader.load(replace(compatible, prefix_group_id="different-group"))
+    assert calls == 1
 
 
 def _transport_spec(parameters: TransportTrainingParameters):

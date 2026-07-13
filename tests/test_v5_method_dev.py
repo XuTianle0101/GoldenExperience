@@ -2,10 +2,14 @@ import hashlib
 import json
 from dataclasses import replace
 from pathlib import Path
+from types import SimpleNamespace
+from typing import Any, cast
 
 import pytest
+import torch
 
 import goldenexperience.benchmarks.publication as publication_module
+import goldenexperience.size_variant.v5_real_method_dev as real_method_dev_module
 from goldenexperience.benchmarks.publication import (
     PREFIX_BUCKETS,
     SPLIT_COUNTS,
@@ -13,9 +17,11 @@ from goldenexperience.benchmarks.publication import (
     GroupedPrefixRecord,
     PublicationBenchmarkManifest,
 )
+from goldenexperience.runtime.cross_model_reuse import token_ids_sha256
 from goldenexperience.size_variant.cached_kv_manifest import CachedKVModelSpec, sha256_file
 from goldenexperience.size_variant.v5_collect import (
     RAW_BENCHMARK_SAMPLE_SCHEMA,
+    RawBenchmarkSample,
     TraceObjectRef,
     TraceRecord,
     V5TraceManifest,
@@ -40,6 +46,7 @@ from goldenexperience.size_variant.v5_pipeline import (
     V5PipelineConfig,
     V5PipelineWorkspace,
 )
+from goldenexperience.size_variant.v5_real_method_dev import RealQwenMethodDevEvaluator
 
 
 def _digest(value: str) -> str:
@@ -181,9 +188,19 @@ def _publish_trace(
     shard: TraceObjectRef,
 ) -> V5TraceManifest:
     direction = workspace.config.direction("qwen3_4b_to_8b")
+
+    def group_shard(group_id: str) -> TraceObjectRef:
+        digest = _digest(f"{shard.sha256}:{group_id}")
+        return TraceObjectRef(
+            sha256=digest,
+            path=f"objects/{digest[:2]}/{digest}.safetensors",
+            size_bytes=shard.size_bytes,
+        )
+
     records = tuple(
         TraceRecord(
             sample_id=item.sample_id,
+            prefix_group_id=item.prefix_group_id,
             dataset_id=item.dataset_id,
             task=item.task,
             token_bucket=item.token_bucket,
@@ -194,7 +211,7 @@ def _publish_trace(
             token_count=item.token_bucket,
             query_sample_count=1,
             key_sample_count=1,
-            shard=shard,
+            shard=group_shard(item.prefix_group_id),
         )
         for item in manifest.records
         if item.split == split
@@ -489,3 +506,98 @@ def test_frozen_structure_recomputes_rank_aggregates(
         fit=fit,
         method_trace=method_trace,
     )
+
+
+def test_real_method_dev_reuses_prefill_but_times_each_candidate(monkeypatch) -> None:
+    source = SimpleNamespace(max_position_embeddings=128)
+    target = SimpleNamespace(max_position_embeddings=128)
+    candidates = (
+        SimpleNamespace(candidate_id="candidate-32", rank=32, seed=17),
+        SimpleNamespace(candidate_id="candidate-64", rank=64, seed=17),
+    )
+    fit = SimpleNamespace(source=source, target=target, candidates=candidates)
+    evaluator = RealQwenMethodDevEvaluator(
+        workspace=cast(V5PipelineWorkspace, object()),
+        fit=cast(Any, fit),
+        source_path="/tmp/source",
+        target_path="/tmp/target",
+        source_device="cpu",
+        target_device="cpu",
+        identity_cache_path=None,
+    )
+
+    class FakeTokenizer:
+        def __call__(self, text: str, **_kwargs: Any) -> Any:
+            values = [1, 2] if text == "prefix" else [3]
+            return SimpleNamespace(input_ids=torch.tensor([values]))
+
+        def decode(self, _tokens: list[int], **_kwargs: Any) -> str:
+            return "answer"
+
+    class FakeModel:
+        def __init__(self, marker: str) -> None:
+            self.marker = marker
+            self.calls = 0
+
+        def __call__(self, **_kwargs: Any) -> Any:
+            self.calls += 1
+            return SimpleNamespace(past_key_values=self.marker)
+
+    class FakeTransport:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def transform(self, source_kv: torch.Tensor, *, position_ids: torch.Tensor) -> torch.Tensor:
+            self.calls += 1
+            assert position_ids.tolist() == [0, 1]
+            return source_kv.clone()
+
+    source_kv = torch.ones(2, 1, 1, 2, 2)
+    target_kv = torch.ones(2, 1, 1, 2, 2)
+    monkeypatch.setattr(
+        real_method_dev_module,
+        "dynamic_cache_to_head_object",
+        lambda marker: source_kv.clone() if marker == "source" else target_kv.clone(),
+    )
+    monkeypatch.setattr(
+        real_method_dev_module,
+        "greedy_decode",
+        lambda *_args, **_kwargs: ([1] * METHOD_DEV_GENERATION_TOKENS, "answer", 1.0),
+    )
+    monkeypatch.setattr(real_method_dev_module, "teacher_nll", lambda *_args, **_kwargs: 1.0)
+    source_model = FakeModel("source")
+    target_model = FakeModel("target")
+    transports = {candidate.candidate_id: FakeTransport() for candidate in candidates}
+    evaluator.tokenizer = FakeTokenizer()
+    evaluator.source_model = source_model
+    evaluator.target_model = target_model
+    evaluator.transports = cast(Any, transports)
+    record = SimpleNamespace(
+        sample_id="sample-1",
+        prefix_group_id="shared-group",
+        token_count=2,
+        token_ids_sha256=token_ids_sha256([1, 2]),
+    )
+    sample = RawBenchmarkSample(
+        sample_id="sample-1",
+        prefix_text="prefix",
+        suffix_query="suffix-1",
+        reference="answer",
+        evaluation={"metric": "exact_match"},
+        provenance={},
+    )
+
+    first = evaluator.evaluate(cast(Any, record), sample)
+    second = evaluator.evaluate(
+        cast(Any, SimpleNamespace(**{**vars(record), "sample_id": "sample-2"})),
+        replace(sample, sample_id="sample-2", suffix_query="suffix-2"),
+    )
+
+    assert len(first) == len(second) == len(candidates)
+    assert source_model.calls == 1
+    assert target_model.calls == 1
+    assert {name: transport.calls for name, transport in transports.items()} == {
+        "candidate-32": 2,
+        "candidate-64": 2,
+    }
+    assert all(measurement.transform_ms >= 0 for measurement in (*first, *second))

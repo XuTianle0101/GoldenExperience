@@ -5,7 +5,7 @@ import inspect
 import json
 import math
 import sys
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, cast
@@ -547,12 +547,18 @@ def test_real_risk_evaluator_uses_round_tripped_source_only_features(monkeypatch
     class FakeModel:
         def __init__(self, marker: str) -> None:
             self.marker = marker
+            self.calls = 0
 
         def __call__(self, **_kwargs: Any) -> Any:
+            self.calls += 1
             return SimpleNamespace(past_key_values=self.marker)
 
     class FakeTransport:
+        def __init__(self) -> None:
+            self.calls = 0
+
         def transform(self, source_kv: torch.Tensor, *, position_ids: torch.Tensor) -> torch.Tensor:
+            self.calls += 1
             assert position_ids.tolist() == [0, 1]
             return source_kv.clone()
 
@@ -566,21 +572,30 @@ def test_real_risk_evaluator_uses_round_tripped_source_only_features(monkeypatch
             assert payload == b"quantized-sidecar"
             return FakeRuntimeSidecar()
 
-    class FakeSidecar:
-        def to_bytes(self) -> bytes:
-            return b"quantized-sidecar"
-
     observed_history: list[tuple[int, int, float]] = []
 
-    def fake_sidecar(_source_kv: Any, _transport: Any, **kwargs: Any) -> FakeSidecar:
-        observed_history.append(
-            (
-                kwargs["history_samples"],
-                kwargs["history_failures"],
-                kwargs["history_greedy_agreement"],
+    @dataclass(frozen=True)
+    class FakeSidecar:
+        history_samples: int
+        history_failures: int
+        history_greedy_agreement: float
+
+        def to_bytes(self) -> bytes:
+            observed_history.append(
+                (
+                    self.history_samples,
+                    self.history_failures,
+                    self.history_greedy_agreement,
+                )
             )
+            return b"quantized-sidecar"
+
+    def fake_sidecar(_source_kv: Any, _transport: Any, **kwargs: Any) -> FakeSidecar:
+        return FakeSidecar(
+            history_samples=kwargs["history_samples"],
+            history_failures=kwargs["history_failures"],
+            history_greedy_agreement=kwargs["history_greedy_agreement"],
         )
-        return FakeSidecar()
 
     source_kv = torch.ones(2, 1, 1, 2, 2)
     target_kv = torch.ones(2, 1, 1, 2, 2)
@@ -595,14 +610,19 @@ def test_real_risk_evaluator_uses_round_tripped_source_only_features(monkeypatch
         (
             ([1] * 16, "answer", 1.0),
             ([1] * 15 + [2], "wrong", 1.0),
+            ([1] * 16, "answer", 1.0),
+            ([1] * 15 + [2], "wrong", 1.0),
         )
     )
     monkeypatch.setattr(real_risk_module, "greedy_decode", lambda *_args, **_kwargs: next(decodes))
     monkeypatch.setattr(real_risk_module, "teacher_nll", lambda *_args, **_kwargs: 1.0)
+    source_model = FakeModel("source")
+    target_model = FakeModel("target")
+    transport = FakeTransport()
     evaluator.tokenizer = FakeTokenizer()
-    evaluator.source_model = FakeModel("source")
-    evaluator.target_model = FakeModel("target")
-    evaluator.transport = cast(Any, FakeTransport())
+    evaluator.source_model = source_model
+    evaluator.target_model = target_model
+    evaluator.transport = cast(Any, transport)
     history = RiskHistory(samples=2, failures=1, greedy_agreement_sum=1.75)
     benchmark = GroupedPrefixRecord(
         sample_id="sample",
@@ -630,11 +650,37 @@ def test_real_risk_evaluator_uses_round_tripped_source_only_features(monkeypatch
     )
 
     example = evaluator.evaluate(benchmark, trace, sample, history)
+    next_history = history.update(example)
+    next_benchmark = replace(
+        benchmark,
+        sample_id="sample-2",
+        suffix_query_sha256=_digest("suffix-2"),
+        content_sha256=_digest("content-2"),
+    )
+    next_trace = SimpleNamespace(
+        sample_id="sample-2",
+        token_count=2,
+        token_ids_sha256=token_ids_sha256([1, 2]),
+    )
+    next_sample = replace(sample, sample_id="sample-2", suffix_query="suffix-2")
+    next_example = evaluator.evaluate(
+        next_benchmark,
+        next_trace,
+        next_sample,
+        next_history,
+    )
 
     assert example.features == (0.25,) * RISK_FEATURE_DIM
     assert example.unsafe is True
     assert example.greedy_matches == 15
-    assert observed_history == [(2, 1, 0.875)]
+    assert next_example.validate(expected_history=next_history) == []
+    assert observed_history == [
+        (2, 1, 0.875),
+        (3, 2, next_history.greedy_agreement),
+    ]
+    assert source_model.calls == 1
+    assert target_model.calls == 1
+    assert transport.calls == 1
     assert example.validate(expected_history=history) == []
     parameters = evaluator.parameters()
     assert parameters["sidecar_round_trip_before_features"] is True
