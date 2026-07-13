@@ -67,6 +67,14 @@ KV cosine. All four new task passes are code prompts in the 32/128-token buckets
 512/2048-token task score and prose/chat task score remain zero. The method is therefore
 confirmed as directionally useful but is not selected as a production bridge.
 
+`native_generation_refinement_8b_to_14b_20260713.json` aligns the refinement teacher
+with the native greedy continuation used by the output-quality gate. Four seeded,
+nonlinear-up-only steps improve validation task score from 0.09375 to 0.90625 and
+greedy continuation match from 0.0820 to 0.8408. The run adds 52 task passes with no
+regressions and generalizes to all four token buckets. Tensor cosine, next-token
+agreement, perplexity drift, and remaining output metrics still fail production gates,
+so the result remains validation-only and the sealed test stays unopened.
+
 Only a `CachedKVBridgeManifest` whose derived `approved` property is true may be used by
 the runtime materializer. Missing held-out accuracy or Mooncake cost evidence keeps a
 manifest fail closed.

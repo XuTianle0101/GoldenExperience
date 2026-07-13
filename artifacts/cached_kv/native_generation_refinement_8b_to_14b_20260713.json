@@ -1,0 +1,99 @@
+{
+  "automatic_reuse_approved": false,
+  "conclusion": {
+    "generation_alignment_breakthrough": true,
+    "reason": "Four native-generation steps add 52 validation task passes with no task regressions and generalize across every category and token bucket.",
+    "selected_as_default": false,
+    "selected_for_eight_step_followup": true,
+    "status": "validation_only_below_threshold"
+  },
+  "direction": "8b_to_14b",
+  "experiment": {
+    "anchor_weight": 0.1,
+    "best_step": 4,
+    "generation_tokens": 16,
+    "holdout_objective_after": 0.20511548640206456,
+    "holdout_objective_before": 0.46031663939356804,
+    "holdout_top1_after": 0.9375,
+    "holdout_top1_before": 0.890625,
+    "kv_anchor_weight": 1.0,
+    "learning_rate": 0.000003,
+    "objective": "native-generation",
+    "parameter_count": 41943040,
+    "parameter_group": "nonlinear-up-only",
+    "rank": 512,
+    "seed": 17,
+    "source_window": 3,
+    "steps": 4
+  },
+  "implementation_commit": "108cfbc",
+  "paired_delta": {
+    "bridge_perplexity": -0.48591500956859335,
+    "bridge_task_score": 0.8125,
+    "greedy_continuation_match_rate": 0.7587890625,
+    "key_cosine": -1.1827796697616577e-7,
+    "next_token_top1_agreement": 0.0009765625,
+    "perplexity_drift_pct": -1.4349508171754621,
+    "task_score_drop_pct": -81.25,
+    "value_cosine": -0.00003531016409397125
+  },
+  "post_refinement": {
+    "bridge_perplexity": 41.888141947908416,
+    "bridge_task_score": 0.90625,
+    "greedy_continuation_match_rate": 0.8408203125,
+    "key_cosine": 0.9316645599901676,
+    "native_perplexity": 33.86283374680835,
+    "native_task_score": 1.0,
+    "next_token_top1_agreement": 0.8173828125,
+    "perplexity_drift_pct": 23.699458412444503,
+    "task_score_drop_pct": 9.375,
+    "value_cosine": 0.7989457957446575
+  },
+  "pre_refinement": {
+    "bridge_perplexity": 42.37405695747701,
+    "bridge_task_score": 0.09375,
+    "greedy_continuation_match_rate": 0.08203125,
+    "key_cosine": 0.9316646782681346,
+    "next_token_top1_agreement": 0.81640625,
+    "perplexity_drift_pct": 25.134409229619965,
+    "task_score_drop_pct": 90.625,
+    "value_cosine": 0.7989811059087515
+  },
+  "quality_breakdown": {
+    "new_task_passes": 52,
+    "regressed_task_passes": 0,
+    "task_score_by_category": {
+      "chat": 0.9375,
+      "code": 1.0,
+      "math": 1.0,
+      "prose": 0.6875
+    },
+    "task_score_by_token_bucket": {
+      "128": 0.875,
+      "2048": 0.9375,
+      "32": 0.9375,
+      "512": 0.875
+    }
+  },
+  "raw_results_path": "artifacts/results/qwen3_8b_to_14b_native_generation_paired_rank512_seed17.results.json",
+  "raw_results_sha256": "4193da6a16ff51fa10b5d87389d31f930c8c5477e6b87eb92014ed83dd1a4757",
+  "remaining_approval_failures": [
+    "key cosine is below 0.95",
+    "value cosine is below 0.95",
+    "next-token top-1 agreement is below 0.98",
+    "greedy continuation match rate is below 0.98",
+    "perplexity drift exceeds 2%",
+    "bridge task score is below 0.95",
+    "task score drop exceeds 1%",
+    "sealed-test and eligible Mooncake cost evidence are absent"
+  ],
+  "schema_version": "goldenexperience.cached_kv_native_generation_refinement.v1",
+  "sealed_test_opened": false,
+  "validation_contract": {
+    "dataset": "configs/qwen3_cached_kv_prompts.json",
+    "evaluated_tokens": 1024,
+    "prompt_count": 64,
+    "split": "validation",
+    "split_sha256": "fbcb5a68716be8230945d01c503774f5a733b043822d78aaedeac9816a6b0936"
+  }
+}
