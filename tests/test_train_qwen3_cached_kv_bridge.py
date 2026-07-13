@@ -5,6 +5,7 @@ from goldenexperience.size_variant.cached_kv_dataset import CachedKVPrompt
 from scripts.train_qwen3_cached_kv_bridge import (
     _bucket_balanced_samples,
     _kv_anchor_losses,
+    _native_generation_teacher,
     _parameter_anchor_loss,
     build_parser,
 )
@@ -130,12 +131,42 @@ def test_logit_refinement_cli_defaults_fail_closed_against_collapse() -> None:
 
     assert args.logit_refinement_learning_rate == pytest.approx(1e-5)
     assert args.logit_refinement_parameter_group == "bias-only"
+    assert args.logit_refinement_objective == "native-generation"
     assert args.logit_refinement_anchor_weight == pytest.approx(0.1)
     assert args.logit_refinement_kv_anchor_weight == pytest.approx(1.0)
     assert args.logit_refinement_holdout_prompts == 4
     assert args.logit_refinement_early_stopping_patience == 2
     assert args.seed == 17
     assert not args.paired_refinement_validation
+
+
+class _GreedyTeacherModel:
+    def __init__(self) -> None:
+        self.inputs: list[list[int]] = []
+
+    def __call__(self, *, input_ids, past_key_values=None, use_cache):
+        del past_key_values
+        assert use_cache
+        self.inputs.append(input_ids[0].tolist())
+        logits = torch.zeros(1, input_ids.shape[1], 8)
+        next_token = (int(input_ids[0, -1]) + 1) % logits.shape[-1]
+        logits[:, -1, next_token] = 10
+        return type("Output", (), {"logits": logits, "past_key_values": object()})()
+
+
+def test_native_generation_teacher_collects_autoregressive_greedy_targets() -> None:
+    model = _GreedyTeacherModel()
+
+    logits, labels = _native_generation_teacher(
+        model,
+        [1, 2],
+        target_device="cpu",
+        generation_tokens=3,
+    )
+
+    assert model.inputs == [[1, 2], [3], [4]]
+    assert labels.tolist() == [[3, 4, 5]]
+    assert logits.argmax(dim=-1).tolist() == labels.tolist()
 
 
 def test_paired_refinement_validation_is_exposed_by_cli() -> None:

@@ -280,6 +280,8 @@ _LOGIT_REFINEMENT_PARAMETER_GROUPS = {
     "nonlinear-up-only": ("key_nonlinear_up", "value_nonlinear_up"),
 }
 
+_LOGIT_REFINEMENT_OBJECTIVES = ("native-generation", "prompt-tail")
+
 
 def _bucket_balanced_samples(
     samples: tuple[CachedKVPrompt, ...],
@@ -346,6 +348,46 @@ def _kv_anchor_losses(refined: Any, reference: Any) -> tuple[Any, Any, Any]:
     return (relative_mse + cosine_loss) / 2, relative_mse, cosine_loss
 
 
+def _native_generation_teacher(
+    target_model: Any,
+    token_ids: list[int],
+    *,
+    target_device: str,
+    generation_tokens: int,
+) -> tuple[Any, Any]:
+    """Collect frozen native greedy logits and their generated token labels."""
+
+    import torch
+
+    if not token_ids or generation_tokens <= 0:
+        raise ValueError("native-generation refinement requires prompt and generation tokens")
+    teacher_logits: list[Any] = []
+    generated_tokens: list[int] = []
+    input_ids = torch.tensor([token_ids], dtype=torch.long, device=target_device)
+    with torch.inference_mode():
+        output = target_model(input_ids=input_ids, use_cache=True)
+        cache = output.past_key_values
+        next_logits = output.logits[:, -1:]
+        for step in range(generation_tokens):
+            teacher_logits.append(next_logits.detach())
+            next_token = int(next_logits[:, -1].argmax(dim=-1).item())
+            generated_tokens.append(next_token)
+            if step + 1 == generation_tokens:
+                break
+            next_input = torch.tensor([[next_token]], dtype=torch.long, device=target_device)
+            output = target_model(
+                input_ids=next_input,
+                past_key_values=cache,
+                use_cache=True,
+            )
+            cache = output.past_key_values
+            next_logits = output.logits[:, -1:]
+    return (
+        torch.cat(teacher_logits, dim=1),
+        torch.tensor([generated_tokens], dtype=torch.long, device=target_device),
+    )
+
+
 def _refinement_prompt_forward(
     sample: CachedKVPrompt,
     *,
@@ -356,32 +398,55 @@ def _refinement_prompt_forward(
     source_device: str,
     target_device: str,
     suffix_tokens: int,
+    objective_mode: str,
+    generation_tokens: int,
 ) -> tuple[Any, Any, Any, Any, Any, float]:
     import torch
 
     _, token_ids = render_to_token_bucket(sample, tokenizer, suffix_tokens=suffix_tokens)
-    prefix = sample.token_bucket
-    continuation = token_ids[prefix : prefix + suffix_tokens + 1]
-    if len(continuation) != suffix_tokens + 1:
-        raise ValueError("logit refinement prompt has an incomplete continuation")
+    if objective_mode == "prompt-tail":
+        prefix = sample.token_bucket
+        continuation = token_ids[prefix : prefix + suffix_tokens + 1]
+        if len(continuation) != suffix_tokens + 1:
+            raise ValueError("logit refinement prompt has an incomplete continuation")
+        source_token_ids = token_ids[:prefix]
+        teacher_input = torch.tensor(
+            [token_ids[: prefix + suffix_tokens]],
+            dtype=torch.long,
+            device=target_device,
+        )
+        with torch.inference_mode():
+            teacher_out = target_model(input_ids=teacher_input, use_cache=False)
+            teacher_logits = teacher_out.logits[:, prefix : prefix + suffix_tokens].detach()
+        del teacher_out
+        labels = torch.tensor(
+            [continuation[1:]],
+            dtype=torch.long,
+            device=target_device,
+        )
+        student_token_ids = continuation[:-1]
+    elif objective_mode == "native-generation":
+        if len(token_ids) < 2:
+            raise ValueError("native-generation refinement prompt is too short")
+        source_token_ids = token_ids[:-1]
+        teacher_logits, labels = _native_generation_teacher(
+            target_model,
+            token_ids,
+            target_device=target_device,
+            generation_tokens=generation_tokens,
+        )
+        student_token_ids = [token_ids[-1], *labels[0, :-1].tolist()]
+    else:
+        raise ValueError(f"unsupported logit refinement objective: {objective_mode}")
 
-    source_input = torch.tensor([token_ids[:prefix]], dtype=torch.long)
+    source_input = torch.tensor([source_token_ids], dtype=torch.long)
     source_out, source_prefill_ms = _run_prefill(source_model, source_input, source_device)
     source_object = cache_to_object(source_out.past_key_values)
     del source_out
-    teacher_input = torch.tensor(
-        [token_ids[: prefix + suffix_tokens]],
-        dtype=torch.long,
-        device=target_device,
-    )
-    with torch.inference_mode():
-        teacher_out = target_model(input_ids=teacher_input, use_cache=False)
-        teacher_logits = teacher_out.logits[:, prefix : prefix + suffix_tokens].detach()
-    del teacher_out
 
     source_config = source_model.config
     target_config = target_model.config
-    positions = torch.arange(prefix, device=target_device)
+    positions = torch.arange(len(source_token_ids), device=target_device)
     bridge_object = transform_with_state(
         source_object,
         positions,
@@ -396,12 +461,7 @@ def _refinement_prompt_forward(
     )
     bridge_cache = object_to_dynamic_cache(bridge_object, target_config)
     student_input = torch.tensor(
-        [continuation[:-1]],
-        dtype=torch.long,
-        device=target_device,
-    )
-    labels = torch.tensor(
-        [continuation[1:]],
+        [student_token_ids],
         dtype=torch.long,
         device=target_device,
     )
@@ -432,6 +492,8 @@ def _measure_refinement_holdout(
     source_device: str,
     target_device: str,
     suffix_tokens: int,
+    objective_mode: str,
+    generation_tokens: int,
     temperature: float,
     label_weight: float,
 ) -> dict[str, float]:
@@ -459,6 +521,8 @@ def _measure_refinement_holdout(
                 source_device=source_device,
                 target_device=target_device,
                 suffix_tokens=suffix_tokens,
+                objective_mode=objective_mode,
+                generation_tokens=generation_tokens,
             )
             objective, distillation, label_loss = logit_distillation_loss(
                 student_logits,
@@ -493,6 +557,8 @@ def refine_state_with_target_logits(
     source_device: str,
     target_device: str,
     suffix_tokens: int,
+    objective_mode: str,
+    generation_tokens: int,
     steps: int,
     max_prompts: int,
     learning_rate: float,
@@ -514,6 +580,10 @@ def refine_state_with_target_logits(
 
     if steps <= 0 or max_prompts <= 0:
         raise ValueError("logit refinement steps and prompt count must be positive")
+    if objective_mode not in _LOGIT_REFINEMENT_OBJECTIVES:
+        raise ValueError(f"unsupported logit refinement objective: {objective_mode}")
+    if generation_tokens <= 0:
+        raise ValueError("logit refinement generation tokens must be positive")
     if learning_rate <= 0 or not math.isfinite(learning_rate):
         raise ValueError("logit refinement learning rate must be finite and positive")
     if anchor_weight < 0 or not math.isfinite(anchor_weight):
@@ -579,6 +649,8 @@ def refine_state_with_target_logits(
             source_device=source_device,
             target_device=target_device,
             suffix_tokens=suffix_tokens,
+            objective_mode=objective_mode,
+            generation_tokens=generation_tokens,
             temperature=temperature,
             label_weight=label_weight,
         )
@@ -605,6 +677,8 @@ def refine_state_with_target_logits(
             source_device=source_device,
             target_device=target_device,
             suffix_tokens=suffix_tokens,
+            objective_mode=objective_mode,
+            generation_tokens=generation_tokens,
         )
         objective, distillation, label_loss = logit_distillation_loss(
             student_logits,
@@ -623,7 +697,7 @@ def refine_state_with_target_logits(
         kv_anchor_cosine_loss = objective.new_zeros(())
         if kv_anchor_weight:
             anchor_positions = _sample_positions(
-                sample.token_bucket,
+                int(source_object.shape[2]),
                 kv_anchor_max_positions,
             )
             with torch.no_grad():
@@ -707,6 +781,8 @@ def refine_state_with_target_logits(
                 source_device=source_device,
                 target_device=target_device,
                 suffix_tokens=suffix_tokens,
+                objective_mode=objective_mode,
+                generation_tokens=generation_tokens,
                 temperature=temperature,
                 label_weight=label_weight,
             )
@@ -755,6 +831,8 @@ def refine_state_with_target_logits(
         "max_prompts": max_prompts,
         "prompt_ids": [sample.prompt_id for sample in selected],
         "learning_rate": learning_rate,
+        "objective": objective_mode,
+        "generation_tokens": generation_tokens,
         "temperature": temperature,
         "label_weight": label_weight,
         "anchor_weight": anchor_weight,
@@ -1105,6 +1183,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--greedy-tokens", type=int, default=16)
     parser.add_argument("--logit-refinement-steps", type=int, default=0)
     parser.add_argument("--logit-refinement-prompts", type=int, default=16)
+    parser.add_argument(
+        "--logit-refinement-objective",
+        choices=_LOGIT_REFINEMENT_OBJECTIVES,
+        default="native-generation",
+    )
     parser.add_argument("--logit-refinement-learning-rate", type=float, default=1e-5)
     parser.add_argument("--logit-refinement-temperature", type=float, default=1.0)
     parser.add_argument("--logit-refinement-label-weight", type=float, default=0.1)
@@ -1305,6 +1388,8 @@ def main() -> int:
             source_device=args.source_device,
             target_device=args.target_device,
             suffix_tokens=args.suffix_tokens,
+            objective_mode=args.logit_refinement_objective,
+            generation_tokens=args.greedy_tokens,
             steps=args.logit_refinement_steps,
             max_prompts=args.logit_refinement_prompts,
             learning_rate=args.logit_refinement_learning_rate,
