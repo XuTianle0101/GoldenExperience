@@ -1,0 +1,10 @@
+cff-version: 1.2.0
+message: "If you use GoldenExperience, please cite this software and the associated paper."
+title: "GoldenExperience: Cross-Model KV Cache Reuse"
+type: software
+authors:
+  - name: "GoldenExperience Contributors"
+repository-code: "https://github.com/XuTianle0101/GoldenExperience"
+license: Apache-2.0
+version: 0.1.0
+date-released: 2026-07-13

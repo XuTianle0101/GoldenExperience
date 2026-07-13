@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=68", "wheel"]
+requires = ["setuptools>=77", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -8,9 +8,22 @@ version = "0.1.0"
 description = "Cross-model KV cache reuse framework for vLLM, LMCache MP, and Mooncake Store."
 readme = "README.md"
 requires-python = ">=3.10"
-license = { text = "Apache-2.0" }
+license = "Apache-2.0"
+license-files = ["LICENSE"]
 authors = [
   { name = "GoldenExperience Contributors" }
+]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Developers",
+  "Intended Audience :: Science/Research",
+  "Operating System :: POSIX :: Linux",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Scientific/Engineering :: Artificial Intelligence",
+  "Typing :: Typed",
 ]
 keywords = [
   "llm",
@@ -30,7 +43,20 @@ dependencies = []
 torch = ["torch>=2.1", "safetensors>=0.4,<1"]
 hf = ["transformers>=4.40", "torch>=2.1", "safetensors>=0.4,<1"]
 runtime = ["vllm==0.24.0", "lmcache==0.4.6"]
-dev = ["pytest>=8", "ruff>=0.5", "mypy>=1.10"]
+dev = [
+  "build>=1,<2",
+  "coverage[toml]>=7,<8",
+  "mypy>=1.10,<3",
+  "pytest>=8,<10",
+  "ruff>=0.5,<1",
+  "safetensors>=0.4,<1",
+  "torch>=2.1",
+]
+
+[project.urls]
+Homepage = "https://github.com/XuTianle0101/GoldenExperience"
+Issues = "https://github.com/XuTianle0101/GoldenExperience/issues"
+Repository = "https://github.com/XuTianle0101/GoldenExperience.git"
 
 [project.scripts]
 golden-patch-manifest = "goldenexperience.cli.patch_manifest:main"
@@ -47,6 +73,9 @@ golden-publication-benchmark = "goldenexperience.cli.publication_benchmark:main"
 where = ["."]
 include = ["goldenexperience*"]
 
+[tool.setuptools.package-data]
+goldenexperience = ["py.typed"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
@@ -60,6 +89,21 @@ warn_redundant_casts = true
 warn_unreachable = true
 warn_unused_configs = true
 warn_unused_ignores = true
+
+[tool.coverage.run]
+branch = true
+source = ["goldenexperience"]
+
+[tool.coverage.report]
+fail_under = 68
+precision = 1
+show_missing = true
+skip_covered = true
+exclude_also = [
+  "if TYPE_CHECKING:",
+  "raise NotImplementedError",
+  "if __name__ == .__main__.:",
+]
 
 [tool.ruff]
 line-length = 100
