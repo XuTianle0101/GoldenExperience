@@ -59,12 +59,14 @@ from goldenexperience.size_variant.head_aware_transport import (
     select_transport_candidate,
 )
 from goldenexperience.size_variant.risk_gate import (
+    RISK_CALIBRATION_METHOD,
     CalibratedRiskGate,
     RiskCalibrationExample,
     RiskGateError,
     RiskPredictor,
     SelectorEvaluationExample,
     SourceKVSidecar,
+    bonferroni_adjusted_confidence,
     build_source_kv_sidecar,
     clopper_pearson_upper_bound,
     evaluate_selector_baselines,
@@ -149,6 +151,8 @@ def _risk_spec() -> RiskGateSpec:
         predictor_sha256=_digest("risk"),
         threshold=0.01,
         calibration_dataset_sha256=_digest("risk-calibration"),
+        calibration_method=RISK_CALIBRATION_METHOD,
+        candidate_threshold_count=1,
         accepted_count=300,
         total_count=2048,
         error_count=0,
@@ -495,16 +499,19 @@ def test_source_sidecar_is_bounded_stable_and_checksum_protected() -> None:
         SourceKVSidecar.from_bytes(tampered)
 
 
-def test_calibration_maximizes_coverage_under_exact_one_sided_bound() -> None:
-    examples = [RiskCalibrationExample(index / 1000, False) for index in range(400)]
-    examples.extend(RiskCalibrationExample(0.5 + index / 2000, True) for index in range(600))
+def test_calibration_maximizes_coverage_under_simultaneous_exact_bound() -> None:
+    examples = [RiskCalibrationExample(0.1, False) for _ in range(1200)]
+    examples.extend(RiskCalibrationExample(0.9, True) for _ in range(848))
 
     result = select_calibrated_threshold(examples)
 
-    assert result.accepted_count == 400
+    assert result.accepted_count == 1200
     assert result.error_count == 0
-    assert result.coverage == 0.4
+    assert result.coverage == 1200 / 2048
     assert result.regression_risk_upper_bound < 0.01
+    assert result.calibration_method == RISK_CALIBRATION_METHOD
+    assert result.candidate_threshold_count == 2
+    assert bonferroni_adjusted_confidence(0.95, 2) == pytest.approx(0.975)
     assert clopper_pearson_upper_bound(0, 300) == pytest.approx(0.009936081944, abs=1e-12)
     assert unsafe_label(
         native_task_passed=True,
@@ -512,6 +519,15 @@ def test_calibration_maximizes_coverage_under_exact_one_sided_bound() -> None:
         greedy_agreement=1.0,
         perplexity_drift_pct=0.0,
     )
+
+
+def test_calibration_rejects_candidate_that_only_passes_a_pointwise_bound() -> None:
+    examples = [RiskCalibrationExample(0.1, False) for _ in range(300)]
+    examples.append(RiskCalibrationExample(0.9, True))
+
+    assert clopper_pearson_upper_bound(0, 300) < 0.01
+    with pytest.raises(RiskGateError, match="no admission threshold"):
+        select_calibrated_threshold(examples)
 
 
 def test_risk_predictor_training_keeps_fixed_two_layer_shape() -> None:
@@ -888,6 +904,18 @@ def test_manifest_loader_dispatches_v5_without_changing_v4_reader(tmp_path: Path
 
     assert isinstance(loaded, SelectiveKVBridgeManifest)
     assert loaded == manifest
+
+
+def test_v5_manifest_rejects_legacy_pointwise_calibration_evidence() -> None:
+    payload = _v5_manifest().to_dict()
+    payload["risk_gate"].pop("calibration_method")
+    payload["risk_gate"].pop("candidate_threshold_count")
+
+    legacy = SelectiveKVBridgeManifest.from_dict(payload)
+    errors = legacy.validate()
+
+    assert any("Bonferroni-corrected" in error for error in errors)
+    assert any("candidate threshold count" in error for error in errors)
 
 
 def test_planner_executes_only_final_v5_state_and_exposes_retrieve_transform(

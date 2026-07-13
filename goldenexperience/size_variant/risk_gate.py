@@ -14,6 +14,7 @@ from goldenexperience.size_variant.cached_kv_manifest import sha256_file
 
 SIDECAR_SCHEMA_VERSION = "goldenexperience.source_kv_sidecar.v1"
 RISK_FEATURE_SCHEMA_VERSION = "goldenexperience.source_kv_risk_features.v1"
+RISK_CALIBRATION_METHOD = "bonferroni_clopper_pearson"
 SIDECAR_MAX_BYTES = 4096
 SKETCH_DIM = 128
 RISK_FEATURE_DIM = 169
@@ -49,6 +50,8 @@ class RiskCalibrationResult:
     coverage: float
     regression_risk_upper_bound: float
     confidence_level: float = 0.95
+    calibration_method: str = RISK_CALIBRATION_METHOD
+    candidate_threshold_count: int = 1
 
 
 @dataclass(frozen=True)
@@ -131,6 +134,16 @@ def clopper_pearson_upper_bound(
     return high
 
 
+def bonferroni_adjusted_confidence(confidence: float, candidate_count: int) -> float:
+    """Return the pointwise confidence needed for a family-wise confidence target."""
+
+    if not 0 < confidence < 1:
+        raise ValueError("confidence must be between zero and one")
+    if candidate_count < 1:
+        raise ValueError("candidate_count must be positive")
+    return 1.0 - (1.0 - confidence) / candidate_count
+
+
 def select_calibrated_threshold(
     examples: Sequence[RiskCalibrationExample] | Iterable[RiskCalibrationExample],
     *,
@@ -138,7 +151,7 @@ def select_calibrated_threshold(
     max_risk_upper_bound: float = 0.01,
     confidence: float = 0.95,
 ) -> RiskCalibrationResult:
-    """Choose maximum coverage subject to the exact one-sided risk constraint."""
+    """Choose maximum coverage under a simultaneous exact one-sided risk bound."""
 
     rows = sorted(list(examples), key=lambda item: item.unsafe_probability)
     if not rows:
@@ -147,9 +160,25 @@ def select_calibrated_threshold(
         raise ValueError("min_accepted must be positive")
     if not 0 < max_risk_upper_bound < 1:
         raise ValueError("max_risk_upper_bound must be between zero and one")
+    if not 0 < confidence < 1:
+        raise ValueError("confidence must be between zero and one")
     for row in rows:
         if not math.isfinite(row.unsafe_probability) or not 0 <= row.unsafe_probability <= 1:
             raise RiskGateError("risk calibration probabilities must be finite in [0, 1]")
+
+    candidate_count = 0
+    cumulative = 0
+    index = 0
+    while index < len(rows):
+        threshold = rows[index].unsafe_probability
+        while index < len(rows) and rows[index].unsafe_probability == threshold:
+            cumulative += 1
+            index += 1
+        if cumulative >= min_accepted:
+            candidate_count += 1
+    if candidate_count == 0:
+        raise RiskGateError("risk calibration set has no eligible admission threshold")
+    adjusted_confidence = bonferroni_adjusted_confidence(confidence, candidate_count)
 
     best: RiskCalibrationResult | None = None
     accepted = 0
@@ -163,7 +192,11 @@ def select_calibrated_threshold(
             index += 1
         if accepted < min_accepted:
             continue
-        upper = clopper_pearson_upper_bound(failures, accepted, confidence=confidence)
+        upper = clopper_pearson_upper_bound(
+            failures,
+            accepted,
+            confidence=adjusted_confidence,
+        )
         if upper <= max_risk_upper_bound:
             best = RiskCalibrationResult(
                 threshold=threshold,
@@ -173,6 +206,7 @@ def select_calibrated_threshold(
                 coverage=accepted / len(rows),
                 regression_risk_upper_bound=upper,
                 confidence_level=confidence,
+                candidate_threshold_count=candidate_count,
             )
     if best is None:
         raise RiskGateError("no admission threshold satisfies the calibrated risk constraint")

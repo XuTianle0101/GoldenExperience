@@ -78,7 +78,9 @@ The predictor only ranks risk. `select_calibrated_threshold` chooses the highest
 threshold on the independent calibration split for which:
 
 - at least 300 samples are accepted;
-- the exact 95% one-sided Clopper-Pearson upper bound is at most 1%;
+- the family-wise exact 95% one-sided Clopper-Pearson upper bound is at most 1%;
+- the pointwise confidence is Bonferroni-adjusted over every eligible distinct threshold,
+  and the correction method plus candidate count are stored in the artifact;
 - tied predictor scores are admitted or rejected together.
 
 At runtime, a missing/corrupt sidecar, unseen prefix, insufficient shadow history, OOD score,
@@ -114,4 +116,3 @@ manifest authority; it is not automatically enabled by the existing runtime patc
 
 The retained Qwen3 8B-to-14B and 14B-to-8B rank-512 results remain deprecated development
 evidence. They fail the existing quality and cost gates and cannot be promoted to v5 evidence.
-

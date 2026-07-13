@@ -38,8 +38,8 @@ and `GoldenBridge` targets `different_base_model`.
 The current research path is a fail-closed v5 artifact for same-family scale variants:
 
 - head-aware transport supports different source/target KV-head counts;
-- a source-only sidecar and calibrated MLP admit only prefixes whose 95% one-sided risk
-  bound is at most 1%;
+- a source-only sidecar and calibrated MLP admit only prefixes whose simultaneous 95%
+  one-sided risk bound, Bonferroni-corrected across candidate thresholds, is at most 1%;
 - `validation_candidate` and `semantic_approved` artifacts cannot execute runtime reuse;
 - final `approved` artifacts use `RETRIEVE_TRANSFORM` to scatter directly into vLLM paged
   KV without publishing target Mooncake objects.

@@ -95,6 +95,7 @@ from goldenexperience.size_variant.projection import (
     validate_projection_cost,
 )
 from goldenexperience.size_variant.risk_gate import (
+    RISK_CALIBRATION_METHOD,
     AdmissionDecision,
     CalibratedRiskGate,
     RiskCalibrationExample,
@@ -104,6 +105,7 @@ from goldenexperience.size_variant.risk_gate import (
     SelectorEvaluation,
     SelectorEvaluationExample,
     SourceKVSidecar,
+    bonferroni_adjusted_confidence,
     build_source_kv_sidecar,
     build_transport_source_sidecar,
     clopper_pearson_upper_bound,
@@ -170,6 +172,7 @@ __all__ = [
     "QualityGateResult",
     "RiskCalibrationExample",
     "RiskCalibrationResult",
+    "RISK_CALIBRATION_METHOD",
     "RiskGateError",
     "RiskGateSpec",
     "RiskPredictor",
@@ -200,6 +203,7 @@ __all__ = [
     "build_source_layer_plan",
     "build_source_kv_sidecar",
     "build_transport_source_sidecar",
+    "bonferroni_adjusted_confidence",
     "causal_sample_mask",
     "build_training_matrices",
     "cache_to_object",

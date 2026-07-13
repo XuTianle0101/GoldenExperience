@@ -22,8 +22,9 @@
 
 - A head-aware, attention-preserving transport for same-family parameter sizes and unequal
   KV-head counts. Transport alone is not claimed as novel; see `related_work_matrix.md`.
-- Source-only selective admission whose threshold maximizes coverage subject to an exact
-  95% one-sided behavioral-regression bound on an independent calibration split.
+- Source-only selective admission whose threshold maximizes coverage subject to a
+  Bonferroni-corrected, family-wise exact 95% one-sided behavioral-regression bound on an
+  independent calibration split.
 - A three-state artifact authority model that prevents validation or semantic-only artifacts
   from enabling runtime reuse.
 - An LMCache MP `RETRIEVE_TRANSFORM` path that writes accepted translations directly into

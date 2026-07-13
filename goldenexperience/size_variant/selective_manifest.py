@@ -98,6 +98,8 @@ class RiskGateSpec:
     predictor_sha256: str
     threshold: float | None
     calibration_dataset_sha256: str | None
+    calibration_method: str
+    candidate_threshold_count: int
     accepted_count: int = 0
     total_count: int = 0
     error_count: int = 0
@@ -114,6 +116,8 @@ class RiskGateSpec:
         return self.threshold is not None and self.calibration_dataset_sha256 is not None
 
     def artifact_errors(self) -> list[str]:
+        from goldenexperience.size_variant.risk_gate import RISK_CALIBRATION_METHOD
+
         errors: list[str] = []
         if not self.predictor_uri.endswith(".safetensors"):
             errors.append("risk predictor must use safetensors")
@@ -127,10 +131,19 @@ class RiskGateSpec:
             errors.append("risk OOD threshold must be finite and positive")
         if self.min_shadow_samples < 1:
             errors.append("risk min_shadow_samples must be positive")
+        if self.calibrated:
+            if self.calibration_method != RISK_CALIBRATION_METHOD:
+                errors.append("risk calibration must use Bonferroni-corrected Clopper-Pearson")
+            if self.candidate_threshold_count < 1:
+                errors.append("risk calibration candidate threshold count is invalid")
         return errors
 
     def calibration_errors(self, *, min_accepted: int = 300) -> list[str]:
-        from goldenexperience.size_variant.risk_gate import clopper_pearson_upper_bound
+        from goldenexperience.size_variant.risk_gate import (
+            RISK_CALIBRATION_METHOD,
+            bonferroni_adjusted_confidence,
+            clopper_pearson_upper_bound,
+        )
 
         errors = self.artifact_errors()
         if (
@@ -141,6 +154,11 @@ class RiskGateSpec:
             errors.append("calibrated risk threshold must be between zero and one")
         if not _is_sha256(self.calibration_dataset_sha256):
             errors.append("risk calibration_dataset_sha256 must be a SHA-256 digest")
+        if self.calibration_method != RISK_CALIBRATION_METHOD:
+            errors.append("risk calibration must use Bonferroni-corrected Clopper-Pearson")
+        candidate_count_valid = 1 <= self.candidate_threshold_count <= max(1, self.total_count)
+        if not candidate_count_valid:
+            errors.append("risk calibration candidate threshold count is invalid")
         if (
             self.total_count <= 0
             or self.accepted_count < 0
@@ -154,13 +172,23 @@ class RiskGateSpec:
         expected_coverage = self.accepted_count / self.total_count if self.total_count > 0 else 0.0
         if not math.isfinite(self.coverage) or abs(self.coverage - expected_coverage) > 1e-9:
             errors.append("risk calibration coverage is inconsistent with counts")
-        if not math.isfinite(self.confidence_level) or self.confidence_level != 0.95:
+        confidence_valid = math.isfinite(self.confidence_level) and self.confidence_level == 0.95
+        if not confidence_valid:
             errors.append("risk calibration confidence_level must be 0.95")
-        if self.accepted_count > 0 and 0 <= self.error_count <= self.accepted_count:
+        if (
+            self.accepted_count > 0
+            and 0 <= self.error_count <= self.accepted_count
+            and candidate_count_valid
+            and confidence_valid
+        ):
+            adjusted_confidence = bonferroni_adjusted_confidence(
+                self.confidence_level,
+                self.candidate_threshold_count,
+            )
             expected_upper = clopper_pearson_upper_bound(
                 self.error_count,
                 self.accepted_count,
-                confidence=self.confidence_level,
+                confidence=adjusted_confidence,
             )
             if (
                 not math.isfinite(self.regression_risk_upper_bound)
@@ -603,6 +631,8 @@ class SelectiveKVBridgeManifest:
         transport_payload = dict(payload["transport"])
         transport_payload["loss"] = TransportLossContract(**transport_payload.get("loss", {}))
         risk_payload = dict(payload["risk_gate"])
+        risk_payload.setdefault("calibration_method", "")
+        risk_payload.setdefault("candidate_threshold_count", 0)
         quality_payload = payload.get("accepted_quality")
         transport_quality_payload = payload.get("transport_quality")
         sealed_payload = payload.get("semantic_sealed")

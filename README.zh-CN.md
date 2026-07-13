@@ -34,8 +34,9 @@ connector 路径进入 lookup/retrieve 逻辑。
 ## Selective Cached-KV v5
 
 当前研究主线是同架构家族尺度变体的 fail-closed v5 artifact：head-aware transport
-支持不同 KV head 数；source-only sidecar 与统计校准 MLP 只接纳 95% 单侧风险上界不超过
-1% 的前缀；`validation_candidate` 和 `semantic_approved` 都不能启动线上复用；只有最终
+支持不同 KV head 数；source-only sidecar 与统计校准 MLP 只接纳经候选阈值 Bonferroni
+校正后、同时 95% 单侧风险上界不超过 1% 的前缀；`validation_candidate` 和
+`semantic_approved` 都不能启动线上复用；只有最终
 `approved` artifact 才能通过 `RETRIEVE_TRANSFORM` 直接写入 vLLM paged KV，且不生成
 target Mooncake object。
 
