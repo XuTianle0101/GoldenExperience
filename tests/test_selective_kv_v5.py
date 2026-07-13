@@ -1,5 +1,8 @@
 import hashlib
 import json
+import threading
+import time
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 from pathlib import Path
 
@@ -18,6 +21,7 @@ from goldenexperience.benchmarks.publication import (
     PublicationBenchmarkManifest,
     SemanticSealedGuard,
     ValidationGateReceipt,
+    write_immutable_sealed_report,
 )
 from goldenexperience.benchmarks.selective_runtime import (
     build_selective_runtime_report,
@@ -908,10 +912,7 @@ def test_planner_executes_only_final_v5_state_and_exposes_retrieve_transform(
     assert plan.as_metadata()["ge_artifact_state"] == "approved"
 
 
-def test_semantic_sealed_guard_requires_four_directions_and_opens_once(tmp_path: Path) -> None:
-    payload = b"sealed semantic samples"
-    payload_path = tmp_path / "sealed.bin"
-    payload_path.write_bytes(payload)
+def _validation_receipt() -> ValidationGateReceipt:
     directions = tuple(
         DirectionValidationEvidence(
             direction=direction,
@@ -929,11 +930,18 @@ def test_semantic_sealed_guard_requires_four_directions_and_opens_once(tmp_path:
             "qwen3_14b_to_8b",
         )
     )
-    receipt = ValidationGateReceipt(
+    return ValidationGateReceipt(
         benchmark_manifest_sha256=_digest("benchmark"),
         validation_dataset_sha256=_digest("validation"),
         directions=directions,
     )
+
+
+def test_semantic_sealed_guard_requires_four_directions_and_opens_once(tmp_path: Path) -> None:
+    payload = b"sealed semantic samples"
+    payload_path = tmp_path / "sealed.bin"
+    payload_path.write_bytes(payload)
+    receipt = _validation_receipt()
     guard = SemanticSealedGuard(tmp_path / "opened.json")
 
     opened = guard.open_once(
@@ -953,6 +961,63 @@ def test_semantic_sealed_guard_requires_four_directions_and_opens_once(tmp_path:
             expected_manifest_sha256=_digest("benchmark"),
             expected_validation_sha256=_digest("validation"),
         )
+
+
+def test_semantic_sealed_guard_acquires_marker_before_concurrent_read(
+    tmp_path: Path, monkeypatch
+) -> None:
+    payload = b"sealed semantic samples"
+    payload_path = tmp_path / "sealed.bin"
+    payload_path.write_bytes(payload)
+    guard = SemanticSealedGuard(tmp_path / "opened.json")
+    receipt = _validation_receipt()
+    original_read_bytes = Path.read_bytes
+    reads = []
+    reads_lock = threading.Lock()
+    start = threading.Barrier(2)
+
+    def tracked_read_bytes(path: Path) -> bytes:
+        if path == payload_path:
+            with reads_lock:
+                reads.append(path)
+            time.sleep(0.05)
+        return original_read_bytes(path)
+
+    def open_payload() -> bytes | str:
+        start.wait()
+        try:
+            return guard.open_once(
+                payload_path,
+                expected_payload_sha256=hashlib.sha256(payload).hexdigest(),
+                receipt=receipt,
+                expected_manifest_sha256=_digest("benchmark"),
+                expected_validation_sha256=_digest("validation"),
+            )
+        except BenchmarkContractError as exc:
+            return str(exc)
+
+    monkeypatch.setattr(Path, "read_bytes", tracked_read_bytes)
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        futures = [executor.submit(open_payload) for _ in range(2)]
+        results = [future.result() for future in futures]
+
+    assert results.count(payload) == 1
+    assert sum("already opened" in str(result) for result in results) == 1
+    assert reads == [payload_path]
+    marker = json.loads(guard.marker_path.read_text(encoding="utf-8"))
+    assert marker["state"] == "opened"
+
+
+def test_immutable_sealed_report_is_atomically_published_once(tmp_path: Path) -> None:
+    report = {"metric": 0.5, "passed": True}
+
+    path = write_immutable_sealed_report(tmp_path, report)
+
+    assert json.loads(path.read_text(encoding="utf-8")) == report
+    assert path.stat().st_mode & 0o222 == 0
+    assert not list(tmp_path.glob("*.tmp"))
+    with pytest.raises(BenchmarkContractError, match="already exists"):
+        write_immutable_sealed_report(tmp_path, report)
 
 
 def test_publication_benchmark_enforces_registered_counts_and_group_isolation() -> None:

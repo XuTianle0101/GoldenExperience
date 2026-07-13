@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import tempfile
 from collections.abc import Mapping
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -336,54 +337,135 @@ class SemanticSealedGuard:
             errors.append("validation receipt refers to a different benchmark manifest")
         if receipt.validation_dataset_sha256 != expected_validation_sha256:
             errors.append("validation receipt refers to a different validation split")
-        if self.marker_path.exists():
-            errors.append("semantic sealed payload was already opened")
         if errors:
             raise BenchmarkContractError("; ".join(errors))
         path = Path(payload_path)
-        before = path.stat()
-        payload = path.read_bytes()
-        after = path.stat()
-        if (before.st_dev, before.st_ino, before.st_size, before.st_mtime_ns) != (
-            after.st_dev,
-            after.st_ino,
-            after.st_size,
-            after.st_mtime_ns,
-        ):
-            raise BenchmarkContractError("semantic sealed payload changed while opening")
-        observed = hashlib.sha256(payload).hexdigest()
-        if observed != expected_payload_sha256:
-            raise BenchmarkContractError("semantic sealed payload checksum mismatch")
-        marker = {
-            "schema_version": "goldenexperience.semantic_sealed_open.v1",
-            "payload_sha256": observed,
-            "validation_receipt_sha256": receipt.content_sha256(),
-        }
-        self.marker_path.parent.mkdir(parents=True, exist_ok=True)
-        descriptor = os.open(self.marker_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o444)
         try:
-            os.write(descriptor, (json.dumps(marker, sort_keys=True) + "\n").encode("utf-8"))
+            before = path.stat()
+        except OSError as exc:
+            raise BenchmarkContractError("semantic sealed payload is unavailable") from exc
+        self.marker_path.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            descriptor = os.open(
+                self.marker_path,
+                os.O_WRONLY | os.O_CREAT | os.O_EXCL,
+                0o444,
+            )
+        except FileExistsError as exc:
+            raise BenchmarkContractError("semantic sealed payload was already opened") from exc
+        receipt_sha256 = receipt.content_sha256()
+        try:
+            _replace_descriptor(
+                descriptor,
+                _json_bytes(
+                    {
+                        "schema_version": "goldenexperience.semantic_sealed_open.v1",
+                        "state": "opening",
+                        "validation_receipt_sha256": receipt_sha256,
+                    }
+                ),
+            )
             os.fsync(descriptor)
+            _fsync_directory(self.marker_path.parent)
+            try:
+                payload = path.read_bytes()
+                after = path.stat()
+                if (before.st_dev, before.st_ino, before.st_size, before.st_mtime_ns) != (
+                    after.st_dev,
+                    after.st_ino,
+                    after.st_size,
+                    after.st_mtime_ns,
+                ):
+                    raise BenchmarkContractError("semantic sealed payload changed while opening")
+                observed = hashlib.sha256(payload).hexdigest()
+                if observed != expected_payload_sha256:
+                    raise BenchmarkContractError("semantic sealed payload checksum mismatch")
+            except Exception as exc:
+                _replace_descriptor(
+                    descriptor,
+                    _json_bytes(
+                        {
+                            "schema_version": "goldenexperience.semantic_sealed_open.v1",
+                            "state": "failed",
+                            "validation_receipt_sha256": receipt_sha256,
+                            "error_type": type(exc).__name__,
+                        }
+                    ),
+                )
+                os.fsync(descriptor)
+                if isinstance(exc, BenchmarkContractError):
+                    raise
+                raise BenchmarkContractError("semantic sealed payload could not be opened") from exc
+            _replace_descriptor(
+                descriptor,
+                _json_bytes(
+                    {
+                        "schema_version": "goldenexperience.semantic_sealed_open.v1",
+                        "state": "opened",
+                        "payload_sha256": observed,
+                        "validation_receipt_sha256": receipt_sha256,
+                    }
+                ),
+            )
+            os.fsync(descriptor)
+            return payload
         finally:
             os.close(descriptor)
-        return payload
 
 
 def write_immutable_sealed_report(directory: str | Path, report: Mapping[str, Any]) -> Path:
     """Publish a content-addressed report without an overwrite path."""
 
-    raw = (json.dumps(dict(report), indent=2, sort_keys=True) + "\n").encode("utf-8")
+    raw = _json_bytes(dict(report), indent=2)
     digest = hashlib.sha256(raw).hexdigest()
     root = Path(directory)
     root.mkdir(parents=True, exist_ok=True)
     path = root / f"{digest}.json"
-    descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o444)
+    descriptor, temporary_name = tempfile.mkstemp(prefix=f".{digest}.", suffix=".tmp", dir=root)
+    temporary = Path(temporary_name)
     try:
-        os.write(descriptor, raw)
+        try:
+            _write_all(descriptor, raw)
+            os.fchmod(descriptor, 0o444)
+            os.fsync(descriptor)
+        finally:
+            os.close(descriptor)
+        try:
+            os.link(temporary, path)
+            _fsync_directory(root)
+        except FileExistsError as exc:
+            raise BenchmarkContractError("immutable sealed report already exists") from exc
+    finally:
+        temporary.unlink(missing_ok=True)
+    return path
+
+
+def _json_bytes(value: Mapping[str, Any], *, indent: int | None = None) -> bytes:
+    return (json.dumps(dict(value), indent=indent, sort_keys=True) + "\n").encode("utf-8")
+
+
+def _write_all(descriptor: int, payload: bytes) -> None:
+    remaining = memoryview(payload)
+    while remaining:
+        written = os.write(descriptor, remaining)
+        if written <= 0:
+            raise OSError("failed to write publication artifact")
+        remaining = remaining[written:]
+
+
+def _replace_descriptor(descriptor: int, payload: bytes) -> None:
+    os.lseek(descriptor, 0, os.SEEK_SET)
+    os.ftruncate(descriptor, 0)
+    _write_all(descriptor, payload)
+
+
+def _fsync_directory(directory: Path) -> None:
+    flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
+    descriptor = os.open(directory, flags)
+    try:
         os.fsync(descriptor)
     finally:
         os.close(descriptor)
-    return path
 
 
 def _is_sha256(value: str | None) -> bool:
