@@ -1,0 +1,162 @@
+{
+  "attempt": {
+    "attempt_id": "5fc42ef4088b4b69983799ec43c5e507",
+    "completed_at": "2026-07-14T00:21:17.105611+00:00",
+    "error_message": "transport oracle safe coverage is below 0.45",
+    "error_type": "V5PipelineError",
+    "input_sha256": "a0e2b95333f096a8a28dc38e2bac46fce9b67701bb6f4b051089291f3ceb1f7d",
+    "started_at": "2026-07-13T22:50:35.141941+00:00",
+    "status": "failed"
+  },
+  "authority": "non_authoritative_failed_stage_diagnostic",
+  "benchmark_manifest_sha256": "557cfe1eccd522d19e6a06177b2d86e6b1a55587b8a84cba65732fad4d2bcd4a",
+  "candidate_metrics": [
+    {
+      "candidate_id": "transport-r32-s17-8f66e77f08e5",
+      "greedy_agreement": 0.403076171875,
+      "oracle_safe_coverage": 0.0693359375,
+      "p95_transform_ms": 103.84078691713512,
+      "perplexity_drift_pct": 178.8849160630803,
+      "rank": 32,
+      "seed": 17,
+      "task_score": 0.9770166322010302
+    },
+    {
+      "candidate_id": "transport-r32-s29-c00a427e75d8",
+      "greedy_agreement": 0.4085693359375,
+      "oracle_safe_coverage": 0.078125,
+      "p95_transform_ms": 103.84173123165965,
+      "perplexity_drift_pct": 167.2477681807165,
+      "rank": 32,
+      "seed": 29,
+      "task_score": 0.9771297620884017
+    },
+    {
+      "candidate_id": "transport-r32-s43-e8f2f7e1bb01",
+      "greedy_agreement": 0.4010009765625,
+      "oracle_safe_coverage": 0.07421875,
+      "p95_transform_ms": 103.83763215504587,
+      "perplexity_drift_pct": 185.5223627352166,
+      "rank": 32,
+      "seed": 43,
+      "task_score": 0.9780313271415064
+    },
+    {
+      "candidate_id": "transport-r64-s17-7d307ba79f46",
+      "greedy_agreement": 0.45550537109375,
+      "oracle_safe_coverage": 0.10546875,
+      "p95_transform_ms": 104.60541606880724,
+      "perplexity_drift_pct": 95.19484087794605,
+      "rank": 64,
+      "seed": 17,
+      "task_score": 0.9800783326150974
+    },
+    {
+      "candidate_id": "transport-r64-s29-ac0fb3f8f3d1",
+      "greedy_agreement": 0.45318603515625,
+      "oracle_safe_coverage": 0.0966796875,
+      "p95_transform_ms": 104.60322094149888,
+      "perplexity_drift_pct": 98.18000403971399,
+      "rank": 64,
+      "seed": 29,
+      "task_score": 0.9771368647575739
+    },
+    {
+      "candidate_id": "transport-r64-s43-d9a681fc77ab",
+      "greedy_agreement": 0.45294189453125,
+      "oracle_safe_coverage": 0.1044921875,
+      "p95_transform_ms": 104.60120993666351,
+      "perplexity_drift_pct": 97.45322873975523,
+      "rank": 64,
+      "seed": 43,
+      "task_score": 0.9781098889876464
+    },
+    {
+      "candidate_id": "transport-r128-s17-bea0bafa8488",
+      "greedy_agreement": 0.530517578125,
+      "oracle_safe_coverage": 0.142578125,
+      "p95_transform_ms": 105.9619715437293,
+      "perplexity_drift_pct": 53.62795691895188,
+      "rank": 128,
+      "seed": 17,
+      "task_score": 0.9808788042417008
+    },
+    {
+      "candidate_id": "transport-r128-s29-179d3421fa58",
+      "greedy_agreement": 0.54278564453125,
+      "oracle_safe_coverage": 0.1552734375,
+      "p95_transform_ms": 105.96500528044999,
+      "perplexity_drift_pct": 50.61438609830314,
+      "rank": 128,
+      "seed": 29,
+      "task_score": 0.9788559247774151
+    },
+    {
+      "candidate_id": "transport-r128-s43-ed94ba9543e2",
+      "greedy_agreement": 0.53790283203125,
+      "oracle_safe_coverage": 0.150390625,
+      "p95_transform_ms": 105.96598382107913,
+      "perplexity_drift_pct": 52.7631269867609,
+      "rank": 128,
+      "seed": 43,
+      "task_score": 0.9791915092579179
+    }
+  ],
+  "code_sha256": "0424fadb7ab7a036028783f69a5cc46949f379bd789da4a4830b4316b836d24c",
+  "diagnosis": {
+    "deployment_candidate_id_under_registered_ordering": "transport-r128-s17-bea0bafa8488",
+    "deployment_safe_count": 146,
+    "failure_reason_combinations": {
+      "drift_only": 71,
+      "greedy_and_drift": 767,
+      "greedy_only": 20,
+      "safe": 146,
+      "task_regression_greedy_and_drift": 20
+    },
+    "gate_required_oracle_safe_coverage": 0.45,
+    "observed_oracle_safe_coverage": 0.142578125,
+    "selected_rank_under_registered_ordering": 128,
+    "unsafe_by_token_bucket": {
+      "128": 223,
+      "512": 218,
+      "2048": 217,
+      "8192": 220
+    }
+  },
+  "direction": "qwen3_4b_to_8b",
+  "fit_manifest_content_sha256": "488f9ae57f5e955ac9b0657a1ad720a293a56690b8c0f5ba58c67ac3630962f1",
+  "method_dev_report": {
+    "file_sha256": "d3c3085f1ef71881281159bb555750c68f685e17bdb2cbdaa26c967ca0d234c7",
+    "measurement_count": 9216,
+    "sample_count": 1024,
+    "workspace_path": ".pipeline/work/qwen3_4b_to_8b/evaluate_method_dev/method_dev_report.json"
+  },
+  "method_dev_trace_manifest_content_sha256": "7561035a9d40beec36c45a4a7cbf16753b98c8f815713892f1bd690a4f71bf76",
+  "pipeline_id": "v5-pipeline-fcc72c17609ebfb1c14e33c1",
+  "rank_aggregates": [
+    {
+      "mean_greedy_agreement": 0.4042154947916667,
+      "mean_oracle_safe_coverage": 0.07389322916666667,
+      "mean_p95_transform_ms": 103.84005010128021,
+      "mean_task_score": 0.9773925738103127,
+      "rank": 32
+    },
+    {
+      "mean_greedy_agreement": 0.4538777669270833,
+      "mean_oracle_safe_coverage": 0.10221354166666667,
+      "mean_p95_transform_ms": 104.60328231565654,
+      "mean_task_score": 0.9784416954534393,
+      "rank": 64
+    },
+    {
+      "mean_greedy_agreement": 0.5370686848958334,
+      "mean_oracle_safe_coverage": 0.1494140625,
+      "mean_p95_transform_ms": 105.96432021508615,
+      "mean_task_score": 0.979642079425678,
+      "rank": 128
+    }
+  ],
+  "schema_version": "goldenexperience.publication_v5_failed_stage.v1",
+  "stage": "evaluate_method_dev",
+  "verified_at": "2026-07-14T00:29:14.949716+00:00"
+}
