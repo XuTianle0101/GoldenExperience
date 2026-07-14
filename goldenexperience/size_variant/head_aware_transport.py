@@ -281,10 +281,10 @@ class HeadAwareKVTransport:
         import torch
 
         layer_ids = self.tensors["source_layer_ids"].long()
-        selected = source[layer_ids]
-        # selected: target_layer, target_head, window, source_head, token, head_dim
+        selected = source[layer_ids[:, 0]]
+        # selected: target_layer, window, source_head, token, head_dim
         head_mixed = torch.einsum(
-            "lhwstd,lhws->lhwtd",
+            "lwstd,lhws->lhwtd",
             selected,
             self._tensor("head_mix"),
         )
@@ -399,6 +399,8 @@ class HeadAwareKVTransport:
         layer_ids = self.tensors["source_layer_ids"]
         if bool((layer_ids < 0).any()) or bool((layer_ids >= self.source.num_layers).any()):
             raise HeadAwareTransportError("source_layer_ids contains an out-of-range layer")
+        if not bool((layer_ids == layer_ids[:, :1]).all()):
+            raise HeadAwareTransportError("source_layer_ids must be shared across target heads")
         for name in ("layer_mix", "head_mix"):
             weights = self.tensors[name].float()
             if bool((weights < 0).any()):
@@ -564,57 +566,106 @@ def build_trainable_head_aware_transport(
                         torch.nn.Parameter(initial[f"{prefix}_scale"]),
                     )
 
-        def _mix(self, value: Any) -> Any:
-            selected = value[self.source_layer_ids]
+        def _mix(self, value: Any, compute_dtype: Any | None = None) -> Any:
             head_mix = self.head_mix_logits.softmax(dim=-1)
             layer_mix = self.layer_mix_logits.softmax(dim=-1)
-            head_mixed = torch.einsum("lhwstd,lhws->lhwtd", selected, head_mix)
-            return torch.einsum("lhwtd,lhw->lhtd", head_mixed, layer_mix)
+            layer_ids = self.source_layer_ids[:, 0]
+            if compute_dtype is None:
+                selected = value[layer_ids]
+                head_mixed = torch.einsum("lwstd,lhws->lhwtd", selected, head_mix)
+                return torch.einsum("lhwtd,lhw->lhtd", head_mixed, layer_mix)
 
-        def forward(self, source_kv: Any, position_ids: Any) -> Any:
+            from torch.utils.checkpoint import checkpoint
+
+            head_mix = head_mix.to(dtype=compute_dtype)
+            layer_mix = layer_mix.to(dtype=compute_dtype)
+
+            def mix_chunk(chunk: Any, heads: Any, layers: Any) -> Any:
+                contiguous = chunk.contiguous()
+                selected = contiguous[layer_ids]
+                head_mixed = torch.einsum("lwstd,lhws->lhwtd", selected, heads)
+                result = torch.einsum("lhwtd,lhw->lhtd", head_mixed, layers)
+                if chunk.device.type == "cuda":
+                    torch.cuda.synchronize(chunk.device)
+                return result
+
+            outputs = []
+            for chunk in value.split(256, dim=2):
+                outputs.append(
+                    checkpoint(
+                        mix_chunk,
+                        chunk,
+                        head_mix,
+                        layer_mix,
+                        use_reentrant=False,
+                    )
+                )
+            return torch.cat(outputs, dim=2)
+
+        def forward(
+            self,
+            source_kv: Any,
+            position_ids: Any,
+            compute_dtype: Any | None = None,
+        ) -> Any:
             positions = torch.as_tensor(position_ids, dtype=torch.long, device=source_kv.device)
-            source_value = source_kv.float()
+            source_value = source_kv.to(dtype=compute_dtype or torch.float32)
             source_key = _apply_rope_heads(
                 source_value[0],
                 positions,
                 theta=source.rope_theta,
                 inverse=True,
+                chunk_tokens=256 if compute_dtype is not None else None,
             )
-            base_key = self._mix(source_key)
-            base_value = self._mix(source_value[1])
+            if compute_dtype is not None and source_kv.device.type == "cuda":
+                torch.cuda.synchronize(source_kv.device)
+            base_key = self._mix(source_key, compute_dtype)
+            base_value = self._mix(source_value[1], compute_dtype)
             outputs: list[Any] = []
             for prefix, base in (("key", base_key), ("value", base_value)):
                 mean = getattr(self, f"{prefix}_normalizer_mean").unsqueeze(2)
                 scale = getattr(self, f"{prefix}_normalizer_scale").unsqueeze(2)
+                down = getattr(self, f"{prefix}_down")
+                up = getattr(self, f"{prefix}_up")
+                bias = getattr(self, f"{prefix}_bias")
+                if compute_dtype is not None:
+                    mean = mean.to(dtype=compute_dtype)
+                    scale = scale.to(dtype=compute_dtype)
+                    down = down.to(dtype=compute_dtype)
+                    up = up.to(dtype=compute_dtype)
+                    bias = bias.to(dtype=compute_dtype)
                 normalized = (base - mean) / scale
-                latent = torch.einsum(
-                    "lhtd,lhdr->lhtr", normalized, getattr(self, f"{prefix}_down")
-                )
+                latent = torch.einsum("lhtd,lhdr->lhtr", normalized, down)
                 if spec.structure_id == TRANSPORT_V1_STRUCTURE_ID:
+                    scale_parameter = getattr(self, f"{prefix}_scale")
+                    gate = getattr(self, f"{prefix}_gate")
+                    if compute_dtype is not None:
+                        scale_parameter = scale_parameter.to(dtype=compute_dtype)
+                        gate = gate.to(dtype=compute_dtype)
                     residual = torch.einsum(
                         "lhtr,lhrd->lhtd",
                         torch.nn.functional.silu(latent),
-                        getattr(self, f"{prefix}_up"),
+                        up,
                     )
                     output = (
-                        base * getattr(self, f"{prefix}_scale").unsqueeze(2)
-                        + torch.sigmoid(getattr(self, f"{prefix}_gate")).unsqueeze(2) * residual
-                        + getattr(self, f"{prefix}_bias").unsqueeze(2)
+                        base * scale_parameter.unsqueeze(2)
+                        + torch.sigmoid(gate).unsqueeze(2) * residual
+                        + bias.unsqueeze(2)
                     )
                 else:
-                    output = torch.einsum(
-                        "lhtr,lhrd->lhtd",
-                        latent,
-                        getattr(self, f"{prefix}_up"),
-                    ) + getattr(self, f"{prefix}_bias").unsqueeze(2)
+                    output = torch.einsum("lhtr,lhrd->lhtd", latent, up) + bias.unsqueeze(2)
                 outputs.append(output)
             outputs[0] = _apply_rope_heads(
                 outputs[0],
                 positions,
                 theta=target.rope_theta,
                 inverse=False,
+                chunk_tokens=256 if compute_dtype is not None else None,
             )
-            return torch.stack(outputs)
+            result = torch.stack(outputs)
+            if compute_dtype is not None and source_kv.device.type == "cuda":
+                torch.cuda.synchronize(source_kv.device)
+            return result
 
         def runtime_state(self) -> dict[str, Any]:
             state = {
@@ -1204,7 +1255,14 @@ def _compatibility_errors(source: CachedKVModelSpec, target: CachedKVModelSpec) 
     return errors
 
 
-def _apply_rope_heads(value: Any, positions: Any, *, theta: float, inverse: bool) -> Any:
+def _apply_rope_heads(
+    value: Any,
+    positions: Any,
+    *,
+    theta: float,
+    inverse: bool,
+    chunk_tokens: int | None = None,
+) -> Any:
     """Apply half-split Qwen RoPE to `[..., head, token, head_dim]`."""
 
     import torch
@@ -1214,6 +1272,8 @@ def _apply_rope_heads(value: Any, positions: Any, *, theta: float, inverse: bool
     token_count = int(value.shape[-2])
     if positions.ndim != 1 or positions.numel() != token_count:
         raise HeadAwareTransportError("RoPE positions do not match the token axis")
+    if chunk_tokens is not None and chunk_tokens <= 0:
+        raise HeadAwareTransportError("RoPE chunk size must be positive")
     head_dim = int(value.shape[-1])
     frequencies = torch.arange(0, head_dim, 2, dtype=torch.float32, device=value.device)
     inv_freq = 1.0 / (theta ** (frequencies / head_dim))
@@ -1222,9 +1282,23 @@ def _apply_rope_heads(value: Any, positions: Any, *, theta: float, inverse: bool
     broadcast = (1,) * (value.ndim - 2) + (token_count, head_dim)
     cosine = embedding.cos().reshape(broadcast).to(value.dtype)
     sine = embedding.sin().reshape(broadcast).to(value.dtype)
+    sign = -1.0 if inverse else 1.0
+    if chunk_tokens is not None and token_count > chunk_tokens:
+        outputs = []
+        for value_chunk, cosine_chunk, sine_chunk in zip(
+            value.split(chunk_tokens, dim=-2),
+            cosine.split(chunk_tokens, dim=-2),
+            sine.split(chunk_tokens, dim=-2),
+            strict=True,
+        ):
+            contiguous = value_chunk.contiguous()
+            first = contiguous[..., : head_dim // 2]
+            second = contiguous[..., head_dim // 2 :]
+            rotated = torch.cat((-second, first), dim=-1)
+            outputs.append(contiguous * cosine_chunk + sign * rotated * sine_chunk)
+        return torch.cat(outputs, dim=-2)
     first, second = value[..., : head_dim // 2], value[..., head_dim // 2 :]
     rotated_half = torch.cat((-second, first), dim=-1)
-    sign = -1.0 if inverse else 1.0
     return value * cosine + sign * rotated_half * sine
 
 

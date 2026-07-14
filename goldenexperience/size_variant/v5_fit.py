@@ -50,8 +50,9 @@ from goldenexperience.size_variant.v5_collect import (
     trace_shard_metadata,
 )
 from goldenexperience.size_variant.v5_generation import (
+    FULL_PREFIX_SUPERVISION_ID,
+    FullPrefixGenerationBackend,
     GenerationSupervisionSpec,
-    TargetLogitGenerationBackend,
     TraceConstantGenerationBackend,
 )
 from goldenexperience.size_variant.v5_pipeline import (
@@ -60,10 +61,11 @@ from goldenexperience.size_variant.v5_pipeline import (
     V5PipelineWorkspace,
 )
 
-V5_TRANSPORT_FIT_SCHEMA = "goldenexperience.v5_transport_fit.v3"
+V5_TRANSPORT_FIT_SCHEMA = "goldenexperience.v5_transport_fit.v4"
+V5_TARGET_LOGIT_TRANSPORT_FIT_SCHEMA = "goldenexperience.v5_transport_fit.v3"
 V5_RIDGE_TRANSPORT_FIT_SCHEMA = "goldenexperience.v5_transport_fit.v2"
 V5_LEGACY_TRANSPORT_FIT_SCHEMA = "goldenexperience.v5_transport_fit.v1"
-V5_TRANSPORT_CHECKPOINT_SCHEMA = "goldenexperience.v5_transport_checkpoint.v2"
+V5_TRANSPORT_CHECKPOINT_SCHEMA = "goldenexperience.v5_transport_checkpoint.v3"
 V5_NORMALIZER_CHECKPOINT_SCHEMA = "goldenexperience.v5_transport_normalizers.v1"
 V5_RIDGE_INITIALIZER_CHECKPOINT_SCHEMA = "goldenexperience.v5_ridge_initializer.v1"
 SCREENING_DIRECTION = "qwen3_4b_to_8b"
@@ -72,6 +74,9 @@ DEPLOYMENT_SEED = 17
 REGISTERED_RIDGE_RATIO = 1e-3
 RIDGE_INITIALIZER = "train_only_row_weighted_ridge_svd"
 RIDGE_SEED_STRATEGY = "deployment_identity_other_seed_orthogonal_rotation"
+FULL_PREFIX_CANDIDATE_MICROBATCH = 3
+FULL_PREFIX_ACTIVATION_CHECKPOINT = "non_reentrant"
+FULL_PREFIX_BATCHING = "grouped_global_accumulation_v1"
 LEGACY_INITIALIZER = "random_gated_silu"
 LEGACY_SEED_STRATEGY = "independent_gaussian_down_projection"
 _TERM_NAMES = (
@@ -100,7 +105,12 @@ class TransportTrainingParameters:
     ridge_ratio: float = REGISTERED_RIDGE_RATIO
     seed_strategy: str = RIDGE_SEED_STRATEGY
     loss: TransportLossContract = field(default_factory=TransportLossContract)
-    generation: GenerationSupervisionSpec = field(default_factory=GenerationSupervisionSpec)
+    generation: GenerationSupervisionSpec = field(
+        default_factory=GenerationSupervisionSpec.full_prefix
+    )
+    full_prefix_candidate_microbatch: int = FULL_PREFIX_CANDIDATE_MICROBATCH
+    full_prefix_activation_checkpoint: str = FULL_PREFIX_ACTIVATION_CHECKPOINT
+    full_prefix_batching: str = FULL_PREFIX_BATCHING
 
     def validate(self, *, require_registered: bool = True) -> list[str]:
         try:
@@ -164,6 +174,13 @@ class TransportTrainingParameters:
             errors.append("publication transport screening must use transport v2")
         if require_registered and self.loss != TransportLossContract():
             errors.append("publication transport loss weights differ from the frozen contract")
+        if self.generation.supervision_id == FULL_PREFIX_SUPERVISION_ID:
+            if self.full_prefix_candidate_microbatch != FULL_PREFIX_CANDIDATE_MICROBATCH:
+                errors.append("full-prefix candidate microbatch must remain three")
+            if self.full_prefix_activation_checkpoint != FULL_PREFIX_ACTIVATION_CHECKPOINT:
+                errors.append("full-prefix activation checkpoint contract changed")
+            if self.full_prefix_batching != FULL_PREFIX_BATCHING:
+                errors.append("full-prefix batching contract changed")
         return errors
 
     def to_dict(self, *, include_generation: bool = True) -> dict[str, Any]:
@@ -181,6 +198,12 @@ class TransportTrainingParameters:
         }
         if include_generation:
             payload["generation"] = self.generation.to_dict()
+        if include_generation and self.generation.supervision_id == FULL_PREFIX_SUPERVISION_ID:
+            payload["full_prefix"] = {
+                "candidate_microbatch": self.full_prefix_candidate_microbatch,
+                "activation_checkpoint": self.full_prefix_activation_checkpoint,
+                "batching": self.full_prefix_batching,
+            }
         if self.structure_id == TRANSPORT_V2_STRUCTURE_ID:
             payload.update(
                 {
@@ -291,6 +314,7 @@ class V5TransportFitManifest:
         errors: list[str] = []
         if self.schema_version not in {
             V5_TRANSPORT_FIT_SCHEMA,
+            V5_TARGET_LOGIT_TRANSPORT_FIT_SCHEMA,
             V5_RIDGE_TRANSPORT_FIT_SCHEMA,
             V5_LEGACY_TRANSPORT_FIT_SCHEMA,
         }:
@@ -307,12 +331,19 @@ class V5TransportFitManifest:
             errors.append("transport fit trace manifest hash mismatch")
         if not _is_sha256(self.normalizer_sha256):
             errors.append("transport fit normalizer hash is invalid")
-        if self.schema_version in {V5_TRANSPORT_FIT_SCHEMA, V5_RIDGE_TRANSPORT_FIT_SCHEMA}:
+        if self.schema_version in {
+            V5_TRANSPORT_FIT_SCHEMA,
+            V5_TARGET_LOGIT_TRANSPORT_FIT_SCHEMA,
+            V5_RIDGE_TRANSPORT_FIT_SCHEMA,
+        }:
             if not _is_sha256(self.training_initializer_sha256):
                 errors.append("transport fit training initializer hash is invalid")
         elif self.training_initializer_sha256 is not None:
             errors.append("legacy transport fit cannot claim a ridge initializer")
-        if self.schema_version == V5_TRANSPORT_FIT_SCHEMA:
+        if self.schema_version in {
+            V5_TRANSPORT_FIT_SCHEMA,
+            V5_TARGET_LOGIT_TRANSPORT_FIT_SCHEMA,
+        }:
             if self.generation_sample_store_sha256 != trace.raw_sample_store_sha256:
                 errors.append("transport fit generation sample store hash mismatch")
         elif self.generation_sample_store_sha256 is not None:
@@ -322,6 +353,11 @@ class V5TransportFitManifest:
         training_errors = self.training.validate(
             require_registered=self.schema_version == V5_TRANSPORT_FIT_SCHEMA
         )
+        if (
+            self.schema_version == V5_TARGET_LOGIT_TRANSPORT_FIT_SCHEMA
+            and self.training.generation != GenerationSupervisionSpec()
+        ):
+            training_errors.append("v3 transport fit must use sampled-cache target logits")
         if (
             self.schema_version == V5_RIDGE_TRANSPORT_FIT_SCHEMA
             and self.training.generation != GenerationSupervisionSpec.legacy()
@@ -369,13 +405,21 @@ class V5TransportFitManifest:
             "source": asdict(self.source),
             "target": asdict(self.target),
             "training": self.training.to_dict(
-                include_generation=self.schema_version == V5_TRANSPORT_FIT_SCHEMA
+                include_generation=self.schema_version
+                in {V5_TRANSPORT_FIT_SCHEMA, V5_TARGET_LOGIT_TRANSPORT_FIT_SCHEMA}
             ),
             "candidates": [asdict(item) for item in self.candidates],
         }
-        if self.schema_version in {V5_TRANSPORT_FIT_SCHEMA, V5_RIDGE_TRANSPORT_FIT_SCHEMA}:
+        if self.schema_version in {
+            V5_TRANSPORT_FIT_SCHEMA,
+            V5_TARGET_LOGIT_TRANSPORT_FIT_SCHEMA,
+            V5_RIDGE_TRANSPORT_FIT_SCHEMA,
+        }:
             payload["training_initializer_sha256"] = self.training_initializer_sha256
-        if self.schema_version == V5_TRANSPORT_FIT_SCHEMA:
+        if self.schema_version in {
+            V5_TRANSPORT_FIT_SCHEMA,
+            V5_TARGET_LOGIT_TRANSPORT_FIT_SCHEMA,
+        }:
             payload["generation_sample_store_sha256"] = self.generation_sample_store_sha256
         return payload
 
@@ -391,6 +435,19 @@ class V5TransportFitManifest:
             if isinstance(raw_generation, Mapping)
             else GenerationSupervisionSpec.legacy()
         )
+        raw_full_prefix = training_payload.pop("full_prefix", None)
+        if isinstance(raw_full_prefix, Mapping):
+            training_payload.update(
+                {
+                    "full_prefix_candidate_microbatch": raw_full_prefix.get(
+                        "candidate_microbatch"
+                    ),
+                    "full_prefix_activation_checkpoint": raw_full_prefix.get(
+                        "activation_checkpoint"
+                    ),
+                    "full_prefix_batching": raw_full_prefix.get("batching"),
+                }
+            )
         if "structure_id" not in training_payload:
             training_payload.update(
                 {
@@ -635,6 +692,58 @@ def _row_weighted_unique_records(trace: V5TraceManifest) -> tuple[tuple[TraceRec
     return tuple(grouped.values())
 
 
+def _full_prefix_epoch_order(trace: V5TraceManifest, epoch: int) -> tuple[int, ...]:
+    if type(epoch) is not int or epoch < 0:
+        raise V5PipelineError("full-prefix epoch must be non-negative")
+    groups: dict[str, list[int]] = {}
+    for index, record in enumerate(trace.records):
+        groups.setdefault(record.prefix_group_id, []).append(index)
+    group_ids = sorted(groups)
+    random.Random(10_000 * epoch + DEPLOYMENT_SEED).shuffle(group_ids)
+    order: list[int] = []
+    for group_id in group_ids:
+        indices = sorted(groups[group_id], key=lambda value: trace.records[value].sample_id)
+        seed = int(
+            _sha256_bytes(
+                _canonical_json_bytes(
+                    {
+                        "epoch": epoch,
+                        "prefix_group_id": group_id,
+                        "strategy": FULL_PREFIX_BATCHING,
+                    }
+                )
+            )[:16],
+            16,
+        )
+        random.Random(seed).shuffle(indices)
+        order.extend(indices)
+    if len(order) != len(trace.records) or set(order) != set(range(len(trace.records))):
+        raise V5PipelineError("full-prefix epoch order is not a record permutation")
+    return tuple(order)
+
+
+def _full_prefix_order_sha256(trace: V5TraceManifest, epoch: int) -> str:
+    order = _full_prefix_epoch_order(trace, epoch)
+    return _sha256_bytes(
+        _canonical_json_bytes([trace.records[index].sample_id for index in order])
+    )
+
+
+def _prefix_segments(
+    trace: V5TraceManifest,
+    indices: Sequence[int],
+) -> tuple[tuple[int, ...], ...]:
+    segments: list[list[int]] = []
+    for index in indices:
+        if not segments or (
+            trace.records[segments[-1][-1]].prefix_group_id
+            != trace.records[index].prefix_group_id
+        ):
+            segments.append([])
+        segments[-1].append(index)
+    return tuple(tuple(segment) for segment in segments)
+
+
 class SynchronousTransportTrainer:
     """Train every candidate with one verified tensor load per unique trace shard."""
 
@@ -666,6 +775,16 @@ class SynchronousTransportTrainer:
             generation_backend = TraceConstantGenerationBackend()
         if generation_backend.supervision_id != parameters.generation.supervision_id:
             raise V5PipelineError("generation backend differs from the training contract")
+        if (
+            parameters.generation.supervision_id == FULL_PREFIX_SUPERVISION_ID
+            and not isinstance(generation_backend, FullPrefixGenerationBackend)
+        ):
+            raise V5PipelineError("full-prefix training requires its registered backend")
+        if isinstance(generation_backend, FullPrefixGenerationBackend):
+            import torch
+
+            if torch.device(generation_backend.target_device) != torch.device(device):
+                raise V5PipelineError("full-prefix backend and trainer target devices differ")
         self.workspace = workspace
         self.trace = trace
         self.parameters = parameters
@@ -693,17 +812,19 @@ class SynchronousTransportTrainer:
             stage_input_sha256=stage_input_sha256,
         )
         contexts = self._build_contexts(normalizers, initializer)
-        checkpoint_binding = _sha256_bytes(
-            _canonical_json_bytes(
-                {
-                    "stage_input_sha256": stage_input_sha256,
-                    "trace_manifest_sha256": self.trace.content_sha256(),
-                    "training": self.parameters.to_dict(),
-                    "normalizer_sha256": normalizer_sha256,
-                    "training_initializer_sha256": initializer_sha256,
-                }
-            )
-        )
+        checkpoint_payload: dict[str, Any] = {
+            "stage_input_sha256": stage_input_sha256,
+            "trace_manifest_sha256": self.trace.content_sha256(),
+            "training": self.parameters.to_dict(),
+            "normalizer_sha256": normalizer_sha256,
+            "training_initializer_sha256": initializer_sha256,
+        }
+        if self.parameters.generation.supervision_id == FULL_PREFIX_SUPERVISION_ID:
+            checkpoint_payload["epoch_order_sha256"] = [
+                _full_prefix_order_sha256(self.trace, epoch)
+                for epoch in range(self.parameters.epochs)
+            ]
+        checkpoint_binding = _sha256_bytes(_canonical_json_bytes(checkpoint_payload))
         progress = _load_checkpoint_set(
             work / "checkpoint_set.json",
             contexts,
@@ -724,13 +845,23 @@ class SynchronousTransportTrainer:
             context.module.train()
         total_samples = len(self.trace.records) * self.parameters.epochs
         with self.generation_backend:
-            self._train_contexts(
-                contexts,
-                progress=progress,
-                total_samples=total_samples,
-                work=work,
-                checkpoint_binding=checkpoint_binding,
-            )
+            if isinstance(self.generation_backend, FullPrefixGenerationBackend):
+                self._train_full_prefix_contexts(
+                    contexts,
+                    backend=self.generation_backend,
+                    progress=progress,
+                    total_samples=total_samples,
+                    work=work,
+                    checkpoint_binding=checkpoint_binding,
+                )
+            else:
+                self._train_contexts(
+                    contexts,
+                    progress=progress,
+                    total_samples=total_samples,
+                    work=work,
+                    checkpoint_binding=checkpoint_binding,
+                )
         if int(progress["samples_seen"]) != total_samples:
             raise V5PipelineError("transport training checkpoint sample count is inconsistent")
         _validate_progress(
@@ -911,6 +1042,206 @@ class SynchronousTransportTrainer:
                         progress=progress,
                         binding_sha256=checkpoint_binding,
                     )
+
+    def _train_full_prefix_contexts(
+        self,
+        contexts: Sequence[_CandidateContext],
+        *,
+        backend: FullPrefixGenerationBackend,
+        progress: dict[str, Any],
+        total_samples: int,
+        work: Path,
+        checkpoint_binding: str,
+    ) -> None:
+        import torch
+
+        for epoch in range(int(progress["epoch"]), self.parameters.epochs):
+            order = _full_prefix_epoch_order(self.trace, epoch)
+            start_position = int(progress["position"]) if epoch == int(progress["epoch"]) else 0
+            backend.clear_prefix_asset()
+            for group_start in range(
+                start_position,
+                len(order),
+                self.parameters.gradient_accumulation,
+            ):
+                group = order[
+                    group_start : group_start + self.parameters.gradient_accumulation
+                ]
+                for segment in _prefix_segments(self.trace, group):
+                    records = tuple(self.trace.records[index] for index in segment)
+                    self._train_full_prefix_segment(
+                        contexts,
+                        backend=backend,
+                        records=records,
+                        denominator=len(group),
+                    )
+                    for record in records:
+                        progress["samples_seen"] = int(progress["samples_seen"]) + 1
+                        if self.progress is not None:
+                            self.progress(
+                                int(progress["samples_seen"]),
+                                total_samples,
+                                epoch,
+                                record.sample_id,
+                            )
+                for context in contexts:
+                    gradient_norm = torch.nn.utils.clip_grad_norm_(
+                        context.module.parameters(),
+                        self.parameters.max_grad_norm,
+                    )
+                    if not bool(torch.isfinite(gradient_norm)):
+                        raise V5PipelineError(
+                            f"transport candidate {context.candidate_id} produced "
+                            "non-finite gradients"
+                        )
+                    context.optimizer.step()
+                    context.optimizer.zero_grad(set_to_none=True)
+                progress["optimizer_steps"] = int(progress["optimizer_steps"]) + 1
+                progress["position"] = group_start + len(group)
+                if int(progress["position"]) == len(order):
+                    progress["epoch"] = epoch + 1
+                    progress["position"] = 0
+                    backend.clear_prefix_asset()
+                if (
+                    int(progress["optimizer_steps"]) % self.checkpoint_every_steps == 0
+                    or int(progress["position"]) == 0
+                ):
+                    _save_checkpoint_set(
+                        work,
+                        contexts,
+                        progress=progress,
+                        binding_sha256=checkpoint_binding,
+                    )
+
+    def _train_full_prefix_segment(
+        self,
+        contexts: Sequence[_CandidateContext],
+        *,
+        backend: FullPrefixGenerationBackend,
+        records: Sequence[TraceRecord],
+        denominator: int,
+    ) -> None:
+        import torch
+        import torch.nn.functional as functional
+        from torch.utils.checkpoint import checkpoint
+
+        if not records or denominator <= 0 or len(records) > denominator:
+            raise V5PipelineError("full-prefix segment has an invalid accumulation weight")
+        representative = records[0]
+        if any(
+            record.prefix_group_id != representative.prefix_group_id
+            or record.shard != representative.shard
+            for record in records
+        ):
+            raise V5PipelineError("full-prefix segment spans multiple trace objects")
+        tensors = self.loader.load(representative)
+        asset = backend.prefix_asset(representative)
+        teachers = tuple(backend.teacher(record, asset) for record in records)
+        if torch.device(self.device).type == "cuda":
+            torch.cuda.synchronize(self.device)
+        full_positions = torch.arange(asset.token_count, device=self.device)
+        key_positions = tensors["key_positions"].to(self.device)
+        target_kv = tensors["target_kv"].to(self.device)
+        query = tensors["target_query"].to(self.device)
+        mask = tensors["causal_mask"].to(self.device)
+        native_output = tensors["native_attention_output"].to(self.device)
+        model_dtype = next(backend.model.parameters()).dtype
+        contract = self.parameters.loss
+        microbatch = self.parameters.full_prefix_candidate_microbatch
+        segment_weight = len(records) / denominator
+        for start in range(0, len(contexts), microbatch):
+            batch_contexts = contexts[start : start + microbatch]
+            transformed_values = []
+            for context in batch_contexts:
+                transformed_values.append(
+                    checkpoint(
+                        lambda source, positions, module=context.module: module(
+                            source,
+                            positions,
+                            compute_dtype=model_dtype,
+                        ),
+                        asset.source_kv,
+                        full_positions,
+                        use_reentrant=False,
+                    )
+                )
+            transformed = torch.stack(transformed_values)
+            del transformed_values
+            proxy = transformed.detach().requires_grad_(True)
+            generation_sums = [0.0] * len(batch_contexts)
+            distillation_sums = [0.0] * len(batch_contexts)
+            for teacher in teachers:
+                generation, distillation = backend.student_losses(proxy, teacher)
+                if (
+                    generation.shape != (len(batch_contexts),)
+                    or distillation.shape != (len(batch_contexts),)
+                    or not bool(torch.isfinite(generation).all())
+                    or not bool(torch.isfinite(distillation).all())
+                ):
+                    raise V5PipelineError("full-prefix generation losses are invalid")
+                for index in range(len(batch_contexts)):
+                    generation_sums[index] += float(generation[index].detach().float().item())
+                    distillation_sums[index] += float(
+                        distillation[index].detach().float().item()
+                    )
+                row_loss = (
+                    generation + contract.prompt_tail_distillation * distillation
+                ).sum() / denominator
+                row_loss.backward()
+            if proxy.grad is None or not bool(torch.isfinite(proxy.grad).all()):
+                raise V5PipelineError("full-prefix cache proxy gradient is invalid")
+            sampled = transformed.index_select(4, key_positions)
+            alignment_losses = []
+            alignment_values = []
+            for index in range(len(batch_contexts)):
+                logit_kl, output_mse = attention_distillation_terms(
+                    query,
+                    target_kv[0],
+                    target_kv[1],
+                    sampled[index, 0],
+                    sampled[index, 1],
+                    attention_mask=mask,
+                    native_attention_output=native_output,
+                )
+                anchor = functional.mse_loss(sampled[index].float(), target_kv.float())
+                alignment = (
+                    contract.attention_logit_kl * logit_kl
+                    + contract.attention_output_mse * output_mse
+                    + contract.transformed_kv_anchor * anchor
+                )
+                alignment_losses.append(alignment)
+                alignment_values.append(
+                    (
+                        float(logit_kl.detach().float().item()),
+                        float(output_mse.detach().float().item()),
+                        float(anchor.detach().float().item()),
+                    )
+                )
+            alignment_loss = torch.stack(alignment_losses).sum() * segment_weight
+            torch.autograd.backward(
+                (transformed, alignment_loss),
+                (proxy.grad, torch.ones_like(alignment_loss)),
+            )
+            for index, context in enumerate(batch_contexts):
+                logit_kl_value, output_mse_value, anchor_value = alignment_values[index]
+                context.metric_sums["native_generation"] += generation_sums[index]
+                context.metric_sums["prompt_tail_distillation"] += distillation_sums[index]
+                context.metric_sums["attention_logit_kl"] += logit_kl_value * len(records)
+                context.metric_sums["attention_output_mse"] += output_mse_value * len(records)
+                context.metric_sums["transformed_kv_anchor"] += anchor_value * len(records)
+                context.metric_sums["total"] += (
+                    generation_sums[index]
+                    + contract.prompt_tail_distillation * distillation_sums[index]
+                    + len(records)
+                    * (
+                        contract.attention_logit_kl * logit_kl_value
+                        + contract.attention_output_mse * output_mse_value
+                        + contract.transformed_kv_anchor * anchor_value
+                    )
+                )
+            del transformed, proxy, sampled, alignment_loss
+            if torch.device(self.device).type == "cuda":
+                torch.cuda.empty_cache()
 
     def _build_contexts(
         self,
@@ -1200,6 +1531,7 @@ def run_fit_transport_stage(
     direction: str,
     sample_store_path: str | Path,
     identity_cache_path: str | Path | None,
+    source_device: str = "cuda:0",
     device: str = "cuda:1",
     resume: bool = False,
     checkpoint_every_steps: int = 256,
@@ -1233,11 +1565,14 @@ def run_fit_transport_stage(
         "raw_sample_store_sha256": store_sha256,
         "training": training.to_dict(),
     }
-    generation_backend = TargetLogitGenerationBackend(
+    generation_backend = FullPrefixGenerationBackend(
+        source_path=direction_config.source_model_path,
         target_path=direction_config.target_model_path,
+        source=trace.source,
         target=trace.target,
         samples=sample_by_id,
-        device=device,
+        source_device=source_device,
+        target_device=device,
         identity_cache_path=identity_cache_path,
         spec=training.generation,
     )

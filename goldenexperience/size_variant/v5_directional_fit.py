@@ -36,8 +36,8 @@ from goldenexperience.size_variant.v5_fit import (
     verify_transport_candidate_object,
 )
 from goldenexperience.size_variant.v5_generation import (
+    FullPrefixGenerationBackend,
     GenerationSupervisionSpec,
-    TargetLogitGenerationBackend,
 )
 from goldenexperience.size_variant.v5_method_dev import (
     FrozenTransportStructure,
@@ -49,7 +49,8 @@ from goldenexperience.size_variant.v5_pipeline import (
     V5PipelineWorkspace,
 )
 
-V5_DIRECTIONAL_FIT_SCHEMA = "goldenexperience.v5_directional_transport_fit.v3"
+V5_DIRECTIONAL_FIT_SCHEMA = "goldenexperience.v5_directional_transport_fit.v4"
+V5_TARGET_LOGIT_DIRECTIONAL_FIT_SCHEMA = "goldenexperience.v5_directional_transport_fit.v3"
 V5_RIDGE_DIRECTIONAL_FIT_SCHEMA = "goldenexperience.v5_directional_transport_fit.v2"
 V5_LEGACY_DIRECTIONAL_FIT_SCHEMA = "goldenexperience.v5_directional_transport_fit.v1"
 
@@ -81,6 +82,7 @@ class V5DirectionalTransportFitManifest:
         errors: list[str] = []
         if self.schema_version not in {
             V5_DIRECTIONAL_FIT_SCHEMA,
+            V5_TARGET_LOGIT_DIRECTIONAL_FIT_SCHEMA,
             V5_RIDGE_DIRECTIONAL_FIT_SCHEMA,
             V5_LEGACY_DIRECTIONAL_FIT_SCHEMA,
         }:
@@ -105,13 +107,17 @@ class V5DirectionalTransportFitManifest:
             errors.append("directional transport fit normalizer hash is invalid")
         if self.schema_version in {
             V5_DIRECTIONAL_FIT_SCHEMA,
+            V5_TARGET_LOGIT_DIRECTIONAL_FIT_SCHEMA,
             V5_RIDGE_DIRECTIONAL_FIT_SCHEMA,
         }:
             if not _is_sha256(self.training_initializer_sha256):
                 errors.append("directional transport fit initializer hash is invalid")
         elif self.training_initializer_sha256 is not None:
             errors.append("legacy directional fit cannot claim a ridge initializer")
-        if self.schema_version == V5_DIRECTIONAL_FIT_SCHEMA:
+        if self.schema_version in {
+            V5_DIRECTIONAL_FIT_SCHEMA,
+            V5_TARGET_LOGIT_DIRECTIONAL_FIT_SCHEMA,
+        }:
             if self.generation_sample_store_sha256 != trace.raw_sample_store_sha256:
                 errors.append("directional generation sample store hash mismatch")
         elif self.generation_sample_store_sha256 is not None:
@@ -132,6 +138,11 @@ class V5DirectionalTransportFitManifest:
             expected_training = replace(
                 expected_training,
                 generation=GenerationSupervisionSpec.legacy(),
+            )
+        elif self.schema_version == V5_TARGET_LOGIT_DIRECTIONAL_FIT_SCHEMA:
+            expected_training = replace(
+                expected_training,
+                generation=GenerationSupervisionSpec(),
             )
         if self.training != expected_training:
             errors.append("directional transport training differs from the frozen contract")
@@ -172,16 +183,21 @@ class V5DirectionalTransportFitManifest:
             "source": asdict(self.source),
             "target": asdict(self.target),
             "training": self.training.to_dict(
-                include_generation=self.schema_version == V5_DIRECTIONAL_FIT_SCHEMA
+                include_generation=self.schema_version
+                in {V5_DIRECTIONAL_FIT_SCHEMA, V5_TARGET_LOGIT_DIRECTIONAL_FIT_SCHEMA}
             ),
             "candidates": [asdict(item) for item in self.candidates],
         }
         if self.schema_version in {
             V5_DIRECTIONAL_FIT_SCHEMA,
+            V5_TARGET_LOGIT_DIRECTIONAL_FIT_SCHEMA,
             V5_RIDGE_DIRECTIONAL_FIT_SCHEMA,
         }:
             payload["training_initializer_sha256"] = self.training_initializer_sha256
-        if self.schema_version == V5_DIRECTIONAL_FIT_SCHEMA:
+        if self.schema_version in {
+            V5_DIRECTIONAL_FIT_SCHEMA,
+            V5_TARGET_LOGIT_DIRECTIONAL_FIT_SCHEMA,
+        }:
             payload["generation_sample_store_sha256"] = self.generation_sample_store_sha256
         return payload
 
@@ -199,6 +215,19 @@ class V5DirectionalTransportFitManifest:
             if isinstance(raw_generation, Mapping)
             else GenerationSupervisionSpec.legacy()
         )
+        raw_full_prefix = training_payload.pop("full_prefix", None)
+        if isinstance(raw_full_prefix, Mapping):
+            training_payload.update(
+                {
+                    "full_prefix_candidate_microbatch": raw_full_prefix.get(
+                        "candidate_microbatch"
+                    ),
+                    "full_prefix_activation_checkpoint": raw_full_prefix.get(
+                        "activation_checkpoint"
+                    ),
+                    "full_prefix_batching": raw_full_prefix.get("batching"),
+                }
+            )
         if "structure_id" not in training_payload:
             training_payload.update(
                 {
@@ -276,6 +305,7 @@ def run_frozen_direction_fit_stage(
     direction: str,
     sample_store_path: str | Path,
     identity_cache_path: str | Path | None,
+    source_device: str = "cuda:0",
     device: str = "cuda:1",
     resume: bool = False,
     checkpoint_every_steps: int = 256,
@@ -309,11 +339,14 @@ def run_frozen_direction_fit_stage(
         "training": training.to_dict(),
     }
     direction_config = workspace.config.direction(direction)
-    generation_backend = TargetLogitGenerationBackend(
+    generation_backend = FullPrefixGenerationBackend(
+        source_path=direction_config.source_model_path,
         target_path=direction_config.target_model_path,
+        source=trace.source,
         target=trace.target,
         samples=sample_by_id,
-        device=device,
+        source_device=source_device,
+        target_device=device,
         identity_cache_path=identity_cache_path,
         spec=training.generation,
     )
