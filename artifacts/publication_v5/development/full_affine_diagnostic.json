@@ -1,0 +1,106 @@
+{
+  "authority": "diagnostic_only_not_publication_evidence",
+  "benchmark_manifest_sha256": "557cfe1eccd522d19e6a06177b2d86e6b1a55587b8a84cba65732fad4d2bcd4a",
+  "code_sha256": "0424fadb7ab7a036028783f69a5cc46949f379bd789da4a4830b4316b836d24c",
+  "conclusion": {
+    "adopt_for_implementation": "ridge_initialized_full_affine_attention_finetuning",
+    "reason": "full-affine preserves the ridge KV alignment while attention fine-tuning recovers decode safety; pure ridge is insufficient",
+    "requires_full_method_dev_rerun": true
+  },
+  "created_at": "2026-07-14T01:01:19.304529+00:00",
+  "direction": "qwen3_4b_to_8b",
+  "failed_registered_baseline": {
+    "diagnostic_uri": "artifacts/publication_v5/stages/qwen3_4b_to_8b.evaluate_method_dev.failed.json",
+    "rank_128_seed_17_greedy_agreement": 0.530517578125,
+    "rank_128_seed_17_oracle_safe_coverage": 0.142578125
+  },
+  "full_affine": {
+    "architecture": "independent_per_layer_head_kv_full_affine",
+    "initialization": {
+      "ridge_ratio": 0.001,
+      "source": "transport_train_only",
+      "weighted_by_frozen_rows": true
+    },
+    "sampled_dev_after_epoch_3": {
+      "group_mean": {
+        "attention_kl": 0.10588046659351043,
+        "attention_output_mse": 0.05823777553260974,
+        "cosine": 0.79050505614799,
+        "mse": 1.3494633164094842
+      },
+      "row_weighted_mean": {
+        "attention_kl": 0.04129777721936989,
+        "attention_output_mse": 0.025577403823263012,
+        "cosine": 0.8448840232449584,
+        "mse": 0.9875732992659323
+      }
+    },
+    "training": {
+      "epochs": 3,
+      "gradient_accumulation": 8,
+      "learning_rate": 0.0003,
+      "loss": {
+        "attention_logit_kl": 0.5,
+        "attention_output_mse": 0.5,
+        "native_generation": 1.0,
+        "prompt_tail_distillation": 0.25,
+        "transformed_kv_anchor": 0.1
+      },
+      "max_grad_norm": 1.0,
+      "seed": 17,
+      "weight_decay": 0.0001
+    }
+  },
+  "pure_ridge_real_generation": {
+    "greedy_agreement": 0.36328125,
+    "mean_perplexity_drift_pct": 86.54771115456857,
+    "oracle_safe_coverage": 0.015625,
+    "safe_count": 1,
+    "sample_count": 64
+  },
+  "ridge_initialized_full_affine_real_generation": {
+    "by_bucket": {
+      "128": {
+        "mean_greedy_agreement": 0.8515625,
+        "mean_perplexity_drift_pct": 4.670788414783072,
+        "safe_count": 11,
+        "sample_count": 16
+      },
+      "512": {
+        "mean_greedy_agreement": 0.76953125,
+        "mean_perplexity_drift_pct": 25.35296980763091,
+        "safe_count": 10,
+        "sample_count": 16
+      },
+      "2048": {
+        "mean_greedy_agreement": 0.859375,
+        "mean_perplexity_drift_pct": 15.718508716881347,
+        "safe_count": 11,
+        "sample_count": 16
+      },
+      "8192": {
+        "mean_greedy_agreement": 0.75390625,
+        "mean_perplexity_drift_pct": 18.776468036789716,
+        "safe_count": 7,
+        "sample_count": 16
+      }
+    },
+    "greedy_agreement": 0.80859375,
+    "mean_perplexity_drift_pct": 16.12968374402126,
+    "oracle_safe_coverage": 0.609375,
+    "safe_count": 39,
+    "sample_count": 64
+  },
+  "schema_version": "goldenexperience.publication_v5_transport_diagnostic.v1",
+  "subset": {
+    "selection": "first_16_lexicographic_rows_per_registered_token_bucket",
+    "token_buckets": [
+      128,
+      512,
+      2048,
+      8192
+    ],
+    "total_rows": 64
+  },
+  "transport_train_trace_manifest_sha256": "985abafaf5bf18d6771acb2d9beb82129f13c282e9c3f705555c3c43aea97879"
+}
