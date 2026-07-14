@@ -14,13 +14,14 @@ from pathlib import Path
 from typing import Any
 
 from goldenexperience.benchmarks.publication import PublicationBenchmarkManifest
-from goldenexperience.size_variant.cached_kv_manifest import CachedKVModelSpec
+from goldenexperience.size_variant.cached_kv_manifest import CachedKVModelSpec, sha256_file
 from goldenexperience.size_variant.selective_manifest import TRANSPORT_V1_STRUCTURE_ID
 from goldenexperience.size_variant.v5_collect import (
     TraceObjectRef,
     V5TraceManifest,
     load_bound_benchmark,
     load_completed_trace_manifest,
+    load_raw_sample_store,
 )
 from goldenexperience.size_variant.v5_fit import (
     DEPLOYMENT_SEED,
@@ -34,6 +35,10 @@ from goldenexperience.size_variant.v5_fit import (
     load_fitted_transport,
     verify_transport_candidate_object,
 )
+from goldenexperience.size_variant.v5_generation import (
+    GenerationSupervisionSpec,
+    TargetLogitGenerationBackend,
+)
 from goldenexperience.size_variant.v5_method_dev import (
     FrozenTransportStructure,
     load_frozen_transport_structure,
@@ -44,7 +49,8 @@ from goldenexperience.size_variant.v5_pipeline import (
     V5PipelineWorkspace,
 )
 
-V5_DIRECTIONAL_FIT_SCHEMA = "goldenexperience.v5_directional_transport_fit.v2"
+V5_DIRECTIONAL_FIT_SCHEMA = "goldenexperience.v5_directional_transport_fit.v3"
+V5_RIDGE_DIRECTIONAL_FIT_SCHEMA = "goldenexperience.v5_directional_transport_fit.v2"
 V5_LEGACY_DIRECTIONAL_FIT_SCHEMA = "goldenexperience.v5_directional_transport_fit.v1"
 
 
@@ -62,6 +68,7 @@ class V5DirectionalTransportFitManifest:
     training: TransportTrainingParameters
     candidates: tuple[TransportCandidateArtifact, ...]
     training_initializer_sha256: str | None = None
+    generation_sample_store_sha256: str | None = None
     schema_version: str = V5_DIRECTIONAL_FIT_SCHEMA
 
     def validate(
@@ -74,6 +81,7 @@ class V5DirectionalTransportFitManifest:
         errors: list[str] = []
         if self.schema_version not in {
             V5_DIRECTIONAL_FIT_SCHEMA,
+            V5_RIDGE_DIRECTIONAL_FIT_SCHEMA,
             V5_LEGACY_DIRECTIONAL_FIT_SCHEMA,
         }:
             errors.append("unsupported directional transport fit schema")
@@ -95,11 +103,19 @@ class V5DirectionalTransportFitManifest:
             errors.append("directional transport fit structure receipt hash mismatch")
         if not _is_sha256(self.normalizer_sha256):
             errors.append("directional transport fit normalizer hash is invalid")
-        if self.schema_version == V5_DIRECTIONAL_FIT_SCHEMA:
+        if self.schema_version in {
+            V5_DIRECTIONAL_FIT_SCHEMA,
+            V5_RIDGE_DIRECTIONAL_FIT_SCHEMA,
+        }:
             if not _is_sha256(self.training_initializer_sha256):
                 errors.append("directional transport fit initializer hash is invalid")
         elif self.training_initializer_sha256 is not None:
             errors.append("legacy directional fit cannot claim a ridge initializer")
+        if self.schema_version == V5_DIRECTIONAL_FIT_SCHEMA:
+            if self.generation_sample_store_sha256 != trace.raw_sample_store_sha256:
+                errors.append("directional generation sample store hash mismatch")
+        elif self.generation_sample_store_sha256 is not None:
+            errors.append("pre-v3 directional fit cannot claim generation sample input")
         if self.source != trace.source or self.target != trace.target:
             errors.append("directional transport fit model identities differ from traces")
         expected_training = frozen_direction_training_parameters(structure)
@@ -110,6 +126,12 @@ class V5DirectionalTransportFitManifest:
                 initializer=LEGACY_INITIALIZER,
                 ridge_ratio=0.0,
                 seed_strategy=LEGACY_SEED_STRATEGY,
+                generation=GenerationSupervisionSpec.legacy(),
+            )
+        elif self.schema_version == V5_RIDGE_DIRECTIONAL_FIT_SCHEMA:
+            expected_training = replace(
+                expected_training,
+                generation=GenerationSupervisionSpec.legacy(),
             )
         if self.training != expected_training:
             errors.append("directional transport training differs from the frozen contract")
@@ -149,11 +171,18 @@ class V5DirectionalTransportFitManifest:
             "normalizer_sha256": self.normalizer_sha256,
             "source": asdict(self.source),
             "target": asdict(self.target),
-            "training": self.training.to_dict(),
+            "training": self.training.to_dict(
+                include_generation=self.schema_version == V5_DIRECTIONAL_FIT_SCHEMA
+            ),
             "candidates": [asdict(item) for item in self.candidates],
         }
-        if self.schema_version == V5_DIRECTIONAL_FIT_SCHEMA:
+        if self.schema_version in {
+            V5_DIRECTIONAL_FIT_SCHEMA,
+            V5_RIDGE_DIRECTIONAL_FIT_SCHEMA,
+        }:
             payload["training_initializer_sha256"] = self.training_initializer_sha256
+        if self.schema_version == V5_DIRECTIONAL_FIT_SCHEMA:
+            payload["generation_sample_store_sha256"] = self.generation_sample_store_sha256
         return payload
 
     @classmethod
@@ -164,6 +193,12 @@ class V5DirectionalTransportFitManifest:
         training_payload["ranks"] = tuple(training_payload["ranks"])
         training_payload["seeds"] = tuple(training_payload["seeds"])
         training_payload["loss"] = TransportLossContract(**training_payload["loss"])
+        raw_generation = training_payload.get("generation")
+        training_payload["generation"] = (
+            GenerationSupervisionSpec(**raw_generation)
+            if isinstance(raw_generation, Mapping)
+            else GenerationSupervisionSpec.legacy()
+        )
         if "structure_id" not in training_payload:
             training_payload.update(
                 {
@@ -192,6 +227,7 @@ class V5DirectionalTransportFitManifest:
             training=TransportTrainingParameters(**training_payload),
             candidates=tuple(candidates),
             training_initializer_sha256=payload.get("training_initializer_sha256"),
+            generation_sample_store_sha256=payload.get("generation_sample_store_sha256"),
             schema_version=str(payload.get("schema_version", "")),
         )
 
@@ -238,6 +274,8 @@ def run_frozen_direction_fit_stage(
     *,
     workspace: V5PipelineWorkspace,
     direction: str,
+    sample_store_path: str | Path,
+    identity_cache_path: str | Path | None,
     device: str = "cuda:1",
     resume: bool = False,
     checkpoint_every_steps: int = 256,
@@ -250,6 +288,16 @@ def run_frozen_direction_fit_stage(
     benchmark = load_bound_benchmark(workspace)
     structure, _, _ = load_frozen_transport_structure(workspace)
     trace = load_completed_trace_manifest(workspace, direction, "transport_train", benchmark)
+    store_path = Path(sample_store_path)
+    try:
+        store_before = _file_signature(store_path)
+        store_sha256 = sha256_file(store_path)
+    except OSError as exc:
+        raise V5PipelineError("transport-train raw sample store is unavailable") from exc
+    if store_sha256 != trace.raw_sample_store_sha256:
+        raise V5PipelineError("directional fitting raw store differs from collected traces")
+    samples = load_raw_sample_store(store_path, benchmark, split="transport_train")
+    sample_by_id = {record.sample_id: sample for record, sample in samples}
     training = frozen_direction_training_parameters(structure)
     errors = training.validate(require_registered=False)
     if errors:
@@ -257,8 +305,19 @@ def run_frozen_direction_fit_stage(
     stage_parameters = {
         "trace_manifest_sha256": trace.content_sha256(),
         "frozen_structure_sha256": structure.content_sha256(),
+        "raw_sample_store_sha256": store_sha256,
         "training": training.to_dict(),
     }
+    direction_config = workspace.config.direction(direction)
+    generation_backend = TargetLogitGenerationBackend(
+        target_path=direction_config.target_model_path,
+        target=trace.target,
+        samples=sample_by_id,
+        device=device,
+        identity_cache_path=identity_cache_path,
+        spec=training.generation,
+    )
+    stage_parameters["generation_backend"] = generation_backend.parameters()
     lease = workspace.begin_stage(
         direction,
         "fit_transport",
@@ -274,6 +333,7 @@ def run_frozen_direction_fit_stage(
             trace=trace,
             parameters=training,
             device=device,
+            generation_backend=generation_backend,
             checkpoint_every_steps=checkpoint_every_steps,
             progress=progress,
         )
@@ -281,6 +341,8 @@ def run_frozen_direction_fit_stage(
             work,
             stage_input_sha256=lease.input_sha256,
         )
+        if _file_signature(store_path) != store_before or sha256_file(store_path) != store_sha256:
+            raise V5PipelineError("transport-train raw sample store changed during fitting")
         if len(fitted) != 1:
             raise V5PipelineError("directional transport trainer emitted multiple candidates")
         item = fitted[0]
@@ -310,6 +372,7 @@ def run_frozen_direction_fit_stage(
             training=training,
             candidates=(candidate,),
             training_initializer_sha256=initializer_sha256,
+            generation_sample_store_sha256=store_sha256,
         )
         manifest_errors = manifest.validate(
             workspace=workspace,
@@ -329,6 +392,7 @@ def run_frozen_direction_fit_stage(
                 "deployment_seed": DEPLOYMENT_SEED,
                 "frozen_structure_sha256": structure.content_sha256(),
                 "training_initializer_sha256": initializer_sha256,
+                "generation_sample_store_sha256": store_sha256,
                 "transport_fit_manifest_sha256": manifest.content_sha256(),
             },
         )
@@ -381,6 +445,11 @@ def load_direction_deployment_transport(
         manifest.candidates[0],
         device=device,
     )[0]
+
+
+def _file_signature(path: Path) -> tuple[int, int, int, int, int]:
+    stat = path.stat()
+    return (stat.st_dev, stat.st_ino, stat.st_size, stat.st_mtime_ns, stat.st_ctime_ns)
 
 
 def _write_json_replace(path: Path, value: Mapping[str, Any]) -> None:

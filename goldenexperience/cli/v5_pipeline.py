@@ -74,7 +74,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     fit_transport.add_argument("--workspace", type=Path, required=True)
     fit_transport.add_argument("--direction", choices=tuple(DIRECTION_SIZES), required=True)
+    fit_transport.add_argument("--samples", type=Path, required=True)
     fit_transport.add_argument("--device", default="cuda:1")
+    fit_transport.add_argument("--identity-cache", type=Path)
     fit_transport.add_argument("--repository-root", type=Path, default=Path.cwd())
     fit_transport.add_argument("--resume", action="store_true")
     fit_transport.add_argument("--checkpoint-every-steps", type=int, default=256)
@@ -303,6 +305,12 @@ def fit_transport(args: argparse.Namespace) -> PipelineStageRecord:
     common = {
         "workspace": workspace,
         "direction": args.direction,
+        "sample_store_path": args.samples,
+        "identity_cache_path": (
+            args.identity_cache
+            if args.identity_cache is not None
+            else workspace.control / "model_identity_cache.json"
+        ),
         "device": args.device,
         "resume": args.resume,
         "checkpoint_every_steps": args.checkpoint_every_steps,

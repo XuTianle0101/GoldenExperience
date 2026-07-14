@@ -85,9 +85,14 @@ before decode.
   the semantic sealed split.
 - `v5_fit.py` fits the fixed 3-rank by 3-seed 4B-to-8B screening matrix in one synchronized
   trace pass, verifies and deserializes each shared shard once, fits a row-weighted train-only
-  ridge initializer, checkpoints the initializer plus model and AdamW state atomically, and emits
-  runtime-loadable candidate weights. Its production entry point cannot override the registered
-  matrix.
+  ridge initializer, batches every candidate through frozen-target suffix-logit distillation,
+  checkpoints the initializer plus model and AdamW state atomically, and emits runtime-loadable
+  candidate weights. Its production entry point cannot override the registered matrix or
+  generation-supervision contract.
+- `v5_generation.py` binds the exact transport-train raw store, retains absolute positions under
+  deterministic head-tail suffix bounding, generates a 16-token native sampled-cache teacher,
+  and computes candidate-batched greedy-token CE and teacher-logit KL with gradients flowing only
+  through transformed past KV.
 - `publication_eval.py`, `v5_method_dev.py`, and `v5_real_method_dev.py` provide explicit
   deterministic semantic scorers, real shared-prefix evaluation of all nine candidates,
   resumable per-sample evidence, three-seed rank aggregation, and a seed-17 frozen structure

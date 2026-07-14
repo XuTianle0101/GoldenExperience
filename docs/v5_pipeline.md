@@ -69,6 +69,7 @@ rank, seed, loss, epoch, or optimizer override:
 golden-v5-pipeline fit-transport \
   --workspace artifacts/v5_pipeline \
   --direction qwen3_4b_to_8b \
+  --samples datasets/publication/transport_train.jsonl \
   --device cuda:1
 ```
 
@@ -77,9 +78,13 @@ The stage trains the Cartesian product of ranks 32/64/128 and seeds 17/29/43. It
 `1e-4`, gradient accumulation 8, gradient clipping at 1.0, and the manifest loss contract.
 All nine candidates consume each trace shard synchronously, and each immutable shared shard is
 verified and deserialized once for the complete fit rather than once per row, epoch, or candidate.
-The native-generation and prompt-tail values in a trace are bounded reference constants; they are
-included in the registered reported total, while gradients come from attention-logit KL,
-attention-output MSE, and transformed-KV anchor loss.
+Fit v3 reopens only the exact `transport_train` raw store already hash-bound by collection. For
+each row, the frozen target consumes the real suffix with the sampled native target KV and emits
+16 greedy teacher tokens. All nine transformed sampled caches are stacked into one target-model
+batch; greedy-token cross entropy and teacher-logit KL remain differentiable through the past KV.
+The older trace constants remain diagnostic fields and do not enter the v3 objective. The raw
+store is hashed before and after fitting, and the target model identity plus complete supervision
+contract are part of the stage and checkpoint binding.
 
 Transport v2 first fits per-layer/head K/V normalizers using only `transport_train`. It then solves
 an augmented full-rank ridge system at ratio `1e-3`, with every shared shard weighted by its number
@@ -162,6 +167,7 @@ direction and invoke the same fit command, for example:
 golden-v5-pipeline fit-transport \
   --workspace artifacts/v5_pipeline \
   --direction qwen3_8b_to_14b \
+  --samples datasets/publication/transport_train.jsonl \
   --device cuda:1
 ```
 

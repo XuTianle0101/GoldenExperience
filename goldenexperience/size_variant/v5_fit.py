@@ -25,10 +25,11 @@ from goldenexperience.size_variant.head_aware_transport import (
     RIDGE_INITIALIZER_TENSORS,
     TRANSPORT_TRAINING_SEEDS,
     HeadAwareKVTransport,
+    attention_distillation_terms,
+    attention_preserving_loss,
     build_trainable_head_aware_transport,
     fit_head_aware_normalizers,
     fit_head_aware_ridge_initializer,
-    head_aware_training_objective,
     initialize_trainable_from_ridge,
     transport_artifact_metadata,
 )
@@ -44,8 +45,14 @@ from goldenexperience.size_variant.v5_collect import (
     V5TraceManifest,
     load_bound_benchmark,
     load_completed_trace_manifest,
+    load_raw_sample_store,
     load_trace_shard,
     trace_shard_metadata,
+)
+from goldenexperience.size_variant.v5_generation import (
+    GenerationSupervisionSpec,
+    TargetLogitGenerationBackend,
+    TraceConstantGenerationBackend,
 )
 from goldenexperience.size_variant.v5_pipeline import (
     PipelineStageRecord,
@@ -53,9 +60,10 @@ from goldenexperience.size_variant.v5_pipeline import (
     V5PipelineWorkspace,
 )
 
-V5_TRANSPORT_FIT_SCHEMA = "goldenexperience.v5_transport_fit.v2"
+V5_TRANSPORT_FIT_SCHEMA = "goldenexperience.v5_transport_fit.v3"
+V5_RIDGE_TRANSPORT_FIT_SCHEMA = "goldenexperience.v5_transport_fit.v2"
 V5_LEGACY_TRANSPORT_FIT_SCHEMA = "goldenexperience.v5_transport_fit.v1"
-V5_TRANSPORT_CHECKPOINT_SCHEMA = "goldenexperience.v5_transport_checkpoint.v1"
+V5_TRANSPORT_CHECKPOINT_SCHEMA = "goldenexperience.v5_transport_checkpoint.v2"
 V5_NORMALIZER_CHECKPOINT_SCHEMA = "goldenexperience.v5_transport_normalizers.v1"
 V5_RIDGE_INITIALIZER_CHECKPOINT_SCHEMA = "goldenexperience.v5_ridge_initializer.v1"
 SCREENING_DIRECTION = "qwen3_4b_to_8b"
@@ -92,12 +100,17 @@ class TransportTrainingParameters:
     ridge_ratio: float = REGISTERED_RIDGE_RATIO
     seed_strategy: str = RIDGE_SEED_STRATEGY
     loss: TransportLossContract = field(default_factory=TransportLossContract)
+    generation: GenerationSupervisionSpec = field(default_factory=GenerationSupervisionSpec)
 
     def validate(self, *, require_registered: bool = True) -> list[str]:
         try:
             errors = self.loss.validate()
         except (TypeError, ValueError):
             errors = ["transport loss contract is malformed"]
+        try:
+            errors.extend(self.generation.validate(require_registered=require_registered))
+        except (TypeError, ValueError):
+            errors.append("transport generation supervision is malformed")
         if require_registered and self.ranks != REGISTERED_RANKS:
             errors.append("transport screening must use ranks 32, 64, and 128")
         if require_registered and self.seeds != TRANSPORT_TRAINING_SEEDS:
@@ -153,7 +166,7 @@ class TransportTrainingParameters:
             errors.append("publication transport loss weights differ from the frozen contract")
         return errors
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self, *, include_generation: bool = True) -> dict[str, Any]:
         payload: dict[str, Any] = {
             "ranks": list(self.ranks),
             "seeds": list(self.seeds),
@@ -166,6 +179,8 @@ class TransportTrainingParameters:
             "max_grad_norm": self.max_grad_norm,
             "loss": asdict(self.loss),
         }
+        if include_generation:
+            payload["generation"] = self.generation.to_dict()
         if self.structure_id == TRANSPORT_V2_STRUCTURE_ID:
             payload.update(
                 {
@@ -269,12 +284,14 @@ class V5TransportFitManifest:
     training: TransportTrainingParameters
     candidates: tuple[TransportCandidateArtifact, ...]
     training_initializer_sha256: str | None = None
+    generation_sample_store_sha256: str | None = None
     schema_version: str = V5_TRANSPORT_FIT_SCHEMA
 
     def validate(self, *, workspace: V5PipelineWorkspace, trace: V5TraceManifest) -> list[str]:
         errors: list[str] = []
         if self.schema_version not in {
             V5_TRANSPORT_FIT_SCHEMA,
+            V5_RIDGE_TRANSPORT_FIT_SCHEMA,
             V5_LEGACY_TRANSPORT_FIT_SCHEMA,
         }:
             errors.append("unsupported transport fit manifest schema")
@@ -290,16 +307,26 @@ class V5TransportFitManifest:
             errors.append("transport fit trace manifest hash mismatch")
         if not _is_sha256(self.normalizer_sha256):
             errors.append("transport fit normalizer hash is invalid")
-        if self.schema_version == V5_TRANSPORT_FIT_SCHEMA:
+        if self.schema_version in {V5_TRANSPORT_FIT_SCHEMA, V5_RIDGE_TRANSPORT_FIT_SCHEMA}:
             if not _is_sha256(self.training_initializer_sha256):
                 errors.append("transport fit training initializer hash is invalid")
         elif self.training_initializer_sha256 is not None:
             errors.append("legacy transport fit cannot claim a ridge initializer")
+        if self.schema_version == V5_TRANSPORT_FIT_SCHEMA:
+            if self.generation_sample_store_sha256 != trace.raw_sample_store_sha256:
+                errors.append("transport fit generation sample store hash mismatch")
+        elif self.generation_sample_store_sha256 is not None:
+            errors.append("pre-v3 transport fit cannot claim generation sample input")
         if self.source != trace.source or self.target != trace.target:
             errors.append("transport fit model identities differ from traces")
         training_errors = self.training.validate(
             require_registered=self.schema_version == V5_TRANSPORT_FIT_SCHEMA
         )
+        if (
+            self.schema_version == V5_RIDGE_TRANSPORT_FIT_SCHEMA
+            and self.training.generation != GenerationSupervisionSpec.legacy()
+        ):
+            training_errors.append("v2 transport fit must use trace-constant reporting losses")
         if (
             self.schema_version == V5_LEGACY_TRANSPORT_FIT_SCHEMA
             and self.training.structure_id != TRANSPORT_V1_STRUCTURE_ID
@@ -341,11 +368,15 @@ class V5TransportFitManifest:
             "normalizer_sha256": self.normalizer_sha256,
             "source": asdict(self.source),
             "target": asdict(self.target),
-            "training": self.training.to_dict(),
+            "training": self.training.to_dict(
+                include_generation=self.schema_version == V5_TRANSPORT_FIT_SCHEMA
+            ),
             "candidates": [asdict(item) for item in self.candidates],
         }
-        if self.schema_version == V5_TRANSPORT_FIT_SCHEMA:
+        if self.schema_version in {V5_TRANSPORT_FIT_SCHEMA, V5_RIDGE_TRANSPORT_FIT_SCHEMA}:
             payload["training_initializer_sha256"] = self.training_initializer_sha256
+        if self.schema_version == V5_TRANSPORT_FIT_SCHEMA:
+            payload["generation_sample_store_sha256"] = self.generation_sample_store_sha256
         return payload
 
     @classmethod
@@ -354,6 +385,12 @@ class V5TransportFitManifest:
         training_payload["ranks"] = tuple(training_payload["ranks"])
         training_payload["seeds"] = tuple(training_payload["seeds"])
         training_payload["loss"] = TransportLossContract(**training_payload["loss"])
+        raw_generation = training_payload.get("generation")
+        training_payload["generation"] = (
+            GenerationSupervisionSpec(**raw_generation)
+            if isinstance(raw_generation, Mapping)
+            else GenerationSupervisionSpec.legacy()
+        )
         if "structure_id" not in training_payload:
             training_payload.update(
                 {
@@ -381,6 +418,7 @@ class V5TransportFitManifest:
             training=TransportTrainingParameters(**training_payload),
             candidates=tuple(candidates),
             training_initializer_sha256=payload.get("training_initializer_sha256"),
+            generation_sample_store_sha256=payload.get("generation_sample_store_sha256"),
             schema_version=str(payload.get("schema_version", "")),
         )
 
@@ -562,6 +600,23 @@ class _TraceLoader:
         return tensors
 
 
+class GenerationBackend(Protocol):
+    supervision_id: str
+
+    def __enter__(self) -> GenerationBackend: ...
+
+    def __exit__(self, *_args: object) -> None: ...
+
+    def parameters(self) -> Mapping[str, Any]: ...
+
+    def losses(
+        self,
+        record: TraceRecord,
+        tensors: Mapping[str, Any],
+        transformed_kv_batch: Any,
+    ) -> tuple[Any, Any]: ...
+
+
 def _row_weighted_unique_records(trace: V5TraceManifest) -> tuple[tuple[TraceRecord, int], ...]:
     grouped: dict[str, tuple[TraceRecord, int]] = {}
     for record in trace.records:
@@ -590,6 +645,7 @@ class SynchronousTransportTrainer:
         trace: V5TraceManifest,
         parameters: TransportTrainingParameters,
         device: str,
+        generation_backend: GenerationBackend | None = None,
         checkpoint_every_steps: int = 256,
         progress: Callable[[int, int, int, str], None] | None = None,
     ) -> None:
@@ -604,6 +660,12 @@ class SynchronousTransportTrainer:
             raise V5PipelineError("; ".join(errors))
         if parameters.structure_id != TRANSPORT_V2_STRUCTURE_ID:
             raise V5PipelineError("new transport fitting is restricted to transport v2")
+        if generation_backend is None:
+            if parameters.generation != GenerationSupervisionSpec.legacy():
+                raise V5PipelineError("target-logit generation backend is required")
+            generation_backend = TraceConstantGenerationBackend()
+        if generation_backend.supervision_id != parameters.generation.supervision_id:
+            raise V5PipelineError("generation backend differs from the training contract")
         self.workspace = workspace
         self.trace = trace
         self.parameters = parameters
@@ -611,6 +673,7 @@ class SynchronousTransportTrainer:
         self.checkpoint_every_steps = checkpoint_every_steps
         self.progress = progress
         self.loader = _TraceLoader(workspace, trace)
+        self.generation_backend = generation_backend
 
     def fit(
         self,
@@ -618,8 +681,6 @@ class SynchronousTransportTrainer:
         *,
         stage_input_sha256: str,
     ) -> tuple[list[_FittedCandidate], str, str]:
-        import torch
-
         work.mkdir(parents=True, exist_ok=True)
         normalizers, normalizer_sha256 = self._load_or_fit_normalizers(
             work,
@@ -662,87 +723,14 @@ class SynchronousTransportTrainer:
             context.optimizer.zero_grad(set_to_none=True)
             context.module.train()
         total_samples = len(self.trace.records) * self.parameters.epochs
-        for epoch in range(int(progress["epoch"]), self.parameters.epochs):
-            order = list(range(len(self.trace.records)))
-            random.Random(10_000 * epoch + DEPLOYMENT_SEED).shuffle(order)
-            start_position = int(progress["position"]) if epoch == int(progress["epoch"]) else 0
-            for group_start in range(
-                start_position,
-                len(order),
-                self.parameters.gradient_accumulation,
-            ):
-                group = order[group_start : group_start + self.parameters.gradient_accumulation]
-                for index in group:
-                    record = self.trace.records[index]
-                    tensors = self.loader.load(record)
-                    source_kv = tensors["source_kv"].to(self.device)
-                    target_kv = tensors["target_kv"].to(self.device)
-                    positions = tensors["key_positions"].to(self.device)
-                    query = tensors["target_query"].to(self.device)
-                    mask = tensors["causal_mask"].to(self.device)
-                    native_output = tensors["native_attention_output"].to(self.device)
-                    constants = tensors["constant_losses"].to(self.device)
-                    for context in contexts:
-                        _, terms = head_aware_training_objective(
-                            context.module,
-                            source_kv,
-                            target_kv,
-                            positions,
-                            query,
-                            native_generation_loss=constants[0],
-                            prompt_tail_distillation_loss=constants[1],
-                            attention_mask=mask,
-                            native_attention_output=native_output,
-                            contract=self.parameters.loss,
-                        )
-                        if any(
-                            not bool(torch.isfinite(getattr(terms, name)).all())
-                            for name in _TERM_NAMES
-                        ):
-                            raise V5PipelineError(
-                                f"transport candidate {context.candidate_id} produced "
-                                "a non-finite loss"
-                            )
-                        (terms.total / len(group)).backward()
-                        for name in _TERM_NAMES:
-                            context.metric_sums[name] += float(
-                                getattr(terms, name).detach().float().item()
-                            )
-                    progress["samples_seen"] = int(progress["samples_seen"]) + 1
-                    if self.progress is not None:
-                        self.progress(
-                            int(progress["samples_seen"]),
-                            total_samples,
-                            epoch,
-                            record.sample_id,
-                        )
-                for context in contexts:
-                    gradient_norm = torch.nn.utils.clip_grad_norm_(
-                        context.module.parameters(),
-                        self.parameters.max_grad_norm,
-                    )
-                    if not bool(torch.isfinite(gradient_norm)):
-                        raise V5PipelineError(
-                            f"transport candidate {context.candidate_id} produced "
-                            "non-finite gradients"
-                        )
-                    context.optimizer.step()
-                    context.optimizer.zero_grad(set_to_none=True)
-                progress["optimizer_steps"] = int(progress["optimizer_steps"]) + 1
-                progress["position"] = group_start + len(group)
-                if int(progress["position"]) == len(order):
-                    progress["epoch"] = epoch + 1
-                    progress["position"] = 0
-                if (
-                    int(progress["optimizer_steps"]) % self.checkpoint_every_steps == 0
-                    or int(progress["position"]) == 0
-                ):
-                    _save_checkpoint_set(
-                        work,
-                        contexts,
-                        progress=progress,
-                        binding_sha256=checkpoint_binding,
-                    )
+        with self.generation_backend:
+            self._train_contexts(
+                contexts,
+                progress=progress,
+                total_samples=total_samples,
+                work=work,
+                checkpoint_binding=checkpoint_binding,
+            )
         if int(progress["samples_seen"]) != total_samples:
             raise V5PipelineError("transport training checkpoint sample count is inconsistent")
         _validate_progress(
@@ -798,6 +786,131 @@ class SynchronousTransportTrainer:
                 )
             )
         return fitted, normalizer_sha256, initializer_sha256
+
+    def _train_contexts(
+        self,
+        contexts: Sequence[_CandidateContext],
+        *,
+        progress: dict[str, Any],
+        total_samples: int,
+        work: Path,
+        checkpoint_binding: str,
+    ) -> None:
+        import torch
+        import torch.nn.functional as functional
+
+        for epoch in range(int(progress["epoch"]), self.parameters.epochs):
+            order = list(range(len(self.trace.records)))
+            random.Random(10_000 * epoch + DEPLOYMENT_SEED).shuffle(order)
+            start_position = int(progress["position"]) if epoch == int(progress["epoch"]) else 0
+            for group_start in range(
+                start_position,
+                len(order),
+                self.parameters.gradient_accumulation,
+            ):
+                group = order[group_start : group_start + self.parameters.gradient_accumulation]
+                for index in group:
+                    record = self.trace.records[index]
+                    tensors = self.loader.load(record)
+                    source_kv = tensors["source_kv"].to(self.device)
+                    target_kv = tensors["target_kv"].to(self.device)
+                    positions = tensors["key_positions"].to(self.device)
+                    query = tensors["target_query"].to(self.device)
+                    mask = tensors["causal_mask"].to(self.device)
+                    native_output = tensors["native_attention_output"].to(self.device)
+                    transformed_values = []
+                    attention_values = []
+                    for context in contexts:
+                        transformed = context.module(source_kv, positions)
+                        logit_kl, output_mse = attention_distillation_terms(
+                            query,
+                            target_kv[0],
+                            target_kv[1],
+                            transformed[0],
+                            transformed[1],
+                            attention_mask=mask,
+                            native_attention_output=native_output,
+                        )
+                        anchor = functional.mse_loss(transformed.float(), target_kv.float())
+                        transformed_values.append(transformed)
+                        attention_values.append((logit_kl, output_mse, anchor))
+                    transformed_batch = torch.stack(transformed_values)
+                    generation, distillation = self.generation_backend.losses(
+                        record,
+                        tensors,
+                        transformed_batch,
+                    )
+                    if (
+                        generation.shape != (len(contexts),)
+                        or distillation.shape != (len(contexts),)
+                        or not bool(torch.isfinite(generation).all())
+                        or not bool(torch.isfinite(distillation).all())
+                    ):
+                        raise V5PipelineError("generation backend returned invalid losses")
+                    terms_by_candidate = []
+                    for candidate_index, context in enumerate(contexts):
+                        logit_kl, output_mse, anchor = attention_values[candidate_index]
+                        terms = attention_preserving_loss(
+                            native_generation_loss=generation[candidate_index],
+                            prompt_tail_distillation_loss=distillation[candidate_index],
+                            attention_logit_kl=logit_kl,
+                            attention_output_mse=output_mse,
+                            transformed_kv_anchor_loss=anchor,
+                            contract=self.parameters.loss,
+                        )
+                        if any(
+                            not bool(torch.isfinite(getattr(terms, name)).all())
+                            for name in _TERM_NAMES
+                        ):
+                            raise V5PipelineError(
+                                f"transport candidate {context.candidate_id} produced "
+                                "a non-finite loss"
+                            )
+                        terms_by_candidate.append(terms)
+                    (
+                        torch.stack([item.total for item in terms_by_candidate]).sum()
+                        / len(group)
+                    ).backward()
+                    for context, terms in zip(contexts, terms_by_candidate, strict=True):
+                        for name in _TERM_NAMES:
+                            context.metric_sums[name] += float(
+                                getattr(terms, name).detach().float().item()
+                            )
+                    progress["samples_seen"] = int(progress["samples_seen"]) + 1
+                    if self.progress is not None:
+                        self.progress(
+                            int(progress["samples_seen"]),
+                            total_samples,
+                            epoch,
+                            record.sample_id,
+                        )
+                for context in contexts:
+                    gradient_norm = torch.nn.utils.clip_grad_norm_(
+                        context.module.parameters(),
+                        self.parameters.max_grad_norm,
+                    )
+                    if not bool(torch.isfinite(gradient_norm)):
+                        raise V5PipelineError(
+                            f"transport candidate {context.candidate_id} produced "
+                            "non-finite gradients"
+                        )
+                    context.optimizer.step()
+                    context.optimizer.zero_grad(set_to_none=True)
+                progress["optimizer_steps"] = int(progress["optimizer_steps"]) + 1
+                progress["position"] = group_start + len(group)
+                if int(progress["position"]) == len(order):
+                    progress["epoch"] = epoch + 1
+                    progress["position"] = 0
+                if (
+                    int(progress["optimizer_steps"]) % self.checkpoint_every_steps == 0
+                    or int(progress["position"]) == 0
+                ):
+                    _save_checkpoint_set(
+                        work,
+                        contexts,
+                        progress=progress,
+                        binding_sha256=checkpoint_binding,
+                    )
 
     def _build_contexts(
         self,
@@ -1085,6 +1198,8 @@ def run_fit_transport_stage(
     *,
     workspace: V5PipelineWorkspace,
     direction: str,
+    sample_store_path: str | Path,
+    identity_cache_path: str | Path | None,
     device: str = "cuda:1",
     resume: bool = False,
     checkpoint_every_steps: int = 256,
@@ -1102,10 +1217,31 @@ def run_fit_transport_stage(
         raise V5PipelineError("; ".join(errors))
     benchmark = load_bound_benchmark(workspace)
     trace = load_completed_trace_manifest(workspace, direction, "transport_train", benchmark)
+    store_path = Path(sample_store_path)
+    try:
+        store_before = _file_signature(store_path)
+        store_sha256 = sha256_file(store_path)
+    except OSError as exc:
+        raise V5PipelineError("transport-train raw sample store is unavailable") from exc
+    if store_sha256 != trace.raw_sample_store_sha256:
+        raise V5PipelineError("transport fitting raw store differs from collected traces")
+    samples = load_raw_sample_store(store_path, benchmark, split="transport_train")
+    sample_by_id = {record.sample_id: sample for record, sample in samples}
+    direction_config = workspace.config.direction(direction)
     stage_parameters = {
         "trace_manifest_sha256": trace.content_sha256(),
+        "raw_sample_store_sha256": store_sha256,
         "training": training.to_dict(),
     }
+    generation_backend = TargetLogitGenerationBackend(
+        target_path=direction_config.target_model_path,
+        target=trace.target,
+        samples=sample_by_id,
+        device=device,
+        identity_cache_path=identity_cache_path,
+        spec=training.generation,
+    )
+    stage_parameters["generation_backend"] = generation_backend.parameters()
     lease = workspace.begin_stage(
         direction,
         "fit_transport",
@@ -1121,6 +1257,7 @@ def run_fit_transport_stage(
             trace=trace,
             parameters=training,
             device=device,
+            generation_backend=generation_backend,
             checkpoint_every_steps=checkpoint_every_steps,
             progress=progress,
         )
@@ -1128,6 +1265,8 @@ def run_fit_transport_stage(
             work,
             stage_input_sha256=lease.input_sha256,
         )
+        if _file_signature(store_path) != store_before or sha256_file(store_path) != store_sha256:
+            raise V5PipelineError("transport-train raw sample store changed during fitting")
         candidates = []
         for item in fitted:
             artifact = workspace.publish_file(
@@ -1157,6 +1296,7 @@ def run_fit_transport_stage(
             training=training,
             candidates=tuple(candidates),
             training_initializer_sha256=initializer_sha256,
+            generation_sample_store_sha256=store_sha256,
         )
         manifest_errors = manifest.validate(workspace=workspace, trace=trace)
         if manifest_errors:
@@ -1170,6 +1310,7 @@ def run_fit_transport_stage(
                 "candidate_count": len(candidates),
                 "trace_manifest_sha256": trace.content_sha256(),
                 "training_initializer_sha256": initializer_sha256,
+                "generation_sample_store_sha256": store_sha256,
                 "transport_fit_manifest_sha256": manifest.content_sha256(),
             },
         )

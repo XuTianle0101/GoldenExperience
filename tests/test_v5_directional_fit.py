@@ -11,6 +11,7 @@ from goldenexperience.size_variant.cached_kv_manifest import CachedKVModelSpec
 from goldenexperience.size_variant.selective_manifest import TransportQualityEvidence
 from goldenexperience.size_variant.v5_collect import TraceObjectRef, TraceRecord, V5TraceManifest
 from goldenexperience.size_variant.v5_directional_fit import (
+    V5_RIDGE_DIRECTIONAL_FIT_SCHEMA,
     V5DirectionalTransportFitManifest,
     frozen_direction_training_parameters,
     run_frozen_direction_fit_stage,
@@ -177,6 +178,7 @@ def test_directional_manifest_is_locked_to_selected_rank_and_seed() -> None:
         training=training,
         candidates=(candidate,),
         training_initializer_sha256=_digest("initializer"),
+        generation_sample_store_sha256=trace.raw_sample_store_sha256,
     )
 
     assert manifest.validate(workspace=workspace, trace=trace, structure=structure) == []
@@ -194,6 +196,15 @@ def test_directional_manifest_is_locked_to_selected_rank_and_seed() -> None:
         trace=trace,
         structure=structure,
     )
+    v2_payload = manifest.to_dict()
+    v2_payload["schema_version"] = V5_RIDGE_DIRECTIONAL_FIT_SCHEMA
+    v2_payload["training"].pop("generation")
+    v2_payload.pop("generation_sample_store_sha256")
+
+    loaded_v2 = V5DirectionalTransportFitManifest.from_dict(v2_payload)
+
+    assert loaded_v2.to_dict() == v2_payload
+    assert loaded_v2.validate(workspace=workspace, trace=trace, structure=structure) == []
 
 
 def test_directional_production_runner_has_no_training_override() -> None:
@@ -212,6 +223,12 @@ def test_directional_runner_emits_one_frozen_candidate(
     target = _model("Qwen/Qwen3-4B", 4.0)
     trace = _trace(source, target)
     structure = _structure()
+    sample_store = tmp_path / "transport_train.jsonl"
+    sample_store.write_text("synthetic transport train\n", encoding="utf-8")
+    trace = replace(
+        trace,
+        raw_sample_store_sha256=hashlib.sha256(sample_store.read_bytes()).hexdigest(),
+    )
 
     class FakeWorkspace:
         def __init__(self) -> None:
@@ -220,7 +237,7 @@ def test_directional_runner_emits_one_frozen_candidate(
                 pipeline_id="pipeline",
                 code_sha256=_digest("code"),
                 split_sha256={"transport_train": _digest("transport-train")},
-                direction=lambda _name: object(),
+                direction=lambda _name: SimpleNamespace(target_model_path=tmp_path / "target"),
             )
             self.completed_outputs = None
 
@@ -311,11 +328,21 @@ def test_directional_runner_emits_one_frozen_candidate(
         "load_completed_trace_manifest",
         lambda *_args: trace,
     )
+    monkeypatch.setattr(
+        directional_module,
+        "load_raw_sample_store",
+        lambda *_args, **_kwargs: tuple(
+            (SimpleNamespace(sample_id=item.sample_id), SimpleNamespace())
+            for item in trace.records
+        ),
+    )
     monkeypatch.setattr(directional_module, "SynchronousTransportTrainer", FakeTrainer)
 
     stage = run_frozen_direction_fit_stage(
         workspace=cast(V5PipelineWorkspace, workspace),
         direction=trace.direction,
+        sample_store_path=sample_store,
+        identity_cache_path=None,
         device="cpu",
     )
 

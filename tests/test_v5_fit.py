@@ -34,6 +34,7 @@ from goldenexperience.size_variant.v5_collect import (
 from goldenexperience.size_variant.v5_fit import (
     DEPLOYMENT_SEED,
     REGISTERED_RANKS,
+    V5_RIDGE_TRANSPORT_FIT_SCHEMA,
     CandidateTrainingMetrics,
     SynchronousTransportTrainer,
     TransportCandidateArtifact,
@@ -43,6 +44,10 @@ from goldenexperience.size_variant.v5_fit import (
     _TraceLoader,
     _validate_progress,
     run_fit_transport_stage,
+)
+from goldenexperience.size_variant.v5_generation import (
+    TARGET_LOGIT_SUPERVISION_ID,
+    GenerationSupervisionSpec,
 )
 from goldenexperience.size_variant.v5_pipeline import V5PipelineError, V5PipelineWorkspace
 
@@ -166,6 +171,7 @@ def _parameters(*, epochs: int = 1) -> TransportTrainingParameters:
         weight_decay=1e-4,
         gradient_accumulation=1,
         max_grad_norm=1.0,
+        generation=GenerationSupervisionSpec.legacy(),
     )
 
 
@@ -175,12 +181,14 @@ def _trainer(
     *,
     epochs: int = 1,
     progress=None,
+    generation_backend=None,
 ) -> SynchronousTransportTrainer:
     return SynchronousTransportTrainer(
         workspace=workspace,
         trace=trace,
         parameters=_parameters(epochs=epochs),
         device="cpu",
+        generation_backend=generation_backend,
         checkpoint_every_steps=1,
         progress=progress,
     )
@@ -232,6 +240,53 @@ def test_synchronous_transport_fit_emits_runtime_loadable_weights(tmp_path: Path
     transformed = runtime.transform(source_kv, position_ids=torch.arange(4))
     assert transformed.shape == (2, 3, 1, 4, 32)
     assert bool(torch.isfinite(transformed).all())
+
+
+def test_synchronous_trainer_batches_connected_generation_losses(tmp_path: Path) -> None:
+    workspace, trace = _synthetic_trace(tmp_path)
+
+    class ConnectedBackend:
+        supervision_id = TARGET_LOGIT_SUPERVISION_ID
+
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args: object) -> None:
+            return None
+
+        def parameters(self):
+            return {"supervision_id": self.supervision_id}
+
+        def losses(self, _record, tensors, transformed):
+            self.calls += 1
+            target = tensors["target_kv"].to(transformed).unsqueeze(0)
+            delta = transformed.float() - target.float()
+            generation = delta.square().flatten(1).mean(dim=1)
+            distillation = delta.abs().flatten(1).mean(dim=1)
+            return generation, distillation
+
+    backend = ConnectedBackend()
+    parameters = replace(_parameters(), generation=GenerationSupervisionSpec())
+    trainer = SynchronousTransportTrainer(
+        workspace=workspace,
+        trace=trace,
+        parameters=parameters,
+        device="cpu",
+        generation_backend=backend,
+        checkpoint_every_steps=1,
+    )
+
+    fitted, _, _ = trainer.fit(
+        tmp_path / "connected",
+        stage_input_sha256=_digest("connected-stage"),
+    )
+
+    assert backend.calls == len(trace.records)
+    assert fitted[0].metrics.native_generation > 0
+    assert fitted[0].metrics.prompt_tail_distillation > 0
 
 
 def _known_affine_batch() -> tuple[
@@ -537,6 +592,10 @@ def test_publication_transport_runner_has_no_matrix_override() -> None:
     assert "require_registered" not in parameters
     assert TransportTrainingParameters().ranks == REGISTERED_RANKS
     assert TransportTrainingParameters().deployment_seed == DEPLOYMENT_SEED
+    assert (
+        TransportTrainingParameters().generation.supervision_id
+        == TARGET_LOGIT_SUPERVISION_ID
+    )
 
 
 def test_fit_manifest_requires_the_complete_registered_matrix(tmp_path: Path) -> None:
@@ -590,6 +649,7 @@ def test_fit_manifest_requires_the_complete_registered_matrix(tmp_path: Path) ->
         training=training,
         candidates=candidates,
         training_initializer_sha256=_digest("initializer"),
+        generation_sample_store_sha256=trace.raw_sample_store_sha256,
     )
 
     assert manifest.validate(workspace=workspace, trace=trace) == []
@@ -598,3 +658,13 @@ def test_fit_manifest_requires_the_complete_registered_matrix(tmp_path: Path) ->
         workspace=workspace,
         trace=trace,
     )
+    v2_payload = manifest.to_dict()
+    v2_payload["schema_version"] = V5_RIDGE_TRANSPORT_FIT_SCHEMA
+    v2_payload["training"].pop("generation")
+    v2_payload.pop("generation_sample_store_sha256")
+
+    loaded_v2 = V5TransportFitManifest.from_dict(v2_payload)
+
+    assert loaded_v2.training.generation == GenerationSupervisionSpec.legacy()
+    assert loaded_v2.to_dict() == v2_payload
+    assert loaded_v2.validate(workspace=workspace, trace=trace) == []
