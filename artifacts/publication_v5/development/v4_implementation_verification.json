@@ -1,0 +1,146 @@
+{
+  "authority": "diagnostic_only_not_publication_evidence",
+  "build": {
+    "isolated_wheel_import": {
+      "allocator_contract": "native_default_v1",
+      "fit_schema": "goldenexperience.v5_transport_fit.v4",
+      "status": "passed",
+      "supervision_id": "full_prefix_native_greedy_distillation_v1"
+    },
+    "manifest": {
+      "artifacts_cache_excluded": true,
+      "file_sha256": "7e697a3b9e7233b8e6cf140c4494867af2da3d3ca61e7c3cf1935243ebd71dba",
+      "transport_v4_document_included": true
+    },
+    "sdist": {
+      "filename": "goldenexperience-0.1.0.tar.gz",
+      "sha256": "f3b8aeba447d6d6fc314990fdcc6b033054761d436f0ab67e45e842d6d497eef",
+      "size_bytes": 549280
+    },
+    "status": "passed",
+    "wheel": {
+      "filename": "goldenexperience-0.1.0-py3-none-any.whl",
+      "sha256": "539ff99ddb4db19bef033b5f48a43412bf3a0c9938888351293ac044986579a2",
+      "size_bytes": 370624
+    }
+  },
+  "code_sha256": "b3d0dcb81e5a528937c1a80858273e2e8f8b1876be3d3691e222959867ef2760",
+  "compatibility": {
+    "legacy_v1_content_sha256": "488f9ae57f5e955ac9b0657a1ad720a293a56690b8c0f5ba58c67ac3630962f1",
+    "legacy_v1_round_trip_tested": true,
+    "ridge_v2_content_sha256": "9481dba63de25c6bf8d553a7ff940aef0310246357664d084fc14ebe684686fd",
+    "ridge_v2_sha256_preserved": true,
+    "sampled_logit_v3_content_sha256": "ea33def28699c45867a6a9e9bd4aaaf48773d9ff2bd0007fced60549eec6d7b4",
+    "sampled_logit_v3_sha256_preserved": true
+  },
+  "coverage": {
+    "fail_under": 68.0,
+    "head_aware_transport": {
+      "branches": 250,
+      "covered_branches": 164,
+      "covered_lines": 556,
+      "percent_combined": 77.92207792207792,
+      "statements": 674
+    },
+    "repository": {
+      "branches": 6464,
+      "covered_branches": 3604,
+      "covered_lines": 13874,
+      "missing_lines": 4909,
+      "percent_combined": 69.2280270923278,
+      "statements": 18783
+    },
+    "status": "passed",
+    "v5_fit": {
+      "branches": 490,
+      "covered_branches": 307,
+      "covered_lines": 852,
+      "percent_combined": 72.66457680250784,
+      "statements": 1105
+    },
+    "v5_generation": {
+      "branches": 110,
+      "covered_branches": 75,
+      "covered_lines": 343,
+      "percent_combined": 85.3061224489796,
+      "statements": 380
+    }
+  },
+  "implementation_commit": "36af3e760f045cc6fd6a552bf2ea168ee0d4ca35",
+  "quality_gates": {
+    "mypy": {
+      "module_count": 96,
+      "status": "passed"
+    },
+    "pytest": {
+      "duration_seconds": 71.28,
+      "passed": 362,
+      "status": "passed",
+      "warnings": 50
+    },
+    "ruff": {
+      "paths": [
+        "goldenexperience",
+        "tests",
+        "scripts"
+      ],
+      "status": "passed"
+    }
+  },
+  "real_model_full_prefix_smoke": {
+    "accumulation_rows": 8,
+    "allocator": "native_default_v1",
+    "bounded_suffix_tokens_for_longest_row": 256,
+    "candidate_count": 9,
+    "candidate_microbatch": 3,
+    "device": "NVIDIA A100-SXM4-80GB",
+    "driver_version": "575.57.08",
+    "finite_gradient_tensor_count": 72,
+    "full_suffix_tokens_for_longest_row": 823,
+    "gradients_finite": true,
+    "optimizer_updates": 1,
+    "peak_target_cuda_gib": 50.368,
+    "prefix_tokens": 8192,
+    "sample_id": "transport_train.8192.math.817582b750cf17ed8b0a",
+    "single_row_independent_process_repetitions": 2,
+    "single_row_peak_target_cuda_gib": 50.3,
+    "status": "passed",
+    "target_compute_dtype": "bfloat16",
+    "teacher_count": 8,
+    "torch_cuda_version": "13.0",
+    "torch_version": "2.11.0+cu130",
+    "transformers_version": "5.13.0",
+    "transport_chunk_tokens": 256
+  },
+  "rejected_allocator_diagnostic": {
+    "configuration": "expandable_segments:True",
+    "failure": "asynchronous_cuda_illegal_memory_access",
+    "status": "rejected_before_formal_v4_run"
+  },
+  "schema_version": "goldenexperience.publication_v5_implementation_verification.v2",
+  "source_bindings": {
+    "benchmark_manifest_sha256": "557cfe1eccd522d19e6a06177b2d86e6b1a55587b8a84cba65732fad4d2bcd4a",
+    "full_prefix_backend": {
+      "file_sha256": "c2514a74faa2e40a81e375f6b52623223466ca8d91104a4574befc48e8cbc1cd",
+      "path": "goldenexperience/size_variant/v5_generation.py",
+      "symbol": "FullPrefixGenerationBackend"
+    },
+    "full_prefix_trainer": {
+      "file_sha256": "1e4bd1e90d1b3da44f37250ef95b89b1c27331e4cdc7d3384c979e029f6f2523",
+      "path": "goldenexperience/size_variant/v5_fit.py",
+      "symbol": "SynchronousTransportTrainer._train_full_prefix_segment"
+    },
+    "head_aware_transport": {
+      "file_sha256": "6d23db500e834ac0f2845b53b84b9f2929ccea2b097fee3adecdd24bc56367b6",
+      "path": "goldenexperience/size_variant/head_aware_transport.py",
+      "symbol": "build_trainable_head_aware_transport"
+    },
+    "raw_sample_store_sha256": "911f377094b540163a9fe2cd6dd2f055e4b5376ca541bb914200cd6fe5d16e58",
+    "test_fit_file_sha256": "0d6f1c2aeb6c3313e77a7eea27a7cdf257da845984911a7d2252c46741f7ffae",
+    "test_generation_file_sha256": "dbf2a0e6c03411741a9fd7bae9f1de1ffbbb260c941024bc09bf791e5de3fbab",
+    "transport_train_trace_manifest_sha256": "57204e839f3295fcb1d9941ff6092525a0fb5587d89624e8af3ff946a2d36933"
+  },
+  "test_commit": "aace27c85371d9fc11ab1e63abf9f82c4794e7de",
+  "verified_at": "2026-07-14T17:03:14Z",
+  "workspace_disposition": "implementation smoke reused immutable v3-bound transport-train inputs only; a fresh code-bound v4 workspace is still required"
+}

@@ -1,0 +1,13 @@
+include CITATION.cff
+include CONTRIBUTING.md
+include README.zh-CN.md
+recursive-include .github *.yml
+recursive-include artifacts *.md
+include artifacts/cached_kv/*.json
+include artifacts/publication_v5/initialization.json
+recursive-include configs *.example *.json *.yaml
+recursive-include docs *.md
+recursive-include examples *.py
+recursive-include recipes *.env *.md
+recursive-include scripts *.ps1 *.py *.sh
+recursive-include tests *.py

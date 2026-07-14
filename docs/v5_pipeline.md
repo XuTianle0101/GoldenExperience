@@ -70,6 +70,7 @@ golden-v5-pipeline fit-transport \
   --workspace artifacts/v5_pipeline \
   --direction qwen3_4b_to_8b \
   --samples datasets/publication/transport_train.jsonl \
+  --source-device cuda:0 \
   --device cuda:1
 ```
 
@@ -78,13 +79,22 @@ The stage trains the Cartesian product of ranks 32/64/128 and seeds 17/29/43. It
 `1e-4`, gradient accumulation 8, gradient clipping at 1.0, and the manifest loss contract.
 All nine candidates consume each trace shard synchronously, and each immutable shared shard is
 verified and deserialized once for the complete fit rather than once per row, epoch, or candidate.
-Fit v3 reopens only the exact `transport_train` raw store already hash-bound by collection. For
-each row, the frozen target consumes the real suffix with the sampled native target KV and emits
-16 greedy teacher tokens. All nine transformed sampled caches are stacked into one target-model
-batch; greedy-token cross entropy and teacher-logit KL remain differentiable through the past KV.
-The older trace constants remain diagnostic fields and do not enter the v3 objective. The raw
-store is hashed before and after fitting, and the target model identity plus complete supervision
-contract are part of the stage and checkpoint binding.
+Fit v4 reopens only the exact `transport_train` raw store already hash-bound by collection. The
+frozen source and target models reconstruct each complete native prefix cache on separate GPUs,
+and tokenization must reproduce the collected token hash. Each row's frozen target teacher emits
+16 greedy tokens from the full native target cache. Candidate microbatches of three consume the
+same suffix through full transported caches; greedy-token cross entropy and teacher-logit KL
+remain differentiable through a detached cache proxy whose accumulated gradient is passed once
+through the checkpointed transport.
+
+Prefix groups and rows within each group have deterministic per-epoch orders. Global consecutive
+8-row windows retain exactly 512 optimizer steps per epoch even when a window crosses a prefix
+boundary. Transport forward uses bfloat16 and 256-token checkpointed chunks. The pinned
+Torch 2.11.0/CUDA 13.0 path requires the default native allocator; `PYTORCH_ALLOC_CONF` and
+`PYTORCH_CUDA_ALLOC_CONF` must be unset. The raw store is hashed before and after fitting, and
+both model identities, the full supervision contract, group-order digests, allocator identity,
+and optimizer boundary are part of the stage/checkpoint binding. Existing v1/v2/v3 manifests
+remain readable, but their checkpoints cannot resume v4.
 
 Transport v2 first fits per-layer/head K/V normalizers using only `transport_train`. It then solves
 an augmented full-rank ridge system at ratio `1e-3`, with every shared shard weighted by its number
@@ -168,6 +178,7 @@ golden-v5-pipeline fit-transport \
   --workspace artifacts/v5_pipeline \
   --direction qwen3_8b_to_14b \
   --samples datasets/publication/transport_train.jsonl \
+  --source-device cuda:0 \
   --device cuda:1
 ```
 

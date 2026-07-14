@@ -1,8 +1,9 @@
 # Full-Prefix Transport Training v4
 
-This document preregisters the next transport-training method after the full v3
-method-dev failure. It does not change the runtime transport structure, the benchmark
-splits, the rank/seed selection rule, or any quality threshold.
+This document preregistered the next transport-training method after the full v3
+method-dev failure. The implementation amendment below was recorded before any v4 fit or
+method-dev result was observed. It does not change the runtime transport structure, the
+benchmark splits, the rank/seed selection rule, or any quality threshold.
 
 ## Motivation And Evidence Boundary
 
@@ -103,11 +104,38 @@ the source-window expansion required another 13.5 GiB. Activation checkpointing 
 nine transformed caches fit, but batch-nine target attention still exhausted 78.79 GiB.
 
 The preregistered configuration uses non-reentrant activation checkpointing and candidate
-microbatches of three. On the same longest example, all nine candidates completed forward
-and backward at a 62.6875 GiB peak. All 108 differentiable runtime tensors had finite
-gradients and the aggregate gradient norm was 14.097. Any implementation that exceeds this
-microbatch, silently shortens the prefix, detaches the past cache, or substitutes sampled KV
-violates the contract.
+microbatches of three. A pre-implementation tensor-level feasibility probe completed all nine
+candidates at a 62.6875 GiB peak and produced finite proxy gradients. It established the
+microbatch bound, but was not the final trainable-module memory measurement.
+
+## Pre-Evaluation Implementation Amendment
+
+The final implementation was frozen in commits `36af3e7` and `aace27c`, before creating a
+v4 workspace or observing any v4 fit or method-dev metric. It makes the following numerical
+and operational details explicit:
+
+- full-prefix transport forward and recomputation use the target model's bfloat16 dtype;
+  exported runtime weights and the frozen `head_aware_transport_v2` runtime remain unchanged;
+- RoPE and source mixing operate in 256-token chunks under nested non-reentrant activation
+  checkpointing;
+- the structurally shared source-layer plan is gathered once per target layer and broadcast
+  through learned head mixing, removing an exact eightfold duplicate expansion without changing
+  the function;
+- source and target native models occupy separate CUDA devices, defaulting to `cuda:0` and
+  `cuda:1`;
+- the run requires PyTorch's default native CUDA allocator (`native_default_v1`). In the pinned
+  Torch 2.11.0/CUDA 13.0 stack, `expandable_segments:True` repeatedly caused illegal-memory
+  failures on the real 8192-token path, while two independent default-allocator single-row runs
+  and one complete 8-row window passed.
+
+The implemented nine-candidate 8192-token single-row path peaked at 50.300 GiB on the target
+A100. The complete 8-row accumulation window, including eight native teachers, proxy-gradient
+accumulation, sampled alignment, clipping, and one AdamW update, peaked at 50.368 GiB. All 72
+trainable parameter-gradient tensors were present and finite. These are implementation
+diagnostics only; they do not replace the registered 4,096-row fit or method-dev evaluation.
+Any implementation that exceeds the candidate microbatch, silently shortens the prefix,
+detaches the past cache, substitutes sampled KV, or enables an unregistered allocator violates
+the contract.
 
 ## Checkpoint And Identity Contract
 
@@ -121,7 +149,9 @@ V4 checkpoints must bind:
 - candidate rank/seed identities, model tensors, AdamW moments, finite metric sums, and the
   exact 8-row optimizer boundary;
 - activation-checkpoint mode, candidate microbatch size three, and the full-prefix cache
-  mode.
+  mode;
+- the `native_default_v1` allocator identity and the executable code hash that binds bfloat16
+  compute and 256-token transport chunks.
 
 Resume may recompute deterministic source/target prefixes and teachers. It must reject a
 changed group plan, sample order, prefix token hash, cache mode, supervision parameter,
@@ -140,4 +170,3 @@ below 0.98, or perplexity drift exceeds 2%. The structure is publishable only if
 oracle-safe coverage is at least 0.45. A second failure is recorded as negative evidence;
 it does not authorize a threshold change, a biased pilot, rank/seed cherry-picking, or access
 to selector, calibration, validation, sealed, or runtime splits.
-
