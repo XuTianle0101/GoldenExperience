@@ -1,0 +1,85 @@
+{
+  "authority": "diagnostic_only_not_publication_evidence",
+  "benchmark_manifest_sha256": "557cfe1eccd522d19e6a06177b2d86e6b1a55587b8a84cba65732fad4d2bcd4a",
+  "candidate_order": [
+    "transport-r32-s17-5157adc34b0c",
+    "transport-r32-s29-d370fb3273f9",
+    "transport-r32-s43-82be1ded61e5",
+    "transport-r64-s17-b65196cccb98",
+    "transport-r64-s29-3b6bbd91dc7c",
+    "transport-r64-s43-afd9990f2b4e",
+    "transport-r128-s17-24b8f5ecfd50",
+    "transport-r128-s29-9fa6126accd6",
+    "transport-r128-s43-6613e07f106b"
+  ],
+  "conclusion": {
+    "decision": "freeze_teacher_horizon_at_16_tokens",
+    "reason": "four-token supervision is nearly zero on a full-cache failure, while the registered 16-token horizon exposes candidate-separating loss",
+    "registered_method_dev_horizon": 16,
+    "use_future_method_dev_results_to_change_horizon": false
+  },
+  "created_at": "2026-07-14T07:35:05+00:00",
+  "direction": "qwen3_4b_to_8b",
+  "four_token_sampled_cache": {
+    "native_generation_ce": [
+      0.00006117826706031337,
+      0.00003856216062558815,
+      0.000026404026357340626,
+      0.000026165895178564824,
+      0.000026255329430568963,
+      0.00002631493771332316,
+      0.00002643414518388454,
+      0.000024199087420129217,
+      0.0000233348437177483
+    ],
+    "prompt_tail_kl": [
+      0.00006638393824687228,
+      0.000043327105231588706,
+      0.0000315359648084268,
+      0.00001271278779313434,
+      0.00001324518962064758,
+      0.000012507211977208499,
+      0.000011317325515847187,
+      0.000010589046723907813,
+      0.000010852463674382307
+    ]
+  },
+  "method_dev_report_sha256": "f06d333f8ed871d683df1c6d1f1e1ce4e4f9f47004b541ccf96f7eb07a36798e",
+  "method_dev_trace_manifest_sha256": "6e4638a670efb9c7ba5a191c47f549dbab85c01b6be23c961883adf8099c9781",
+  "pipeline_id": "v5-pipeline-832f408e9bfb1cf6acf698a2",
+  "sample": {
+    "full_cache_greedy_matches": 4,
+    "full_cache_greedy_tokens": 16,
+    "full_cache_perplexity_drift_pct": 537.5400673434067,
+    "sample_id": "method_dev.8192.gsm8k.7b757a0de1e347fd2e09",
+    "selection": "lowest_greedy_agreement_then_highest_drift_for_v2_deployment_candidate"
+  },
+  "sixteen_token_sampled_cache": {
+    "deployment_ce_increase_ratio": 10496.895504332582,
+    "deployment_kl_increase_ratio": 16664.41869980474,
+    "native_generation_ce": [
+      0.8350170850753784,
+      0.8127196431159973,
+      0.7479623556137085,
+      0.26575300097465515,
+      0.22885385155677795,
+      0.2187039852142334,
+      0.2774764597415924,
+      0.19385205209255219,
+      0.23211991786956787
+    ],
+    "prompt_tail_kl": [
+      0.6829986572265625,
+      0.6716656684875488,
+      0.6171345114707947,
+      0.16026270389556885,
+      0.12544186413288116,
+      0.12777431309223175,
+      0.18859665095806122,
+      0.1161578819155693,
+      0.14854344725608826
+    ],
+    "teacher_tokens_sha256": "5eff23f91b05f091eb66e5c2ee16247c7f95b59648a6397dfc55e8eb2ff9cc73"
+  },
+  "transport_fit_manifest_sha256": "9481dba63de25c6bf8d553a7ff940aef0310246357664d084fc14ebe684686fd"
+}

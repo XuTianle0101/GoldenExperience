@@ -31,6 +31,7 @@ def _tiny_model() -> Qwen3ForCausalLM:
 
 
 def test_suffix_bound_preserves_absolute_head_and_tail_positions() -> None:
+    assert GenerationSupervisionSpec().teacher_tokens == 16
     spec = GenerationSupervisionSpec(teacher_tokens=2, max_suffix_tokens=6)
 
     suffix = bound_suffix_token_ids(

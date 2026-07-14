@@ -29,17 +29,18 @@ T_hat_c = transport_c(source_sample, absolute_key_positions)
 The raw suffix/query is tokenized with the pipeline-bound target tokenizer. Suffixes of
 at most 256 tokens are used in full. Longer suffixes use the first 128 and last 128
 tokens while retaining their original absolute positions. The request is rejected if
-the untruncated prefix, suffix, and four teacher tokens exceed the model position
+the untruncated prefix, suffix, and 16 teacher tokens exceed the model position
 contract.
 
 The frozen target model first consumes the bounded suffix with the native sampled
-target KV as its past cache. It then generates exactly four greedy tokens. The logits
-at those four autoregressive steps are detached as the teacher distribution. All
+target KV as its past cache. It then generates exactly 16 greedy tokens, matching the
+registered method-dev continuation horizon. The logits at those autoregressive steps
+are detached as the teacher distribution. All
 teacher tensors are derived only from `transport_train` and may be cached in host
 memory; they are never model parameters or publication labels.
 
 All candidates for a row are stacked on the batch dimension. One teacher-forced target
-forward consumes the same bounded suffix and the first three native teacher tokens,
+forward consumes the same bounded suffix and the first 15 native teacher tokens,
 with each candidate's transformed sampled KV as the past cache. Target-model parameters
 are frozen, but autograd remains enabled through the past KV. This defines two losses
 that were constants in v2:
