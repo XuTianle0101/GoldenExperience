@@ -1,7 +1,7 @@
 {
   "authority": "verified_pipeline_stage_receipt",
   "benchmark_manifest_sha256": "557cfe1eccd522d19e6a06177b2d86e6b1a55587b8a84cba65732fad4d2bcd4a",
-  "code_sha256": "0424fadb7ab7a036028783f69a5cc46949f379bd789da4a4830b4316b836d24c",
+  "code_sha256": "5b2f1272e7d6e4fa47ea300dafaddac8e7434d1bfe60969b12d3450533e64fd8",
   "collector": {
     "attention_implementation": "sdpa",
     "collector_id": "qwen3_grouped_prefix_attention_trace_v2",
@@ -11,26 +11,28 @@
     "max_queries": 32,
     "seed": 17,
     "source_device_name": "NVIDIA A100-SXM4-80GB",
+    "source_device_type": "cuda",
     "target_device_name": "NVIDIA A100-SXM4-80GB",
+    "target_device_type": "cuda",
     "torch_version": "2.11.0+cu130",
     "transformers_version": "5.13.0"
   },
-  "completed_at": "2026-07-13T22:44:20.533901+00:00",
+  "completed_at": "2026-07-14T04:17:19.951519+00:00",
   "direction": "qwen3_4b_to_8b",
-  "input_sha256": "040d96fb7af9fb52e6d8d747101901cf6d1aa81566746b10514e92e400d21249",
-  "pipeline_id": "v5-pipeline-fcc72c17609ebfb1c14e33c1",
+  "input_sha256": "0c3a6b57105aef33c0c0464cbf195d5eecb2b6a9a0600fb2411adcb3bd3953b7",
+  "pipeline_id": "v5-pipeline-832f408e9bfb1cf6acf698a2",
   "raw_sample_store_sha256": "bb56d256380834ed65947dcea0fb7ad0b2ea4d2a37e8fc5f3e0ac700b693166b",
   "schema_version": "goldenexperience.publication_v5_verified_stage.v1",
   "stage": "collect_method_dev",
   "stage_receipt": {
-    "sha256": "be411cfd56f3b62347b2a545edd40646cd11668c89991a3b43a8561b0c7909db",
-    "workspace_path": "receipts/qwen3_4b_to_8b/collect_method_dev/be411cfd56f3b62347b2a545edd40646cd11668c89991a3b43a8561b0c7909db.json"
+    "sha256": "f62aaeaf0e50d7c794380c1a74f72d12ce199f5ae27c0aad55bed7bb1b7e86e9",
+    "workspace_path": "receipts/qwen3_4b_to_8b/collect_method_dev/f62aaeaf0e50d7c794380c1a74f72d12ce199f5ae27c0aad55bed7bb1b7e86e9.json"
   },
   "trace_manifest": {
-    "content_sha256": "7561035a9d40beec36c45a4a7cbf16753b98c8f815713892f1bd690a4f71bf76",
-    "file_sha256": "ace6f7cb12f9c64535805577be14a7a65e2670b546aaeee553e1dcd51abac625",
+    "content_sha256": "6e4638a670efb9c7ba5a191c47f549dbab85c01b6be23c961883adf8099c9781",
+    "file_sha256": "0b393a7258637479b9c9dbaca993ed2341118045480d0be1050f28d5a7323db0",
     "size_bytes": 1005638,
-    "workspace_path": "objects/ac/ace6f7cb12f9c64535805577be14a7a65e2670b546aaeee553e1dcd51abac625.json"
+    "workspace_path": "objects/0b/0b393a7258637479b9c9dbaca993ed2341118045480d0be1050f28d5a7323db0.json"
   },
   "verification": {
     "all_unique_shards_loaded": true,
@@ -50,6 +52,6 @@
     "records": 1024,
     "shard_bytes": 9475919040,
     "unique_shards": 92,
-    "verified_at": "2026-07-13T22:47:53.169840+00:00"
+    "verified_at": "2026-07-14T04:20:09.797595+00:00"
   }
 }
