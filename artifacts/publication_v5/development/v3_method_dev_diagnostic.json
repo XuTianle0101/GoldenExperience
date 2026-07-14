@@ -1,0 +1,161 @@
+{
+  "authority": "diagnostic_only_not_publication_evidence",
+  "benchmark_manifest_sha256": "557cfe1eccd522d19e6a06177b2d86e6b1a55587b8a84cba65732fad4d2bcd4a",
+  "code_sha256": "e61a3e4a5fd33528eac6a45b7b6532be63c117ec4610131f8643c1d631e9cc5a",
+  "conclusion": {
+    "gate_disposition": "v3_rejected_without_threshold_change",
+    "next_method": "full_prefix_native_teacher_distillation",
+    "next_method_requirements": [
+      "condition both native teacher and transported student on the complete prefix cache",
+      "retain train-only fitting and the registered 0.45 oracle-safe coverage gate",
+      "use activation checkpointing and candidate microbatches of three on 8192-token prefixes",
+      "reuse full source and target prefix caches within deterministic prefix-group batches",
+      "bind the changed estimand and implementation to a new immutable pipeline workspace"
+    ],
+    "primary_supported_mechanism": "the sampled-cache native teacher differs from the deployment full-cache native teacher on most prefixes longer than 256 tokens",
+    "rank_or_seed_tuning_is_insufficient": true
+  },
+  "created_at": "2026-07-14T13:20:25.901228+00:00",
+  "direction": "qwen3_4b_to_8b",
+  "full_method_dev": {
+    "candidate_safe_set_analysis_v3": {
+      "all_nine_safe_count": 39,
+      "all_nine_safe_coverage": 0.0380859375,
+      "any_nine_safe_count": 311,
+      "any_nine_safe_coverage": 0.3037109375,
+      "no_candidate_safe_count": 713,
+      "sample_count": 1024
+    },
+    "deployment_paired_safe_contingency": {
+      "v2_safe_v3_safe": 67,
+      "v2_safe_v3_unsafe": 171,
+      "v2_unsafe_v3_safe": 48,
+      "v2_unsafe_v3_unsafe": 738
+    },
+    "deployment_v2": {
+      "aggregate_perplexity_drift_pct": 24.52328663116479,
+      "candidate_id": "transport-r128-s17-24b8f5ecfd50",
+      "greedy_agreement": 0.640380859375,
+      "oracle_safe_coverage": 0.232421875,
+      "safe_count": 238,
+      "task_preservation": 0.9816876634968891
+    },
+    "deployment_v3": {
+      "aggregate_perplexity_drift_pct": 21.461946235665426,
+      "candidate_id": "transport-r128-s17-6cbf6e9682de",
+      "greedy_agreement": 0.5797119140625,
+      "oracle_safe_coverage": 0.1123046875,
+      "safe_count": 115,
+      "task_preservation": 0.9856252879714107
+    },
+    "mean_row_change_v3_minus_v2": {
+      "greedy_agreement": -0.0606689453125,
+      "perplexity_drift_pct": -11.206201604720416,
+      "task_preservation": 0.003937624474521554
+    },
+    "registered_oracle_safe_coverage_gate": 0.45
+  },
+  "full_prefix_backward_feasibility": {
+    "activation_checkpoint_batch_nine": {
+      "failure": "target_attention_out_of_memory",
+      "memory_in_use_gib_at_failure": 78.79,
+      "requested_gib": 0.58203125,
+      "transformed_batch_allocated_gib": 28.02
+    },
+    "activation_checkpoint_candidate_microbatch_three": {
+      "baseline_cuda_gib": 16.76626443862915,
+      "bounded_suffix_tokens": 256,
+      "candidate_count": 9,
+      "candidate_microbatch": 3,
+      "final_cuda_gib": 17.15107822418213,
+      "full_suffix_tokens": 823,
+      "gradient_norm": 14.096960835973327,
+      "gradient_tensor_count": 108,
+      "gradients_finite": true,
+      "peak_cuda_gib": 62.68747854232788,
+      "prefix_tokens": 8192,
+      "sample_id": "transport_train.8192.math.817582b750cf17ed8b0a"
+    },
+    "naive_batch_nine": {
+      "failure": "transport_source_window_expansion_out_of_memory",
+      "memory_in_use_gib_at_failure": 68.93,
+      "requested_gib": 13.5,
+      "transforms_completed": 1
+    }
+  },
+  "method_dev_report_bindings": {
+    "v2_sha256": "f06d333f8ed871d683df1c6d1f1e1ce4e4f9f47004b541ccf96f7eb07a36798e",
+    "v3_sha256": "eb9ff0415d4d684ad93c51465599cc821eb3560c2a5149309b346122c67f7c2a"
+  },
+  "sampled_teacher_alignment": {
+    "by_task": {
+      "competition_math": {
+        "match": 169,
+        "mismatch": 247
+      },
+      "function_calling": {
+        "match": 41,
+        "mismatch": 7
+      },
+      "grade_school_math": {
+        "match": 176,
+        "mismatch": 240
+      },
+      "long_context_qa": {
+        "match": 34,
+        "mismatch": 38
+      },
+      "python_code_generation": {
+        "match": 33,
+        "mismatch": 39
+      }
+    },
+    "by_token_bucket": {
+      "128": {
+        "match": 251,
+        "mismatch": 5
+      },
+      "2048": {
+        "match": 43,
+        "mismatch": 213
+      },
+      "512": {
+        "match": 113,
+        "mismatch": 143
+      },
+      "8192": {
+        "match": 46,
+        "mismatch": 210
+      }
+    },
+    "exact_sequence_match_count": 453,
+    "exact_sequence_match_rate": 0.4423828125,
+    "long_prefix_exact_sequence_match_count": 202,
+    "long_prefix_exact_sequence_match_rate": 0.2630208333333333,
+    "long_prefix_sample_count": 768,
+    "mismatch_count": 571,
+    "sample_count": 1024,
+    "suffix_truncated_count": 21,
+    "suffix_untruncated_count": 1003,
+    "untruncated_mismatch_lower_bound": 550
+  },
+  "schema_version": "goldenexperience.publication_v5_transport_diagnostic.v3",
+  "source_bindings": {
+    "generation_backend": {
+      "file_sha256": "a2d0776bebb1f1b97b8657c689a04d7ad8101570d7830cb47d0199fdb423371e",
+      "path": "goldenexperience/size_variant/v5_generation.py",
+      "symbol": "TargetLogitGenerationBackend.losses"
+    },
+    "method_dev_evaluator": {
+      "file_sha256": "990c9b3b90577062404ac1289c1a6415045da5bac9a190aeba5fc129968676c9",
+      "path": "goldenexperience/size_variant/v5_real_method_dev.py",
+      "symbol": "RealQwenMethodDevEvaluator.evaluate"
+    },
+    "transport": {
+      "file_sha256": "b0e13bff8f8a4c8de363e30e7693149d902054b0d666a1f931ee073e591419ac",
+      "path": "goldenexperience/size_variant/head_aware_transport.py",
+      "symbol": "HeadAwareKVTransport.transform"
+    }
+  },
+  "transport_fit_manifest_sha256": "ea33def28699c45867a6a9e9bd4aaaf48773d9ff2bd0007fced60549eec6d7b4"
+}
