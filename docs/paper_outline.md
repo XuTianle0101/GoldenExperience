@@ -22,6 +22,8 @@
 
 - A head-aware, attention-preserving transport for same-family parameter sizes and unequal
   KV-head counts. Transport alone is not claimed as novel; see `related_work_matrix.md`.
+  The registered Qwen3 4B/8B/14B models all have eight KV heads, so unequal-head support is
+  an implementation capability, not an empirical result of the current study.
 - Source-only selective admission whose threshold maximizes coverage subject to a
   Bonferroni-corrected, family-wise exact 95% one-sided behavioral-regression bound on an
   independent calibration split.
@@ -33,9 +35,11 @@
 - A grouped-prefix benchmark and one-shot semantic sealed protocol that bind data, code,
   model, transport, predictor, and threshold hashes.
 
-The provisional paper claim is the conjunction of calibrated request-level safety and direct
-paged materialization for cross-scale translated KV, not the existence of cross-model KV
-translation by itself.
+The provisional paper claim is the conjunction of independently calibrated source-only
+request admission with an exact finite-sample behavioral-regression bound and atomic direct
+paged materialization for cross-scale target-prefix replacement. Cross-model translation,
+cross-size Qwen transport, target-prefill skipping, TTFT improvement, head-aware mapping, and
+cache error guarantees all have prior art and are not standalone novelty claims.
 
 ## Evaluation Questions
 

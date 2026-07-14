@@ -1,0 +1,99 @@
+{
+  "authority": "claim_scoping_evidence_not_empirical_result",
+  "audited_at": "2026-07-14T21:04:15Z",
+  "benchmark_manifest_sha256": "557cfe1eccd522d19e6a06177b2d86e6b1a55587b8a84cba65732fad4d2bcd4a",
+  "document_sha256": {
+    "docs/paper_outline.md": "11b9d1295b0d2dfa7c913367f1b50b355fdeb8d59760d71e9243b7d936964689",
+    "docs/related_work_matrix.md": "1a735fb7d0dce5bb12042133a8afa5957c9ccd7d97cf628ef2035a7ac7933ce5"
+  },
+  "documents_updated": [
+    "docs/paper_outline.md",
+    "docs/related_work_matrix.md"
+  ],
+  "executable_code_sha256": "b3d0dcb81e5a528937c1a80858273e2e8f8b1876be3d3691e222959867ef2760",
+  "findings": {
+    "closest_serving_predecessor": "Semantic Cache Distillation skips consumer prefill and reconstructs cache state, but is restricted to one Transformer topology with different weights, uses deterministic offline profiling, and reports no independent request-level behavioral-risk gate or page-native runtime path.",
+    "cross_size_transport_prior_art": "Dense Latent Communication evaluates all six Qwen3 4B/8B/14B directions with RoPE disentanglement, depth alignment, and per-KV-group K/V transforms.",
+    "guarantee_prior_art": "vCache provides a response-cache error guarantee through an online randomized policy under i.i.d. and correctly specified sigmoid assumptions; GoldenExperience cannot claim the first cache error guarantee.",
+    "privacy_boundary": "LCGuard addresses empirical reconstruction privacy rather than behavioral preservation and explicitly disclaims a formal privacy guarantee.",
+    "proxykv_boundary": "ProxyKV maps target-shaped per-key importance scores for pruning and never reconstructs K/V values.",
+    "runtime_boundary": "The audited translation papers do not demonstrate an atomic LMCache/vLLM paged scatter with rollback and no target object publication.",
+    "unequal_head_correction": "All registered Qwen3 4B/8B/14B models have eight KV heads and head dimension 128; unequal-head support is not an empirical result."
+  },
+  "official_proceedings_index_status": "open_network_unavailable",
+  "official_proceedings_note": "The environment retrieved exact arXiv records and versioned full text, but TLS connections to several official proceedings/index APIs were reset. The final official MLSys/OSDI/SOSP/NSDI/ATC/FAST/EuroSys/NeurIPS/ICML/ICLR index pass remains open and unqualified first claims remain prohibited.",
+  "schema_version": "goldenexperience.publication_v5_related_work_audit.v1",
+  "search_snapshot": "2026-07-14",
+  "sources": [
+    {
+      "arxiv_id": "2411.02820v4",
+      "pdf_sha256": "483670c3756e062605f27ab4ff2bb084938d86da5308e0e48f425a47542f0c77",
+      "pdf_size_bytes": 1207782,
+      "title": "DroidSpeak: KV Cache Sharing for Cross-LLM Communication and Multi-LLM Serving",
+      "venue": null
+    },
+    {
+      "arxiv_id": "2510.03215v2",
+      "pdf_sha256": "8846282656963fc48f72596f2d26c5f9f59bd6cc30c0d832b9fbe03904a34990",
+      "pdf_size_bytes": 1056870,
+      "title": "Cache-to-Cache: Direct Semantic Communication Between Large Language Models",
+      "venue": "ICLR 2026"
+    },
+    {
+      "arxiv_id": "2510.03346v3",
+      "pdf_sha256": "48b9ee8f1b46e58d729140666243f24f211ea7c55aa85ad9f767cf24cd9f5e9a",
+      "pdf_size_bytes": 4445040,
+      "title": "KVComm: Enabling Efficient LLM Communication through Selective KV Sharing",
+      "venue": "ICLR 2026"
+    },
+    {
+      "arxiv_id": "2502.03771v5",
+      "pdf_sha256": "c7587cd8d52f2be14aa93931ab3778b0a027fa8c589f580a43ba7ba74d2f2d49",
+      "pdf_size_bytes": 6428433,
+      "title": "vCache: Verified Semantic Prompt Caching",
+      "venue": "ICLR 2026"
+    },
+    {
+      "arxiv_id": "2605.16360v1",
+      "pdf_sha256": "f004274afa266e02c5251214d594cd03e79df4e7e8ad05946eb86a3b23725672",
+      "pdf_size_bytes": 1688177,
+      "title": "ProxyKV: Cross-Model Proxy Pruning for Efficient Long-Context LLM Inference",
+      "venue": null
+    },
+    {
+      "arxiv_id": "2605.22786v1",
+      "pdf_sha256": "62aecc1dc06f759511eb086d728fd0da2300d862c970c3dda26c9a63c8081353",
+      "pdf_size_bytes": 2551637,
+      "title": "LCGuard: Latent Communication Guard for Safe KV Sharing in Multi-Agent Systems",
+      "venue": null
+    },
+    {
+      "arxiv_id": "2606.07684v1",
+      "pdf_sha256": "5a9901d6384e414503a6a511268c1321240ef9c7f556a1da9c3b0c23b6a3718b",
+      "pdf_size_bytes": 1075961,
+      "title": "Semantic Cache Distillation: Efficient State Transfer via Reuse and Selective Patching",
+      "venue": "ICML 2026"
+    },
+    {
+      "arxiv_id": "2606.13594v1",
+      "pdf_sha256": "2a16cbd2718637baefaa249ffb4d03cadbb2a6aa0ff191ba9eb99b1bdcc516df",
+      "pdf_size_bytes": 3310807,
+      "title": "See What I See, Know What I Think: Dense Latent Communication Across Heterogeneous Agents",
+      "venue": null
+    },
+    {
+      "arxiv_id": "2604.13349v2",
+      "pdf_sha256": "e77e27f3d3a8791e4d7c5f28936f9d2a9e1efb180e62aa27d189a09491a836d4",
+      "pdf_size_bytes": 11317773,
+      "title": "When Less Latent Leads to Better Relay: Information-Preserving Compression for Latent Multi-Agent LLM Collaboration",
+      "venue": null
+    }
+  ],
+  "verification": {
+    "arxiv_current_versions_checked": true,
+    "exact_version_pdfs_hashed": true,
+    "full_text_claims_checked": true,
+    "stale_vcache_ar5iv_text_rejected": true,
+    "tracked_full_text_payloads": false
+  }
+}
