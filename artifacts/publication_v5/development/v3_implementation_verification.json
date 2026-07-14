@@ -1,0 +1,89 @@
+{
+  "authority": "diagnostic_only_not_publication_evidence",
+  "build": {
+    "isolated_wheel_import": {
+      "fit_schema": "goldenexperience.v5_transport_fit.v3",
+      "status": "passed",
+      "supervision_id": "sampled_prefix_native_greedy_distillation_v1",
+      "teacher_tokens": 16
+    },
+    "sdist": {
+      "filename": "goldenexperience-0.1.0.tar.gz",
+      "sha256": "539f75e72b0b953d8cc49ef7ca988b9d3a0e0b78e0fb4bfcbb13bf55bee056ed",
+      "size_bytes": 533111
+    },
+    "status": "passed",
+    "wheel": {
+      "filename": "goldenexperience-0.1.0-py3-none-any.whl",
+      "sha256": "92975838e9882380e956fdf8a445e052b62a193db621836c85f6fe1cb27806f2",
+      "size_bytes": 365535
+    }
+  },
+  "code_sha256": "e61a3e4a5fd33528eac6a45b7b6532be63c117ec4610131f8643c1d631e9cc5a",
+  "compatibility": {
+    "legacy_v1_round_trip_tested": true,
+    "ridge_v2_content_sha256": "9481dba63de25c6bf8d553a7ff940aef0310246357664d084fc14ebe684686fd",
+    "ridge_v2_round_trip_tested": true,
+    "ridge_v2_sha256_preserved": true
+  },
+  "coverage": {
+    "fail_under": 68.0,
+    "new_generation_module": {
+      "branches": 66,
+      "covered_branches": 47,
+      "covered_lines": 214,
+      "missing_lines": 19,
+      "percent_combined": 87.29096989966555,
+      "statements": 233
+    },
+    "repository": {
+      "branches": 6316,
+      "covered_branches": 3489,
+      "covered_lines": 13545,
+      "missing_lines": 4880,
+      "percent_combined": 68.84927852552444,
+      "statements": 18425
+    },
+    "status": "passed"
+  },
+  "implementation_commit": "ef2c324745caa2a3976c33f714b98511cce83322",
+  "quality_gates": {
+    "mypy": {
+      "module_count": 96,
+      "status": "passed"
+    },
+    "pytest": {
+      "duration_seconds": 73.26,
+      "passed": 352,
+      "status": "passed",
+      "warnings": 50
+    },
+    "ruff": {
+      "paths": [
+        "goldenexperience",
+        "tests",
+        "scripts"
+      ],
+      "status": "passed"
+    }
+  },
+  "real_model_backward_smoke": {
+    "candidate_count": 9,
+    "device": "NVIDIA A100-SXM4-80GB",
+    "finite_gradient": true,
+    "generation_loss_sum": 2.7570807933807373,
+    "gradient_norm": 3.9442391395568848,
+    "key_sample_count": 128,
+    "peak_cuda_memory_bytes": 32481870336,
+    "peak_cuda_memory_gib": 30.251099109649658,
+    "sample_id": "transport_train.0128.math.eb27f9cf26c49eeab4cd",
+    "status": "passed",
+    "suffix_bound_tokens": 256,
+    "suffix_full_tokens": 1531,
+    "teacher_tokens": 16,
+    "torch_version": "2.11.0+cu130",
+    "transformers_version": "5.13.0"
+  },
+  "schema_version": "goldenexperience.publication_v5_implementation_verification.v1",
+  "verified_at": "2026-07-14T08:22:19+00:00"
+}
