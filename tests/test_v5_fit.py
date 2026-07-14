@@ -17,6 +17,7 @@ from goldenexperience.size_variant.cached_kv_manifest import CachedKVModelSpec, 
 from goldenexperience.size_variant.head_aware_transport import (
     HeadAwareKVTransport,
     _apply_rope_heads,
+    attention_distillation_terms,
     build_trainable_head_aware_transport,
     fit_head_aware_normalizers,
     fit_head_aware_ridge_initializer,
@@ -35,19 +36,28 @@ from goldenexperience.size_variant.v5_fit import (
     DEPLOYMENT_SEED,
     REGISTERED_RANKS,
     V5_RIDGE_TRANSPORT_FIT_SCHEMA,
+    V5_TARGET_LOGIT_TRANSPORT_FIT_SCHEMA,
+    V5_TRANSPORT_CHECKPOINT_SCHEMA,
     CandidateTrainingMetrics,
     SynchronousTransportTrainer,
     TransportCandidateArtifact,
     TransportTrainingParameters,
     V5TransportFitManifest,
+    _full_prefix_epoch_order,
+    _full_prefix_order_sha256,
+    _prefix_segments,
     _row_weighted_unique_records,
     _TraceLoader,
     _validate_progress,
     run_fit_transport_stage,
 )
 from goldenexperience.size_variant.v5_generation import (
+    FULL_PREFIX_SUPERVISION_ID,
     TARGET_LOGIT_SUPERVISION_ID,
+    FullPrefixAsset,
+    FullPrefixGenerationBackend,
     GenerationSupervisionSpec,
+    NativeTeacher,
 )
 from goldenexperience.size_variant.v5_pipeline import V5PipelineError, V5PipelineWorkspace
 
@@ -204,6 +214,128 @@ def _runtime_state(path: Path) -> tuple[dict[str, Any], dict[str, str]]:
     return tensors, metadata
 
 
+class _SyntheticFullPrefixBackend(FullPrefixGenerationBackend):
+    def __init__(self, assets: dict[str, FullPrefixAsset]) -> None:
+        self.assets = assets
+        self.target_device = "cpu"
+        self._model = torch.nn.Linear(1, 1, bias=False).requires_grad_(False)
+        self._cached_group: str | None = None
+        self._teachers: dict[str, NativeTeacher] = {}
+        self.prefix_calls = 0
+        self.teacher_calls = 0
+
+    @property
+    def model(self):
+        return self._model
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_args: object) -> None:
+        return None
+
+    def parameters(self):
+        return {"supervision_id": self.supervision_id}
+
+    def prefix_asset(self, record: TraceRecord) -> FullPrefixAsset:
+        if self._cached_group != record.prefix_group_id:
+            self.prefix_calls += 1
+            self._cached_group = record.prefix_group_id
+        return self.assets[record.shard.sha256]
+
+    def teacher(self, record: TraceRecord, asset: FullPrefixAsset) -> NativeTeacher:
+        cached = self._teachers.get(record.sample_id)
+        if cached is None:
+            self.teacher_calls += 1
+            cached = NativeTeacher(
+                input_ids=torch.empty(0, dtype=torch.long),
+                position_ids=torch.empty(0, dtype=torch.long),
+                teacher_tokens=torch.empty(0, dtype=torch.long),
+                teacher_logits=asset.target_kv,
+            )
+            self._teachers[record.sample_id] = cached
+        return cached
+
+    def student_losses(
+        self,
+        transformed_kv_batch: torch.Tensor,
+        teacher: NativeTeacher,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        delta = transformed_kv_batch.float() - teacher.teacher_logits.float().unsqueeze(0)
+        generation = delta.square().flatten(1).mean(dim=1)
+        distillation = delta.flatten(1).mean(dim=1).square()
+        return generation, distillation
+
+    def clear_prefix_asset(self) -> None:
+        self._cached_group = None
+
+
+def _full_prefix_assets(
+    workspace: V5PipelineWorkspace,
+    trace: V5TraceManifest,
+) -> dict[str, FullPrefixAsset]:
+    assets: dict[str, FullPrefixAsset] = {}
+    for record in trace.records:
+        if record.shard.sha256 in assets:
+            continue
+        tensors = load_trace_shard(
+            workspace.root / record.shard.path,
+            record,
+            source=trace.source,
+            target=trace.target,
+        )
+        assets[record.shard.sha256] = FullPrefixAsset(
+            prefix_group_id=record.prefix_group_id,
+            token_ids_sha256=record.token_ids_sha256,
+            token_count=record.token_count,
+            source_kv=tensors["source_kv"],
+            target_kv=tensors["target_kv"],
+        )
+    return assets
+
+
+def _full_parameters(
+    *,
+    epochs: int = 1,
+    gradient_accumulation: int = 1,
+) -> TransportTrainingParameters:
+    return TransportTrainingParameters(
+        ranks=(32,),
+        seeds=(17,),
+        deployment_seed=17,
+        source_window=3,
+        epochs=epochs,
+        learning_rate=3e-4,
+        weight_decay=1e-4,
+        gradient_accumulation=gradient_accumulation,
+        max_grad_norm=1.0,
+        generation=GenerationSupervisionSpec.full_prefix(),
+    )
+
+
+def _full_trainer(
+    workspace: V5PipelineWorkspace,
+    trace: V5TraceManifest,
+    backend: _SyntheticFullPrefixBackend,
+    *,
+    epochs: int = 1,
+    gradient_accumulation: int = 1,
+    progress=None,
+) -> SynchronousTransportTrainer:
+    return SynchronousTransportTrainer(
+        workspace=workspace,
+        trace=trace,
+        parameters=_full_parameters(
+            epochs=epochs,
+            gradient_accumulation=gradient_accumulation,
+        ),
+        device="cpu",
+        generation_backend=backend,
+        checkpoint_every_steps=1,
+        progress=progress,
+    )
+
+
 def test_synchronous_transport_fit_emits_runtime_loadable_weights(tmp_path: Path) -> None:
     workspace, trace = _synthetic_trace(tmp_path)
     fitted, normalizer_sha256, initializer_sha256 = _trainer(workspace, trace).fit(
@@ -287,6 +419,186 @@ def test_synchronous_trainer_batches_connected_generation_losses(tmp_path: Path)
     assert backend.calls == len(trace.records)
     assert fitted[0].metrics.native_generation > 0
     assert fitted[0].metrics.prompt_tail_distillation > 0
+
+
+def test_full_prefix_order_is_deterministic_and_keeps_groups_contiguous(
+    tmp_path: Path,
+) -> None:
+    _, trace = _synthetic_trace(tmp_path, record_count=8)
+    group_ids = ("a", "a", "b", "c", "c", "d", "e", "f")
+    records = tuple(
+        replace(record, prefix_group_id=group_id)
+        for record, group_id in zip(trace.records, group_ids, strict=True)
+    )
+    trace = replace(trace, records=records)
+
+    first = _full_prefix_epoch_order(trace, 0)
+    repeated = _full_prefix_epoch_order(trace, 0)
+    second_epoch = _full_prefix_epoch_order(trace, 1)
+    ordered_groups = [trace.records[index].prefix_group_id for index in first]
+    group_runs = [
+        group_id
+        for index, group_id in enumerate(ordered_groups)
+        if index == 0 or group_id != ordered_groups[index - 1]
+    ]
+
+    assert first == repeated
+    assert first != second_epoch
+    assert set(first) == set(range(len(trace.records)))
+    assert len(group_runs) == len(set(group_ids))
+    assert len(group_runs) == len(set(group_runs))
+    assert _full_prefix_order_sha256(trace, 0) == _full_prefix_order_sha256(trace, 0)
+    assert _full_prefix_order_sha256(trace, 0) != _full_prefix_order_sha256(trace, 1)
+    assert _prefix_segments(trace, (0, 1, 2, 3, 4)) == ((0, 1), (2,), (3, 4))
+
+
+def test_full_prefix_trainer_groups_shared_prefix_rows_once(tmp_path: Path) -> None:
+    workspace, trace = _synthetic_trace(tmp_path)
+    first, second = trace.records
+    shared = replace(
+        second,
+        prefix_group_id=first.prefix_group_id,
+        prefix_sha256=first.prefix_sha256,
+        token_ids_sha256=first.token_ids_sha256,
+        token_count=first.token_count,
+        query_sample_count=first.query_sample_count,
+        key_sample_count=first.key_sample_count,
+        shard=first.shard,
+    )
+    trace = replace(trace, records=(first, shared))
+    backend = _SyntheticFullPrefixBackend(_full_prefix_assets(workspace, trace))
+
+    fitted, _, _ = _full_trainer(
+        workspace,
+        trace,
+        backend,
+        gradient_accumulation=2,
+    ).fit(tmp_path / "full-prefix", stage_input_sha256=_digest("full-prefix-stage"))
+
+    assert fitted[0].metrics.samples == 2
+    assert fitted[0].metrics.optimizer_steps == 1
+    assert fitted[0].metrics.native_generation > 0
+    assert backend.prefix_calls == 1
+    assert backend.teacher_calls == 2
+
+
+def test_full_prefix_proxy_gradient_matches_direct_chain_rule(tmp_path: Path) -> None:
+    workspace, trace = _synthetic_trace(tmp_path, record_count=1)
+    record = trace.records[0]
+    assets = _full_prefix_assets(workspace, trace)
+    backend = _SyntheticFullPrefixBackend(assets)
+    parameters = _full_parameters()
+    trainer = _full_trainer(workspace, trace, backend)
+    spec = parameters.transport_spec(
+        weights_uri="candidate.safetensors",
+        weights_sha256="0" * 64,
+        rank=32,
+    )
+    proxied = build_trainable_head_aware_transport(trace.source, trace.target, spec, seed=17)
+    direct = build_trainable_head_aware_transport(trace.source, trace.target, spec, seed=17)
+    context = SimpleNamespace(
+        candidate_id="proxy",
+        module=proxied,
+        metric_sums={name: 0.0 for name in v5_fit_module._TERM_NAMES},
+    )
+
+    trainer._train_full_prefix_segment(
+        [context],
+        backend=backend,
+        records=(record,),
+        denominator=1,
+    )
+
+    tensors = load_trace_shard(
+        workspace.root / record.shard.path,
+        record,
+        source=trace.source,
+        target=trace.target,
+    )
+    positions = torch.arange(record.token_count)
+    transformed = direct(
+        assets[record.shard.sha256].source_kv,
+        positions,
+        compute_dtype=torch.float32,
+    )
+    generation, distillation = backend.student_losses(
+        transformed.unsqueeze(0),
+        backend.teacher(record, assets[record.shard.sha256]),
+    )
+    sampled = transformed.index_select(3, tensors["key_positions"])
+    logit_kl, output_mse = attention_distillation_terms(
+        tensors["target_query"],
+        tensors["target_kv"][0],
+        tensors["target_kv"][1],
+        sampled[0],
+        sampled[1],
+        attention_mask=tensors["causal_mask"],
+        native_attention_output=tensors["native_attention_output"],
+    )
+    anchor = torch.nn.functional.mse_loss(sampled.float(), tensors["target_kv"].float())
+    contract = parameters.loss
+    total = (
+        generation.sum()
+        + contract.prompt_tail_distillation * distillation.sum()
+        + contract.attention_logit_kl * logit_kl
+        + contract.attention_output_mse * output_mse
+        + contract.transformed_kv_anchor * anchor
+    )
+    total.backward()
+
+    for (proxied_name, proxied_parameter), (direct_name, direct_parameter) in zip(
+        proxied.named_parameters(),
+        direct.named_parameters(),
+        strict=True,
+    ):
+        assert proxied_name == direct_name
+        assert proxied_parameter.grad is not None
+        assert direct_parameter.grad is not None
+        torch.testing.assert_close(
+            proxied_parameter.grad,
+            direct_parameter.grad,
+            atol=1e-5,
+            rtol=1e-5,
+        )
+
+
+def test_full_prefix_checkpoint_resume_matches_uninterrupted_fit(tmp_path: Path) -> None:
+    workspace, trace = _synthetic_trace(tmp_path)
+    assets = _full_prefix_assets(workspace, trace)
+
+    def interrupt(index: int, _total: int, _epoch: int, _sample_id: str) -> None:
+        if index == 2:
+            raise RuntimeError("full-prefix interruption")
+
+    resumed_work = tmp_path / "full-resumed"
+    with pytest.raises(RuntimeError, match="full-prefix interruption"):
+        _full_trainer(
+            workspace,
+            trace,
+            _SyntheticFullPrefixBackend(assets),
+            epochs=2,
+            progress=interrupt,
+        ).fit(resumed_work, stage_input_sha256=_digest("full-stage"))
+    pointer = json.loads((resumed_work / "checkpoint_set.json").read_text())
+    assert pointer["schema_version"] == V5_TRANSPORT_CHECKPOINT_SCHEMA
+
+    resumed, resumed_normalizer, resumed_initializer = _full_trainer(
+        workspace,
+        trace,
+        _SyntheticFullPrefixBackend(assets),
+        epochs=2,
+    ).fit(resumed_work, stage_input_sha256=_digest("full-stage"))
+    uninterrupted, uninterrupted_normalizer, uninterrupted_initializer = _full_trainer(
+        workspace,
+        trace,
+        _SyntheticFullPrefixBackend(assets),
+        epochs=2,
+    ).fit(tmp_path / "full-uninterrupted", stage_input_sha256=_digest("full-stage"))
+
+    assert resumed_normalizer == uninterrupted_normalizer
+    assert resumed_initializer == uninterrupted_initializer
+    assert resumed[0].metrics == uninterrupted[0].metrics
+    assert sha256_file(resumed[0].path) == sha256_file(uninterrupted[0].path)
 
 
 def _known_affine_batch() -> tuple[
@@ -594,8 +906,9 @@ def test_publication_transport_runner_has_no_matrix_override() -> None:
     assert TransportTrainingParameters().deployment_seed == DEPLOYMENT_SEED
     assert (
         TransportTrainingParameters().generation.supervision_id
-        == TARGET_LOGIT_SUPERVISION_ID
+        == FULL_PREFIX_SUPERVISION_ID
     )
+    assert parameters["source_device"].default == "cuda:0"
 
 
 def test_fit_manifest_requires_the_complete_registered_matrix(tmp_path: Path) -> None:
@@ -661,6 +974,7 @@ def test_fit_manifest_requires_the_complete_registered_matrix(tmp_path: Path) ->
     v2_payload = manifest.to_dict()
     v2_payload["schema_version"] = V5_RIDGE_TRANSPORT_FIT_SCHEMA
     v2_payload["training"].pop("generation")
+    v2_payload["training"].pop("full_prefix")
     v2_payload.pop("generation_sample_store_sha256")
 
     loaded_v2 = V5TransportFitManifest.from_dict(v2_payload)
@@ -668,3 +982,13 @@ def test_fit_manifest_requires_the_complete_registered_matrix(tmp_path: Path) ->
     assert loaded_v2.training.generation == GenerationSupervisionSpec.legacy()
     assert loaded_v2.to_dict() == v2_payload
     assert loaded_v2.validate(workspace=workspace, trace=trace) == []
+
+    v3_payload = manifest.to_dict()
+    v3_payload["schema_version"] = V5_TARGET_LOGIT_TRANSPORT_FIT_SCHEMA
+    v3_payload["training"]["generation"] = GenerationSupervisionSpec().to_dict()
+    v3_payload["training"].pop("full_prefix")
+    loaded_v3 = V5TransportFitManifest.from_dict(v3_payload)
+
+    assert loaded_v3.training.generation == GenerationSupervisionSpec()
+    assert loaded_v3.to_dict() == v3_payload
+    assert loaded_v3.validate(workspace=workspace, trace=trace) == []

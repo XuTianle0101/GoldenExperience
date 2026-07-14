@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+from dataclasses import replace
 from types import SimpleNamespace
 
 import pytest
@@ -15,6 +16,8 @@ from goldenexperience.size_variant.v5_collect import (
     TraceRecord,
 )
 from goldenexperience.size_variant.v5_generation import (
+    FULL_PREFIX_CUDA_ALLOCATOR,
+    FullPrefixGenerationBackend,
     GenerationSupervisionSpec,
     TargetLogitGenerationBackend,
     TraceConstantGenerationBackend,
@@ -43,6 +46,25 @@ def _tiny_model() -> Qwen3ForCausalLM:
         max_position_embeddings=256,
     )
     return Qwen3ForCausalLM(config).eval().requires_grad_(False)
+
+
+def _tiny_spec(model_id: str) -> CachedKVModelSpec:
+    return CachedKVModelSpec(
+        model_id=model_id,
+        parameter_count_b=0.0,
+        revision="test",
+        architecture="qwen3",
+        config_sha256=_digest(f"{model_id}-config"),
+        tokenizer_sha256=_digest("tokenizer"),
+        weights_sha256=_digest(f"{model_id}-weights"),
+        num_layers=2,
+        num_key_value_heads=2,
+        head_dim=8,
+        dtype="bfloat16",
+        rope_theta=1_000_000.0,
+        max_position_embeddings=256,
+        chat_template_sha256=_digest("chat"),
+    )
 
 
 def test_suffix_bound_preserves_absolute_head_and_tail_positions() -> None:
@@ -143,6 +165,8 @@ def test_trace_constant_backend_expands_legacy_values() -> None:
 def test_generation_supervision_rejects_malformed_contracts() -> None:
     assert GenerationSupervisionSpec.legacy().validate(require_registered=False) == []
     assert "target-logit" in GenerationSupervisionSpec.legacy().validate()[0]
+    assert GenerationSupervisionSpec.full_prefix().validate() == []
+    assert "full-prefix" in GenerationSupervisionSpec().validate()[0]
     assert GenerationSupervisionSpec(supervision_id="unknown").validate() == [
         "generation supervision method is unsupported"
     ]
@@ -282,3 +306,115 @@ def test_target_logit_backend_loads_once_and_caches_teacher(
     assert candidates.grad is not None
     assert torch.isfinite(candidates.grad).all()
     assert backend.teacher_cache == {}
+
+
+def test_full_prefix_backend_reconstructs_and_caches_native_prefixes(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    source_model = _tiny_model()
+    target_model = _tiny_model()
+    models = iter((source_model, target_model))
+
+    class Tokenizer:
+        def __init__(self) -> None:
+            self.calls: list[str] = []
+
+        def __call__(self, text, **_kwargs):
+            self.calls.append(text)
+            values = [3, 4, 5] if text == "prefix" else [6, 7]
+            return SimpleNamespace(input_ids=torch.tensor([values]))
+
+    tokenizer = Tokenizer()
+    monkeypatch.setattr(generation_module, "verify_model_path", lambda *_args, **_kwargs: [])
+    monkeypatch.setattr(AutoTokenizer, "from_pretrained", lambda *_args, **_kwargs: tokenizer)
+    monkeypatch.setattr(
+        AutoModelForCausalLM,
+        "from_pretrained",
+        lambda *_args, **_kwargs: next(models),
+    )
+    source = _tiny_spec("tiny-source")
+    target = _tiny_spec("tiny-target")
+    record = TraceRecord(
+        sample_id="sample",
+        prefix_group_id="group",
+        dataset_id="synthetic",
+        task="qa",
+        token_bucket=128,
+        content_sha256=_digest("content"),
+        prefix_sha256=_digest("prefix"),
+        suffix_query_sha256=_digest("suffix"),
+        token_ids_sha256=generation_module.token_ids_sha256([3, 4, 5]),
+        token_count=3,
+        query_sample_count=2,
+        key_sample_count=3,
+        shard=TraceObjectRef(
+            _digest("shard"),
+            f"objects/00/{_digest('shard')}.safetensors",
+            1,
+        ),
+    )
+    sample = RawBenchmarkSample(
+        sample_id="sample",
+        prefix_text="prefix",
+        suffix_query="suffix",
+        reference="answer",
+        evaluation={"metric": "exact_match"},
+        provenance={},
+    )
+    backend = FullPrefixGenerationBackend(
+        source_path=tmp_path / "source",
+        target_path=tmp_path / "target",
+        source=source,
+        target=target,
+        samples={record.sample_id: sample},
+        source_device="cpu",
+        target_device="cpu",
+        identity_cache_path=None,
+        spec=GenerationSupervisionSpec.full_prefix(),
+    )
+
+    assert backend.parameters()["cuda_allocator"] == FULL_PREFIX_CUDA_ALLOCATOR
+    with backend:
+        asset = backend.prefix_asset(record)
+        assert backend.prefix_asset(record) is asset
+        assert asset.source_kv.shape == (2, 2, 2, 3, 8)
+        assert asset.target_kv.shape == (2, 2, 2, 3, 8)
+        teacher = backend.teacher(record, asset)
+        assert backend.teacher(record, asset) is teacher
+        candidates = asset.target_kv.unsqueeze(0).repeat(2, 1, 1, 1, 1, 1)
+        candidates.requires_grad_(True)
+        generation, distillation = backend.student_losses(candidates, teacher)
+        (generation.sum() + distillation.sum()).backward()
+        with pytest.raises(V5PipelineError, match="changed token identity"):
+            backend.prefix_asset(replace(record, token_ids_sha256=_digest("wrong")))
+
+    assert tokenizer.calls == ["prefix", "suffix"]
+    assert candidates.grad is not None
+    assert torch.isfinite(candidates.grad).all()
+    assert backend.teacher_cache == {}
+    assert backend.source_model is None
+    assert backend.target_model is None
+
+
+@pytest.mark.parametrize("variable", ["PYTORCH_ALLOC_CONF", "PYTORCH_CUDA_ALLOC_CONF"])
+def test_full_prefix_backend_rejects_nondefault_allocator(
+    tmp_path,
+    monkeypatch,
+    variable: str,
+) -> None:
+    monkeypatch.setenv(variable, "expandable_segments:True")
+    backend = FullPrefixGenerationBackend(
+        source_path=tmp_path / "source",
+        target_path=tmp_path / "target",
+        source=_tiny_spec("tiny-source"),
+        target=_tiny_spec("tiny-target"),
+        samples={},
+        source_device="cpu",
+        target_device="cpu",
+        identity_cache_path=None,
+        spec=GenerationSupervisionSpec.full_prefix(),
+    )
+
+    with pytest.raises(V5PipelineError, match="default CUDA allocator"):
+        backend.parameters()

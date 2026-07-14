@@ -12,6 +12,7 @@ from goldenexperience.size_variant.selective_manifest import TransportQualityEvi
 from goldenexperience.size_variant.v5_collect import TraceObjectRef, TraceRecord, V5TraceManifest
 from goldenexperience.size_variant.v5_directional_fit import (
     V5_RIDGE_DIRECTIONAL_FIT_SCHEMA,
+    V5_TARGET_LOGIT_DIRECTIONAL_FIT_SCHEMA,
     V5DirectionalTransportFitManifest,
     frozen_direction_training_parameters,
     run_frozen_direction_fit_stage,
@@ -20,6 +21,7 @@ from goldenexperience.size_variant.v5_fit import (
     CandidateTrainingMetrics,
     TransportCandidateArtifact,
 )
+from goldenexperience.size_variant.v5_generation import GenerationSupervisionSpec
 from goldenexperience.size_variant.v5_method_dev import FrozenTransportStructure
 from goldenexperience.size_variant.v5_pipeline import (
     PipelineArtifact,
@@ -199,12 +201,22 @@ def test_directional_manifest_is_locked_to_selected_rank_and_seed() -> None:
     v2_payload = manifest.to_dict()
     v2_payload["schema_version"] = V5_RIDGE_DIRECTIONAL_FIT_SCHEMA
     v2_payload["training"].pop("generation")
+    v2_payload["training"].pop("full_prefix")
     v2_payload.pop("generation_sample_store_sha256")
 
     loaded_v2 = V5DirectionalTransportFitManifest.from_dict(v2_payload)
 
     assert loaded_v2.to_dict() == v2_payload
     assert loaded_v2.validate(workspace=workspace, trace=trace, structure=structure) == []
+
+    v3_payload = manifest.to_dict()
+    v3_payload["schema_version"] = V5_TARGET_LOGIT_DIRECTIONAL_FIT_SCHEMA
+    v3_payload["training"]["generation"] = GenerationSupervisionSpec().to_dict()
+    v3_payload["training"].pop("full_prefix")
+    loaded_v3 = V5DirectionalTransportFitManifest.from_dict(v3_payload)
+
+    assert loaded_v3.to_dict() == v3_payload
+    assert loaded_v3.validate(workspace=workspace, trace=trace, structure=structure) == []
 
 
 def test_directional_production_runner_has_no_training_override() -> None:
@@ -213,6 +225,7 @@ def test_directional_production_runner_has_no_training_override() -> None:
     assert "training" not in parameters
     assert "rank" not in parameters
     assert "seed" not in parameters
+    assert parameters["source_device"].default == "cuda:0"
 
 
 def test_directional_runner_emits_one_frozen_candidate(
@@ -237,7 +250,10 @@ def test_directional_runner_emits_one_frozen_candidate(
                 pipeline_id="pipeline",
                 code_sha256=_digest("code"),
                 split_sha256={"transport_train": _digest("transport-train")},
-                direction=lambda _name: SimpleNamespace(target_model_path=tmp_path / "target"),
+                direction=lambda _name: SimpleNamespace(
+                    source_model_path=tmp_path / "source",
+                    target_model_path=tmp_path / "target",
+                ),
             )
             self.completed_outputs = None
 
@@ -343,6 +359,7 @@ def test_directional_runner_emits_one_frozen_candidate(
         direction=trace.direction,
         sample_store_path=sample_store,
         identity_cache_path=None,
+        source_device="cpu",
         device="cpu",
     )
 

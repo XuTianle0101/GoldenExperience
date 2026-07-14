@@ -483,6 +483,41 @@ def test_pipeline_cli_has_no_sealed_payload_option() -> None:
     assert not args.refresh_identity
 
 
+def test_fit_transport_cli_separates_source_and_target_devices() -> None:
+    parser = build_parser()
+    defaults = parser.parse_args(
+        [
+            "fit-transport",
+            "--workspace",
+            "workspace",
+            "--direction",
+            "qwen3_4b_to_8b",
+            "--samples",
+            "transport.jsonl",
+        ]
+    )
+    overridden = parser.parse_args(
+        [
+            "fit-transport",
+            "--workspace",
+            "workspace",
+            "--direction",
+            "qwen3_4b_to_8b",
+            "--samples",
+            "transport.jsonl",
+            "--source-device",
+            "cuda:2",
+            "--device",
+            "cuda:3",
+        ]
+    )
+
+    assert defaults.source_device == "cuda:0"
+    assert defaults.device == "cuda:1"
+    assert overridden.source_device == "cuda:2"
+    assert overridden.device == "cuda:3"
+
+
 def test_source_tree_hash_changes_with_executable_source(tmp_path: Path) -> None:
     (tmp_path / "goldenexperience").mkdir()
     (tmp_path / "scripts").mkdir()

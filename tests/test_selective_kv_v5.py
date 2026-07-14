@@ -47,6 +47,7 @@ from goldenexperience.size_variant.cached_kv_manifest import (
 )
 from goldenexperience.size_variant.head_aware_transport import (
     HeadAwareKVTransport,
+    HeadAwareTransportError,
     TransportScreeningCandidate,
     _apply_rope_heads,
     attention_distillation_terms,
@@ -298,6 +299,32 @@ def test_head_aware_transport_maps_four_to_eight_heads_and_rope_round_trips() ->
     torch.testing.assert_close(restored, value, atol=2e-5, rtol=2e-5)
 
 
+def test_chunked_rope_matches_unchunked_forward_and_backward() -> None:
+    value = torch.randn(2, 3, 257, 32, dtype=torch.bfloat16)
+    positions = torch.arange(257)
+    unchunked_input = value.clone().requires_grad_(True)
+    chunked_input = value.clone().requires_grad_(True)
+
+    unchunked = _apply_rope_heads(
+        unchunked_input,
+        positions,
+        theta=1_000_000,
+        inverse=True,
+    )
+    chunked = _apply_rope_heads(
+        chunked_input,
+        positions,
+        theta=1_000_000,
+        inverse=True,
+        chunk_tokens=256,
+    )
+    unchunked.float().square().mean().backward()
+    chunked.float().square().mean().backward()
+
+    torch.testing.assert_close(chunked, unchunked, atol=0, rtol=0)
+    torch.testing.assert_close(chunked_input.grad, unchunked_input.grad, atol=0, rtol=0)
+
+
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA is not available")
 def test_head_aware_transport_cpu_gpu_numerical_consistency() -> None:
     source = _model("qwen3-4b", size=4, layers=3, heads=4)
@@ -436,6 +463,15 @@ def test_trainable_transport_exports_the_exact_runtime_tensor_contract() -> None
         rtol=0,
     )
     assert "key_gate" not in runtime.tensors
+
+
+def test_transport_rejects_head_specific_source_layer_indices() -> None:
+    source, target, spec, _ = _transport()
+    state = initialize_head_aware_state(source, target, spec)
+    state["source_layer_ids"][0, 1, 0] = 1
+
+    with pytest.raises(HeadAwareTransportError, match="shared across target heads"):
+        HeadAwareKVTransport(source, target, spec, state)
 
 
 def test_legacy_v1_transport_tensor_contract_remains_loadable() -> None:
