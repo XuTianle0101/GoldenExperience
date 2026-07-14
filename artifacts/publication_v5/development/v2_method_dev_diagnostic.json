@@ -1,0 +1,366 @@
+{
+  "authority": "diagnostic_only_not_publication_evidence",
+  "benchmark_manifest_sha256": "557cfe1eccd522d19e6a06177b2d86e6b1a55587b8a84cba65732fad4d2bcd4a",
+  "candidate_safe_set_analysis": {
+    "all_nine_safe_count": 105,
+    "all_nine_safe_coverage": 0.1025390625,
+    "any_nine_safe_count": 352,
+    "any_nine_safe_coverage": 0.34375,
+    "candidate_safe_count_histogram": {
+      "0": 672,
+      "1": 46,
+      "2": 36,
+      "3": 52,
+      "4": 21,
+      "5": 23,
+      "6": 41,
+      "7": 15,
+      "8": 13,
+      "9": 105
+    },
+    "no_candidate_safe_count": 672,
+    "no_candidate_safe_coverage": 0.65625,
+    "oracle_union_is_below_registered_gate": true,
+    "per_rank_seed_overlap": {
+      "32": {
+        "all_three_seeds_safe_count": 145,
+        "all_three_seeds_safe_coverage": 0.1416015625,
+        "any_seed_safe_count": 200,
+        "any_seed_safe_coverage": 0.1953125,
+        "mean_pairwise_safe_set_jaccard": 0.8066166760988492
+      },
+      "64": {
+        "all_three_seeds_safe_count": 187,
+        "all_three_seeds_safe_coverage": 0.1826171875,
+        "any_seed_safe_count": 248,
+        "any_seed_safe_coverage": 0.2421875,
+        "mean_pairwise_safe_set_jaccard": 0.827951798612601
+      },
+      "128": {
+        "all_three_seeds_safe_count": 204,
+        "all_three_seeds_safe_coverage": 0.19921875,
+        "any_seed_safe_count": 274,
+        "any_seed_safe_coverage": 0.267578125,
+        "mean_pairwise_safe_set_jaccard": 0.8209887083457416
+      }
+    },
+    "sample_count": 1024
+  },
+  "code_sha256": "5b2f1272e7d6e4fa47ea300dafaddac8e7434d1bfe60969b12d3450533e64fd8",
+  "conclusion": {
+    "gate_disposition": "blocked_without_threshold_change",
+    "next_method_requirements": [
+      "make generation or teacher-forced suffix logits differentiably depend on transformed KV",
+      "preserve train-only fitting and the registered 0.45 oracle-safe gate",
+      "use dataset-task-bucket-prefix-group stratification for all pilot evaluations",
+      "bind any method change to a new immutable pipeline workspace"
+    ],
+    "primary_supported_mechanism": "prefix-only KV and sampled-attention fitting does not supervise suffix-specific decoded behavior",
+    "rank_or_seed_tuning_is_insufficient": true,
+    "reason": "the nine-candidate oracle safe-set union is 0.34375, while two nominal generation losses are detached constants and the prior 64-row pilot is strongly composition-biased"
+  },
+  "created_at": "2026-07-14T06:22:26+00:00",
+  "deployment_candidate": {
+    "aggregate_perplexity_drift_pct": 24.52328663116479,
+    "candidate_id": "transport-r128-s17-24b8f5ecfd50",
+    "greedy_agreement": 0.640380859375,
+    "mean_row_perplexity_drift_pct": 36.17464429984451,
+    "native_pass_to_bridge_fail_count": 20,
+    "oracle_safe_coverage": 0.232421875,
+    "prompt_count": 1024,
+    "rank": 128,
+    "safe_count": 238,
+    "seed": 17,
+    "task_preservation": 0.9816876634968891
+  },
+  "direction": "qwen3_4b_to_8b",
+  "method_dev_breakdown": {
+    "by_dataset": {
+      "bfcl": {
+        "aggregate_perplexity_drift_pct": 3.6302747596812868,
+        "greedy_agreement": 0.9283854166666666,
+        "mean_row_perplexity_drift_pct": 4.254319235629578,
+        "native_pass_to_bridge_fail_count": 0,
+        "oracle_safe_coverage": 0.7708333333333334,
+        "safe_count": 37,
+        "sample_count": 48
+      },
+      "gsm8k": {
+        "aggregate_perplexity_drift_pct": 28.672943125406935,
+        "greedy_agreement": 0.5868389423076923,
+        "mean_row_perplexity_drift_pct": 37.64032273112509,
+        "native_pass_to_bridge_fail_count": 10,
+        "oracle_safe_coverage": 0.13701923076923078,
+        "safe_count": 57,
+        "sample_count": 416
+      },
+      "humaneval": {
+        "aggregate_perplexity_drift_pct": 21.38467083541819,
+        "greedy_agreement": 0.6276041666666666,
+        "mean_row_perplexity_drift_pct": 25.19041061839574,
+        "native_pass_to_bridge_fail_count": 0,
+        "oracle_safe_coverage": 0.20833333333333334,
+        "safe_count": 5,
+        "sample_count": 24
+      },
+      "longbench_hotpotqa": {
+        "aggregate_perplexity_drift_pct": 87.68257513632267,
+        "greedy_agreement": 0.5859375,
+        "mean_row_perplexity_drift_pct": 129.40894131756804,
+        "native_pass_to_bridge_fail_count": 0,
+        "oracle_safe_coverage": 0.125,
+        "safe_count": 3,
+        "sample_count": 24
+      },
+      "longbench_multifieldqa": {
+        "aggregate_perplexity_drift_pct": 90.41040057527289,
+        "greedy_agreement": 0.7916666666666666,
+        "mean_row_perplexity_drift_pct": 187.28992283923301,
+        "native_pass_to_bridge_fail_count": 3,
+        "oracle_safe_coverage": 0.2916666666666667,
+        "safe_count": 7,
+        "sample_count": 24
+      },
+      "longbench_qasper": {
+        "aggregate_perplexity_drift_pct": 56.5494137205411,
+        "greedy_agreement": 0.6744791666666666,
+        "mean_row_perplexity_drift_pct": 100.51005319420005,
+        "native_pass_to_bridge_fail_count": 0,
+        "oracle_safe_coverage": 0.16666666666666666,
+        "safe_count": 4,
+        "sample_count": 24
+      },
+      "math": {
+        "aggregate_perplexity_drift_pct": 15.57458376339004,
+        "greedy_agreement": 0.6412259615384616,
+        "mean_row_perplexity_drift_pct": 20.219937263406603,
+        "native_pass_to_bridge_fail_count": 7,
+        "oracle_safe_coverage": 0.2620192307692308,
+        "safe_count": 109,
+        "sample_count": 416
+      },
+      "mbpp": {
+        "aggregate_perplexity_drift_pct": 27.89817895553062,
+        "greedy_agreement": 0.75,
+        "mean_row_perplexity_drift_pct": 44.81617522374697,
+        "native_pass_to_bridge_fail_count": 0,
+        "oracle_safe_coverage": 0.3333333333333333,
+        "safe_count": 16,
+        "sample_count": 48
+      }
+    },
+    "by_task": {
+      "competition_math": {
+        "aggregate_perplexity_drift_pct": 15.57458376339004,
+        "greedy_agreement": 0.6412259615384616,
+        "mean_row_perplexity_drift_pct": 20.219937263406603,
+        "native_pass_to_bridge_fail_count": 7,
+        "oracle_safe_coverage": 0.2620192307692308,
+        "safe_count": 109,
+        "sample_count": 416
+      },
+      "function_calling": {
+        "aggregate_perplexity_drift_pct": 3.6302747596812868,
+        "greedy_agreement": 0.9283854166666666,
+        "mean_row_perplexity_drift_pct": 4.254319235629578,
+        "native_pass_to_bridge_fail_count": 0,
+        "oracle_safe_coverage": 0.7708333333333334,
+        "safe_count": 37,
+        "sample_count": 48
+      },
+      "grade_school_math": {
+        "aggregate_perplexity_drift_pct": 28.672943125406935,
+        "greedy_agreement": 0.5868389423076923,
+        "mean_row_perplexity_drift_pct": 37.64032273112509,
+        "native_pass_to_bridge_fail_count": 10,
+        "oracle_safe_coverage": 0.13701923076923078,
+        "safe_count": 57,
+        "sample_count": 416
+      },
+      "long_context_qa": {
+        "aggregate_perplexity_drift_pct": 77.52329706988002,
+        "greedy_agreement": 0.6840277777777778,
+        "mean_row_perplexity_drift_pct": 139.06963911700035,
+        "native_pass_to_bridge_fail_count": 3,
+        "oracle_safe_coverage": 0.19444444444444445,
+        "safe_count": 14,
+        "sample_count": 72
+      },
+      "python_code_generation": {
+        "aggregate_perplexity_drift_pct": 25.689072740238423,
+        "greedy_agreement": 0.7092013888888888,
+        "mean_row_perplexity_drift_pct": 38.2742536886299,
+        "native_pass_to_bridge_fail_count": 0,
+        "oracle_safe_coverage": 0.2916666666666667,
+        "safe_count": 21,
+        "sample_count": 72
+      }
+    },
+    "by_token_bucket": {
+      "128": {
+        "aggregate_perplexity_drift_pct": 21.42370874519778,
+        "drift_above_2_pct_count": 178,
+        "greedy_agreement": 0.68701171875,
+        "greedy_below_0.98_count": 160,
+        "mean_row_perplexity_drift_pct": 28.999231745007506,
+        "native_pass_to_bridge_fail_count": 3,
+        "oracle_safe_coverage": 0.2734375,
+        "safe_count": 70,
+        "sample_count": 256
+      },
+      "512": {
+        "aggregate_perplexity_drift_pct": 28.677047837383313,
+        "drift_above_2_pct_count": 207,
+        "greedy_agreement": 0.5703125,
+        "greedy_below_0.98_count": 192,
+        "mean_row_perplexity_drift_pct": 41.99553959256921,
+        "native_pass_to_bridge_fail_count": 4,
+        "oracle_safe_coverage": 0.1640625,
+        "safe_count": 42,
+        "sample_count": 256
+      },
+      "2048": {
+        "aggregate_perplexity_drift_pct": 28.57750301660272,
+        "drift_above_2_pct_count": 183,
+        "greedy_agreement": 0.627685546875,
+        "greedy_below_0.98_count": 171,
+        "mean_row_perplexity_drift_pct": 45.40088074757499,
+        "native_pass_to_bridge_fail_count": 9,
+        "oracle_safe_coverage": 0.234375,
+        "safe_count": 60,
+        "sample_count": 256
+      },
+      "8192": {
+        "aggregate_perplexity_drift_pct": 19.683072373007978,
+        "drift_above_2_pct_count": 179,
+        "greedy_agreement": 0.676513671875,
+        "greedy_below_0.98_count": 158,
+        "mean_row_perplexity_drift_pct": 28.302925114226344,
+        "native_pass_to_bridge_fail_count": 4,
+        "oracle_safe_coverage": 0.2578125,
+        "safe_count": 66,
+        "sample_count": 256
+      }
+    }
+  },
+  "method_dev_report_sha256": "f06d333f8ed871d683df1c6d1f1e1ce4e4f9f47004b541ccf96f7eb07a36798e",
+  "method_dev_trace_manifest_sha256": "6e4638a670efb9c7ba5a191c47f549dbab85c01b6be23c961883adf8099c9781",
+  "pipeline_id": "v5-pipeline-832f408e9bfb1cf6acf698a2",
+  "prefix_group_analysis": {
+    "all_shared_groups_have_mixed_suffix_outcomes": true,
+    "all_safe_group_count": 14,
+    "group_count": 92,
+    "group_size_histogram": {
+      "1": 72,
+      "6": 4,
+      "12": 8,
+      "103": 6,
+      "107": 2
+    },
+    "macro_mean_oracle_safe_coverage": 0.22656770868263354,
+    "mixed_group_count": 20,
+    "rows_in_shared_groups": 952,
+    "rows_in_singleton_groups": 72,
+    "safe_rows_in_shared_groups": 224,
+    "safe_rows_in_singleton_groups": 14,
+    "shared_group_count": 20,
+    "singleton_group_count": 72,
+    "zero_safe_group_count": 58
+  },
+  "registered_thresholds": {
+    "max_perplexity_drift_pct": 2.0,
+    "min_greedy_agreement": 0.98,
+    "min_oracle_safe_coverage": 0.45,
+    "native_pass_to_bridge_fail_is_unsafe": true
+  },
+  "schema_version": "goldenexperience.publication_v5_transport_diagnostic.v2",
+  "subset_bias_analysis": {
+    "complement_metrics": {
+      "aggregate_perplexity_drift_pct": 25.59299832052077,
+      "greedy_agreement": 0.6267578125,
+      "mean_row_perplexity_drift_pct": 37.83137160253404,
+      "oracle_safe_coverage": 0.20520833333333333,
+      "safe_count": 197,
+      "sample_count": 960
+    },
+    "full_composition": {
+      "dataset_count": 8,
+      "prefix_group_count": 92,
+      "task_count": 5
+    },
+    "pilot_composition": {
+      "datasets": {
+        "bfcl": 48,
+        "gsm8k": 16
+      },
+      "prefix_group_count": 8,
+      "tasks": {
+        "function_calling": 48,
+        "grade_school_math": 16
+      }
+    },
+    "pilot_metrics": {
+      "aggregate_perplexity_drift_pct": 9.52865830506078,
+      "greedy_agreement": 0.8447265625,
+      "mean_row_perplexity_drift_pct": 11.32373475950165,
+      "oracle_safe_coverage": 0.640625,
+      "safe_count": 41,
+      "sample_count": 64
+    },
+    "selection": "first_16_manifest_rows_per_registered_token_bucket",
+    "selection_bias": {
+      "bfcl_full_share": 0.046875,
+      "bfcl_overrepresentation_ratio": 16.0,
+      "bfcl_pilot_share": 0.75,
+      "greedy_agreement_inflation": 0.204345703125,
+      "mean_row_drift_reduction_pct_points": 24.850909540342858,
+      "oracle_safe_coverage_inflation": 0.408203125,
+      "oracle_safe_coverage_ratio": 2.7563025210084033,
+      "omitted_dataset_count": 6,
+      "omitted_task_count": 3
+    }
+  },
+  "training_signal_audit": {
+    "candidate_invariant_reported_terms": {
+      "native_generation": 1.9519506628540313,
+      "prompt_tail_distillation": 0.2916596595633649
+    },
+    "differentiability": {
+      "attention_logit_kl": "connected_to_transport",
+      "attention_output_mse": "connected_to_transport",
+      "native_generation": "detached_constant_no_transport_gradient",
+      "prompt_tail_distillation": "detached_constant_no_transport_gradient",
+      "transformed_kv_anchor": "connected_to_transport"
+    },
+    "source_bindings": {
+      "collector": {
+        "behavior": "calls item() on both logit losses and stores them in constant_losses",
+        "file_sha256": "6af6a83906b5cec49250882eb9b70ba43008ef79a6bcdb700ecf495059e4e4af",
+        "path": "goldenexperience/size_variant/v5_collect.py",
+        "symbol": "RealQwenTraceCollector.collect"
+      },
+      "objective": {
+        "behavior": "adds the two constants to three transport-connected losses",
+        "file_sha256": "b0e13bff8f8a4c8de363e30e7693149d902054b0d666a1f931ee073e591419ac",
+        "path": "goldenexperience/size_variant/head_aware_transport.py",
+        "symbol": "head_aware_training_objective"
+      },
+      "trainer": {
+        "behavior": "passes constant_losses directly into the objective for every repeated record",
+        "file_sha256": "5d6a7c442dc8270e7c0db29c56030e5689245bee30b768b9a527c3721c625235",
+        "path": "goldenexperience/size_variant/v5_fit.py",
+        "symbol": "SynchronousTransportTrainer.fit"
+      }
+    },
+    "transport_train_trace": {
+      "prefix_group_count": 92,
+      "record_count": 4096,
+      "repeated_prefix_row_count": 4024,
+      "repeated_prefix_row_fraction": 0.982421875,
+      "suffix_query_count": 4096,
+      "unique_shard_count": 92
+    }
+  },
+  "transport_fit_manifest_sha256": "9481dba63de25c6bf8d553a7ff940aef0310246357664d084fc14ebe684686fd",
+  "transport_train_trace_manifest_sha256": "5de790b7507b04720743e5523201ece8a2e5d1a17efaae008dcb959e130e0372"
+}
