@@ -1,0 +1,58 @@
+{
+  "authority": "verified_pipeline_stage_receipt",
+  "benchmark_manifest_sha256": "557cfe1eccd522d19e6a06177b2d86e6b1a55587b8a84cba65732fad4d2bcd4a",
+  "code_sha256": "b3d0dcb81e5a528937c1a80858273e2e8f8b1876be3d3691e222959867ef2760",
+  "collector": {
+    "attention_implementation": "sdpa",
+    "collector_id": "qwen3_grouped_prefix_attention_trace_v2",
+    "cuda_version": "13.0",
+    "logit_tail_tokens": 8,
+    "max_keys": 256,
+    "max_queries": 32,
+    "seed": 17,
+    "source_device_name": "NVIDIA A100-SXM4-80GB",
+    "source_device_type": "cuda",
+    "target_device_name": "NVIDIA A100-SXM4-80GB",
+    "target_device_type": "cuda",
+    "torch_version": "2.11.0+cu130",
+    "transformers_version": "5.13.0"
+  },
+  "completed_at": "2026-07-14T17:38:52.078233+00:00",
+  "direction": "qwen3_4b_to_8b",
+  "input_sha256": "a5ee74cbda572d41dfc58d53f7387760ec1917138c126742a1d6b4f66411ab1b",
+  "pipeline_id": "v5-pipeline-1c6fed3dc231893debb58298",
+  "raw_sample_store_sha256": "bb56d256380834ed65947dcea0fb7ad0b2ea4d2a37e8fc5f3e0ac700b693166b",
+  "schema_version": "goldenexperience.publication_v5_verified_stage.v2",
+  "stage": "collect_method_dev",
+  "stage_receipt": {
+    "sha256": "78fac75975bbde2a367f36cb01dd0b5646209f80d4ae7cc4651eeb048b625748",
+    "workspace_path": "receipts/qwen3_4b_to_8b/collect_method_dev/78fac75975bbde2a367f36cb01dd0b5646209f80d4ae7cc4651eeb048b625748.json"
+  },
+  "trace_manifest": {
+    "content_sha256": "1b65cc495ed8cd8749665051a97be84e0b7bfa8acdc77c57cea7507399c670e7",
+    "file_sha256": "d8e4ca0f170ef5d14554eb9be5ed02278e769f532a12898c8d6b6d7df2672e29",
+    "size_bytes": 1005638,
+    "workspace_path": "objects/d8/d8e4ca0f170ef5d14554eb9be5ed02278e769f532a12898c8d6b6d7df2672e29.json"
+  },
+  "verification": {
+    "all_unique_shards_loaded": true,
+    "bucket_groups": {
+      "128": 25,
+      "512": 25,
+      "2048": 25,
+      "8192": 17
+    },
+    "bucket_records": {
+      "128": 256,
+      "512": 256,
+      "2048": 256,
+      "8192": 256
+    },
+    "prefix_groups": 92,
+    "records": 1024,
+    "shard_bytes": 9475919040,
+    "tensor_bytes": 9475771104,
+    "unique_shards": 92,
+    "verified_at": "2026-07-14T17:43:18.947202+00:00"
+  }
+}
