@@ -21,7 +21,8 @@ exact prefix + source/target identity
                                v
                  inverse source RoPE
                  layer/head mixing
-                 per-head K/V low-rank + gated SiLU
+                 train-only z-score normalization
+                 per-head K/V low-rank affine
                  target RoPE
                                |
                                v
@@ -44,7 +45,8 @@ before decode.
   sealed evidence, runtime evidence, and the three-state authority model.
 - `head_aware_transport.py` implements `[K/V, layer, head, token, head_dim]` transport,
   different source/target KV-head counts, source/target RoPE, trainable layer/head mixers,
-  independent per-head K/V projections, attention losses, and the registered screening order.
+  independent per-head K/V affine maps, train-only ridge/SVD initialization, attention losses,
+  and the registered screening order. The legacy v1 gated-SiLU tensor contract remains readable.
 - `attention_collection.py` captures at most 32 target query positions and 256 key positions
   per prompt, plus pre-output-projection attention outputs.
 - `risk_gate.py` implements the compact sidecar, a fixed 128-D CountSketch, the 64-hidden-unit
@@ -82,9 +84,10 @@ before decode.
   resumes from fully verified per-sample checkpoints. Generic collection cannot name or load
   the semantic sealed split.
 - `v5_fit.py` fits the fixed 3-rank by 3-seed 4B-to-8B screening matrix in one synchronized
-  trace pass, verifies and deserializes each shared shard once, checkpoints model plus AdamW
-  state atomically, and emits runtime-loadable candidate weights. Its production entry point
-  cannot override the registered matrix.
+  trace pass, verifies and deserializes each shared shard once, fits a row-weighted train-only
+  ridge initializer, checkpoints the initializer plus model and AdamW state atomically, and emits
+  runtime-loadable candidate weights. Its production entry point cannot override the registered
+  matrix.
 - `publication_eval.py`, `v5_method_dev.py`, and `v5_real_method_dev.py` provide explicit
   deterministic semantic scorers, real shared-prefix evaluation of all nine candidates,
   resumable per-sample evidence, three-seed rank aggregation, and a seed-17 frozen structure
@@ -108,6 +111,21 @@ reuse source/target prefix prefill only while equal prefix groups are contiguous
 timing measurements, causal history updates, semantic scoring, labels, and row weights remain
 independent for every row. Thus grouped execution changes storage and redundant prefill cost, not
 the frozen sample order or statistical estimand.
+
+Transport v2 removes v1's diagonal base path, sigmoid gate, and SiLU residual. For each K/V
+layer-head pair it computes `z = (mixed_source - mean) / scale`, `latent = z @ down`, and
+`target_unrotated = latent @ up + bias`; keys are inverse-rotated before mixing and target-rotated
+after the affine map. Equal-depth/equal-head model pairs start from an identity layer/head mapping,
+which is the topology used by the successful full-affine development diagnostic. Unequal depths
+start from deterministic two-layer linear interpolation inside the registered three-layer window.
+
+The initializer reads only `transport_train`. Shared trace objects are evaluated once but multiplied
+by their number of frozen manifest rows, so grouping changes I/O rather than the training estimand.
+An augmented full-rank ridge solve uses ratio `1e-3`; the raw-space solution is converted to the
+train-only normalized coordinate system and stored as immutable per-head SVD tensors. Ranks
+32/64/128 are exact truncations of that stored decomposition. Seed 17 uses the canonical factors;
+seeds 29 and 43 use deterministic orthogonal latent rotations that preserve the initial affine
+function while allowing AdamW's coordinate-wise moments to explore distinct training paths.
 
 Run the implementation smoke independently of every benchmark split:
 

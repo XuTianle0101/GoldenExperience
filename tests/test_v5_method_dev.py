@@ -288,6 +288,7 @@ def _publish_fit(
         target=trace.target,
         training=training,
         candidates=candidates,
+        training_initializer_sha256=_digest("initializer"),
     )
     assert fit.validate(workspace=workspace, trace=trace) == []
     path = tmp_path / "fit.json"

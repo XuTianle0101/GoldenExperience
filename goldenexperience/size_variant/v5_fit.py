@@ -22,14 +22,19 @@ from goldenexperience.size_variant.cached_kv_manifest import (
     sha256_file,
 )
 from goldenexperience.size_variant.head_aware_transport import (
+    RIDGE_INITIALIZER_TENSORS,
     TRANSPORT_TRAINING_SEEDS,
     HeadAwareKVTransport,
     build_trainable_head_aware_transport,
     fit_head_aware_normalizers,
+    fit_head_aware_ridge_initializer,
     head_aware_training_objective,
+    initialize_trainable_from_ridge,
     transport_artifact_metadata,
 )
 from goldenexperience.size_variant.selective_manifest import (
+    TRANSPORT_V1_STRUCTURE_ID,
+    TRANSPORT_V2_STRUCTURE_ID,
     TransportLossContract,
     TransportSpec,
 )
@@ -48,12 +53,19 @@ from goldenexperience.size_variant.v5_pipeline import (
     V5PipelineWorkspace,
 )
 
-V5_TRANSPORT_FIT_SCHEMA = "goldenexperience.v5_transport_fit.v1"
+V5_TRANSPORT_FIT_SCHEMA = "goldenexperience.v5_transport_fit.v2"
+V5_LEGACY_TRANSPORT_FIT_SCHEMA = "goldenexperience.v5_transport_fit.v1"
 V5_TRANSPORT_CHECKPOINT_SCHEMA = "goldenexperience.v5_transport_checkpoint.v1"
 V5_NORMALIZER_CHECKPOINT_SCHEMA = "goldenexperience.v5_transport_normalizers.v1"
+V5_RIDGE_INITIALIZER_CHECKPOINT_SCHEMA = "goldenexperience.v5_ridge_initializer.v1"
 SCREENING_DIRECTION = "qwen3_4b_to_8b"
 REGISTERED_RANKS = (32, 64, 128)
 DEPLOYMENT_SEED = 17
+REGISTERED_RIDGE_RATIO = 1e-3
+RIDGE_INITIALIZER = "train_only_row_weighted_ridge_svd"
+RIDGE_SEED_STRATEGY = "deployment_identity_other_seed_orthogonal_rotation"
+LEGACY_INITIALIZER = "random_gated_silu"
+LEGACY_SEED_STRATEGY = "independent_gaussian_down_projection"
 _TERM_NAMES = (
     "native_generation",
     "prompt_tail_distillation",
@@ -75,6 +87,10 @@ class TransportTrainingParameters:
     weight_decay: float = 1e-4
     gradient_accumulation: int = 8
     max_grad_norm: float = 1.0
+    structure_id: str = TRANSPORT_V2_STRUCTURE_ID
+    initializer: str = RIDGE_INITIALIZER
+    ridge_ratio: float = REGISTERED_RIDGE_RATIO
+    seed_strategy: str = RIDGE_SEED_STRATEGY
     loss: TransportLossContract = field(default_factory=TransportLossContract)
 
     def validate(self, *, require_registered: bool = True) -> list[str]:
@@ -114,12 +130,31 @@ class TransportTrainingParameters:
             errors.append("transport gradient accumulation must be positive")
         if not _is_finite_number(self.max_grad_norm) or self.max_grad_norm <= 0:
             errors.append("transport max gradient norm must be finite and positive")
+        if self.structure_id == TRANSPORT_V2_STRUCTURE_ID:
+            if self.initializer != RIDGE_INITIALIZER:
+                errors.append("transport v2 must use the registered train-only ridge initializer")
+            if (
+                not _is_finite_number(self.ridge_ratio)
+                or self.ridge_ratio != REGISTERED_RIDGE_RATIO
+            ):
+                errors.append("transport v2 ridge ratio must remain 1e-3")
+            if self.seed_strategy != RIDGE_SEED_STRATEGY:
+                errors.append("transport v2 seed strategy differs from the registered contract")
+        elif self.structure_id == TRANSPORT_V1_STRUCTURE_ID:
+            if self.initializer != LEGACY_INITIALIZER or self.ridge_ratio != 0:
+                errors.append("legacy transport initializer contract is invalid")
+            if self.seed_strategy != LEGACY_SEED_STRATEGY:
+                errors.append("legacy transport seed strategy is invalid")
+        else:
+            errors.append("transport training structure is unsupported")
+        if require_registered and self.structure_id != TRANSPORT_V2_STRUCTURE_ID:
+            errors.append("publication transport screening must use transport v2")
         if require_registered and self.loss != TransportLossContract():
             errors.append("publication transport loss weights differ from the frozen contract")
         return errors
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        payload: dict[str, Any] = {
             "ranks": list(self.ranks),
             "seeds": list(self.seeds),
             "deployment_seed": self.deployment_seed,
@@ -131,6 +166,40 @@ class TransportTrainingParameters:
             "max_grad_norm": self.max_grad_norm,
             "loss": asdict(self.loss),
         }
+        if self.structure_id == TRANSPORT_V2_STRUCTURE_ID:
+            payload.update(
+                {
+                    "structure_id": self.structure_id,
+                    "initializer": self.initializer,
+                    "ridge_ratio": self.ridge_ratio,
+                    "seed_strategy": self.seed_strategy,
+                }
+            )
+        return payload
+
+    def transport_spec(
+        self,
+        *,
+        weights_uri: str,
+        weights_sha256: str,
+        rank: int,
+    ) -> TransportSpec:
+        values: dict[str, Any] = {
+            "weights_uri": weights_uri,
+            "weights_sha256": weights_sha256,
+            "rank": rank,
+            "source_window": self.source_window,
+            "loss": self.loss,
+        }
+        if self.structure_id == TRANSPORT_V1_STRUCTURE_ID:
+            values.update(
+                {
+                    "projection": "independent_per_head_low_rank_kv",
+                    "residual": "gated_silu",
+                    "structure_id": TRANSPORT_V1_STRUCTURE_ID,
+                }
+            )
+        return TransportSpec(**values)
 
 
 @dataclass(frozen=True)
@@ -199,11 +268,15 @@ class V5TransportFitManifest:
     target: CachedKVModelSpec
     training: TransportTrainingParameters
     candidates: tuple[TransportCandidateArtifact, ...]
+    training_initializer_sha256: str | None = None
     schema_version: str = V5_TRANSPORT_FIT_SCHEMA
 
     def validate(self, *, workspace: V5PipelineWorkspace, trace: V5TraceManifest) -> list[str]:
         errors: list[str] = []
-        if self.schema_version != V5_TRANSPORT_FIT_SCHEMA:
+        if self.schema_version not in {
+            V5_TRANSPORT_FIT_SCHEMA,
+            V5_LEGACY_TRANSPORT_FIT_SCHEMA,
+        }:
             errors.append("unsupported transport fit manifest schema")
         if self.pipeline_id != workspace.config.pipeline_id:
             errors.append("transport fit manifest belongs to another pipeline")
@@ -217,9 +290,21 @@ class V5TransportFitManifest:
             errors.append("transport fit trace manifest hash mismatch")
         if not _is_sha256(self.normalizer_sha256):
             errors.append("transport fit normalizer hash is invalid")
+        if self.schema_version == V5_TRANSPORT_FIT_SCHEMA:
+            if not _is_sha256(self.training_initializer_sha256):
+                errors.append("transport fit training initializer hash is invalid")
+        elif self.training_initializer_sha256 is not None:
+            errors.append("legacy transport fit cannot claim a ridge initializer")
         if self.source != trace.source or self.target != trace.target:
             errors.append("transport fit model identities differ from traces")
-        training_errors = self.training.validate(require_registered=True)
+        training_errors = self.training.validate(
+            require_registered=self.schema_version == V5_TRANSPORT_FIT_SCHEMA
+        )
+        if (
+            self.schema_version == V5_LEGACY_TRANSPORT_FIT_SCHEMA
+            and self.training.structure_id != TRANSPORT_V1_STRUCTURE_ID
+        ):
+            training_errors.append("legacy transport fit must use transport v1")
         errors.extend(training_errors)
         expected_pairs = {
             (rank, seed) for rank in self.training.ranks for seed in self.training.seeds
@@ -246,7 +331,7 @@ class V5TransportFitManifest:
         return _sha256_bytes(_canonical_json_bytes(self.to_dict()))
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        payload: dict[str, Any] = {
             "schema_version": self.schema_version,
             "pipeline_id": self.pipeline_id,
             "direction": self.direction,
@@ -259,6 +344,9 @@ class V5TransportFitManifest:
             "training": self.training.to_dict(),
             "candidates": [asdict(item) for item in self.candidates],
         }
+        if self.schema_version == V5_TRANSPORT_FIT_SCHEMA:
+            payload["training_initializer_sha256"] = self.training_initializer_sha256
+        return payload
 
     @classmethod
     def from_dict(cls, payload: Mapping[str, Any]) -> V5TransportFitManifest:
@@ -266,6 +354,15 @@ class V5TransportFitManifest:
         training_payload["ranks"] = tuple(training_payload["ranks"])
         training_payload["seeds"] = tuple(training_payload["seeds"])
         training_payload["loss"] = TransportLossContract(**training_payload["loss"])
+        if "structure_id" not in training_payload:
+            training_payload.update(
+                {
+                    "structure_id": TRANSPORT_V1_STRUCTURE_ID,
+                    "initializer": LEGACY_INITIALIZER,
+                    "ridge_ratio": 0.0,
+                    "seed_strategy": LEGACY_SEED_STRATEGY,
+                }
+            )
         candidates = []
         for item in payload.get("candidates", ()):
             candidate = dict(item)
@@ -283,6 +380,7 @@ class V5TransportFitManifest:
             target=CachedKVModelSpec(**payload["target"]),
             training=TransportTrainingParameters(**training_payload),
             candidates=tuple(candidates),
+            training_initializer_sha256=payload.get("training_initializer_sha256"),
             schema_version=str(payload.get("schema_version", "")),
         )
 
@@ -358,12 +456,10 @@ def load_fitted_transport(
     if candidate not in manifest.candidates:
         raise V5PipelineError("transport candidate is not part of the fit manifest")
     path = _verify_workspace_object(workspace, candidate.weights)
-    spec = TransportSpec(
+    spec = manifest.training.transport_spec(
         weights_uri=path.name,
         weights_sha256=candidate.weights.sha256,
         rank=candidate.rank,
-        source_window=manifest.training.source_window,
-        loss=manifest.training.loss,
     )
     expected_metadata = transport_artifact_metadata(
         direction=manifest.direction,
@@ -466,6 +562,24 @@ class _TraceLoader:
         return tensors
 
 
+def _row_weighted_unique_records(trace: V5TraceManifest) -> tuple[tuple[TraceRecord, int], ...]:
+    grouped: dict[str, tuple[TraceRecord, int]] = {}
+    for record in trace.records:
+        previous = grouped.get(record.shard.sha256)
+        if previous is None:
+            grouped[record.shard.sha256] = (record, 1)
+            continue
+        representative, count = previous
+        if representative.shard != record.shard or trace_shard_metadata(
+            representative,
+            trace.source,
+            trace.target,
+        ) != trace_shard_metadata(record, trace.source, trace.target):
+            raise V5PipelineError("shared trace shard has inconsistent row-weight bindings")
+        grouped[record.shard.sha256] = (representative, count + 1)
+    return tuple(grouped.values())
+
+
 class SynchronousTransportTrainer:
     """Train every candidate with one verified tensor load per unique trace shard."""
 
@@ -483,9 +597,13 @@ class SynchronousTransportTrainer:
             raise V5PipelineError("transport checkpoint interval must be positive")
         if not trace.records:
             raise V5PipelineError("transport fitting requires at least one trace")
+        if trace.split != "transport_train":
+            raise V5PipelineError("transport fitting may only read transport-train traces")
         errors = parameters.validate(require_registered=False)
         if errors:
             raise V5PipelineError("; ".join(errors))
+        if parameters.structure_id != TRANSPORT_V2_STRUCTURE_ID:
+            raise V5PipelineError("new transport fitting is restricted to transport v2")
         self.workspace = workspace
         self.trace = trace
         self.parameters = parameters
@@ -494,7 +612,12 @@ class SynchronousTransportTrainer:
         self.progress = progress
         self.loader = _TraceLoader(workspace, trace)
 
-    def fit(self, work: Path, *, stage_input_sha256: str) -> tuple[list[_FittedCandidate], str]:
+    def fit(
+        self,
+        work: Path,
+        *,
+        stage_input_sha256: str,
+    ) -> tuple[list[_FittedCandidate], str, str]:
         import torch
 
         work.mkdir(parents=True, exist_ok=True)
@@ -502,13 +625,21 @@ class SynchronousTransportTrainer:
             work,
             stage_input_sha256=stage_input_sha256,
         )
-        contexts = self._build_contexts(normalizers)
+        initializer, initializer_sha256 = self._load_or_fit_ridge_initializer(
+            work,
+            normalizers=normalizers,
+            normalizer_sha256=normalizer_sha256,
+            stage_input_sha256=stage_input_sha256,
+        )
+        contexts = self._build_contexts(normalizers, initializer)
         checkpoint_binding = _sha256_bytes(
             _canonical_json_bytes(
                 {
                     "stage_input_sha256": stage_input_sha256,
                     "trace_manifest_sha256": self.trace.content_sha256(),
                     "training": self.parameters.to_dict(),
+                    "normalizer_sha256": normalizer_sha256,
+                    "training_initializer_sha256": initializer_sha256,
                 }
             )
         )
@@ -666,20 +797,22 @@ class SynchronousTransportTrainer:
                     metrics=metrics,
                 )
             )
-        return fitted, normalizer_sha256
+        return fitted, normalizer_sha256, initializer_sha256
 
-    def _build_contexts(self, normalizers: Mapping[str, Any]) -> list[_CandidateContext]:
+    def _build_contexts(
+        self,
+        normalizers: Mapping[str, Any],
+        initializer: Mapping[str, Any],
+    ) -> list[_CandidateContext]:
         import torch
 
         contexts = []
         for rank in self.parameters.ranks:
             for seed in self.parameters.seeds:
-                spec = TransportSpec(
+                spec = self.parameters.transport_spec(
                     weights_uri="candidate.safetensors",
                     weights_sha256="0" * 64,
                     rank=rank,
-                    source_window=self.parameters.source_window,
-                    loss=self.parameters.loss,
                 )
                 module = build_trainable_head_aware_transport(
                     self.trace.source,
@@ -691,6 +824,7 @@ class SynchronousTransportTrainer:
                 with torch.no_grad():
                     for name, value in normalizers.items():
                         getattr(module, name).copy_(value.to(self.device))
+                initialize_trainable_from_ridge(module, initializer, seed=seed)
                 optimizer = torch.optim.AdamW(
                     module.parameters(),
                     lr=self.parameters.learning_rate,
@@ -763,12 +897,10 @@ class SynchronousTransportTrainer:
                 raise V5PipelineError("normalizer checkpoint changed while loading")
             _validate_normalizers(values, self.trace.target)
             return values, digest
-        spec = TransportSpec(
+        spec = self.parameters.transport_spec(
             weights_uri="normalizer.safetensors",
             weights_sha256="0" * 64,
             rank=min(self.parameters.ranks),
-            source_window=self.parameters.source_window,
-            loss=self.parameters.loss,
         )
         module = build_trainable_head_aware_transport(
             self.trace.source,
@@ -778,12 +910,13 @@ class SynchronousTransportTrainer:
             seed=min(self.parameters.seeds),
         )
 
-        def batches() -> Iterator[tuple[Any, Any]]:
-            for record in self.trace.records:
+        def batches() -> Iterator[tuple[Any, Any, int]]:
+            for record, weight in _row_weighted_unique_records(self.trace):
                 tensors = self.loader.load(record)
                 yield (
                     tensors["source_kv"].to(self.device),
                     tensors["key_positions"].to(self.device),
+                    weight,
                 )
 
         fit_head_aware_normalizers(module, batches())
@@ -808,6 +941,130 @@ class SynchronousTransportTrainer:
                 "binding_sha256": binding,
             },
         )
+        canonicalize_safetensors_header(temporary)
+        digest = sha256_file(temporary)
+        path = directory / f"{digest}.safetensors"
+        temporary.replace(path)
+        os.chmod(path, 0o444)
+        _write_json_replace(
+            pointer_path,
+            {
+                "binding_sha256": binding,
+                "path": path.relative_to(work).as_posix(),
+                "sha256": digest,
+            },
+        )
+        return values, digest
+
+    def _load_or_fit_ridge_initializer(
+        self,
+        work: Path,
+        *,
+        normalizers: Mapping[str, Any],
+        normalizer_sha256: str,
+        stage_input_sha256: str,
+    ) -> tuple[dict[str, Any], str]:
+        from safetensors import safe_open
+        from safetensors.torch import save_file
+
+        pointer_path = work / "ridge_initializer.json"
+        binding = _sha256_bytes(
+            _canonical_json_bytes(
+                {
+                    "stage_input_sha256": stage_input_sha256,
+                    "trace_manifest_sha256": self.trace.content_sha256(),
+                    "normalizer_sha256": normalizer_sha256,
+                    "structure_id": self.parameters.structure_id,
+                    "initializer": self.parameters.initializer,
+                    "ridge_ratio": self.parameters.ridge_ratio,
+                    "source_window": self.parameters.source_window,
+                }
+            )
+        )
+        metadata = {
+            "schema_version": V5_RIDGE_INITIALIZER_CHECKPOINT_SCHEMA,
+            "binding_sha256": binding,
+            "trace_manifest_sha256": self.trace.content_sha256(),
+            "normalizer_sha256": normalizer_sha256,
+            "ridge_ratio": str(self.parameters.ridge_ratio),
+            "row_weighting": "frozen_trace_rows",
+        }
+        if pointer_path.is_file():
+            if pointer_path.is_symlink():
+                raise V5PipelineError("ridge initializer pointer cannot be a symbolic link")
+            try:
+                pointer = json.loads(pointer_path.read_text(encoding="utf-8"))
+            except (OSError, TypeError, ValueError, json.JSONDecodeError) as exc:
+                raise V5PipelineError("ridge initializer pointer is malformed") from exc
+            if pointer.get("binding_sha256") != binding:
+                raise V5PipelineError("ridge initializer input binding mismatch")
+            digest = pointer.get("sha256")
+            if not _is_sha256(digest):
+                raise V5PipelineError("ridge initializer checksum is invalid")
+            expected_relative = Path("ridge_initializer_objects") / f"{digest}.safetensors"
+            if str(pointer.get("path")) != expected_relative.as_posix():
+                raise V5PipelineError("ridge initializer path is invalid")
+            path = _resolve_read_only_work_file(work, expected_relative)
+            before = _file_signature(path)
+            if sha256_file(path) != digest:
+                raise V5PipelineError("ridge initializer checksum mismatch")
+            try:
+                with safe_open(str(path), framework="pt", device="cpu") as handle:
+                    if (handle.metadata() or {}) != metadata:
+                        raise V5PipelineError("ridge initializer metadata is invalid")
+                    values = {
+                        name: handle.get_tensor(name)
+                        for name in handle.keys()  # noqa: SIM118
+                    }
+            except V5PipelineError:
+                raise
+            except Exception as exc:
+                raise V5PipelineError("ridge initializer payload is invalid") from exc
+            if _file_signature(path) != before or sha256_file(path) != digest:
+                raise V5PipelineError("ridge initializer changed while loading")
+            _validate_ridge_initializer_checkpoint(values, self.trace.target)
+            return values, digest
+        spec = self.parameters.transport_spec(
+            weights_uri="ridge-initializer.safetensors",
+            weights_sha256="0" * 64,
+            rank=min(self.parameters.ranks),
+        )
+        module = build_trainable_head_aware_transport(
+            self.trace.source,
+            self.trace.target,
+            spec,
+            device=self.device,
+            seed=self.parameters.deployment_seed,
+        )
+        import torch
+
+        with torch.no_grad():
+            for name, value in normalizers.items():
+                getattr(module, name).copy_(value.to(self.device))
+
+        def batches() -> Iterator[tuple[Any, Any, Any, int]]:
+            for record, weight in _row_weighted_unique_records(self.trace):
+                tensors = self.loader.load(record)
+                yield (
+                    tensors["source_kv"].to(self.device),
+                    tensors["target_kv"].to(self.device),
+                    tensors["key_positions"].to(self.device),
+                    weight,
+                )
+
+        try:
+            values = fit_head_aware_ridge_initializer(
+                module,
+                batches(),
+                ridge_ratio=self.parameters.ridge_ratio,
+            )
+        except (TypeError, ValueError, RuntimeError) as exc:
+            raise V5PipelineError("transport ridge initialization failed") from exc
+        _validate_ridge_initializer_checkpoint(values, self.trace.target)
+        directory = work / "ridge_initializer_objects"
+        directory.mkdir(parents=True, exist_ok=True)
+        temporary = directory / f".{uuid.uuid4().hex}.tmp"
+        save_file(values, temporary, metadata=metadata)
         canonicalize_safetensors_header(temporary)
         digest = sha256_file(temporary)
         path = directory / f"{digest}.safetensors"
@@ -867,7 +1124,7 @@ def run_fit_transport_stage(
             checkpoint_every_steps=checkpoint_every_steps,
             progress=progress,
         )
-        fitted, normalizer_sha256 = trainer.fit(
+        fitted, normalizer_sha256, initializer_sha256 = trainer.fit(
             work,
             stage_input_sha256=lease.input_sha256,
         )
@@ -899,6 +1156,7 @@ def run_fit_transport_stage(
             target=trace.target,
             training=training,
             candidates=tuple(candidates),
+            training_initializer_sha256=initializer_sha256,
         )
         manifest_errors = manifest.validate(workspace=workspace, trace=trace)
         if manifest_errors:
@@ -911,6 +1169,7 @@ def run_fit_transport_stage(
             metadata={
                 "candidate_count": len(candidates),
                 "trace_manifest_sha256": trace.content_sha256(),
+                "training_initializer_sha256": initializer_sha256,
                 "transport_fit_manifest_sha256": manifest.content_sha256(),
             },
         )
@@ -959,6 +1218,52 @@ def _validate_normalizers(values: Mapping[str, Any], target: CachedKVModelSpec) 
             raise V5PipelineError(f"transport normalizer {name} is non-finite")
         if name.endswith("_scale") and bool((value <= 0).any()):
             raise V5PipelineError(f"transport normalizer {name} is not positive")
+
+
+def _validate_ridge_initializer_checkpoint(
+    values: Mapping[str, Any],
+    target: CachedKVModelSpec,
+) -> None:
+    import torch
+
+    if set(values) != RIDGE_INITIALIZER_TENSORS:
+        raise V5PipelineError("ridge initializer tensor set is invalid")
+    shapes = {
+        "left_singular_vectors": (
+            target.num_layers,
+            target.num_key_value_heads,
+            target.head_dim,
+            target.head_dim,
+        ),
+        "singular_values": (
+            target.num_layers,
+            target.num_key_value_heads,
+            target.head_dim,
+        ),
+        "right_singular_vectors": (
+            target.num_layers,
+            target.num_key_value_heads,
+            target.head_dim,
+            target.head_dim,
+        ),
+        "bias": (
+            target.num_layers,
+            target.num_key_value_heads,
+            target.head_dim,
+        ),
+    }
+    for prefix in ("key", "value"):
+        for suffix, shape in shapes.items():
+            value = values[f"{prefix}_{suffix}"]
+            if tuple(value.shape) != shape or value.dtype != torch.float32:
+                raise V5PipelineError(
+                    f"ridge initializer {prefix}_{suffix} shape or dtype is invalid"
+                )
+            if not bool(torch.isfinite(value).all()):
+                raise V5PipelineError(f"ridge initializer {prefix}_{suffix} is non-finite")
+        singular = values[f"{prefix}_singular_values"]
+        if bool((singular < 0).any()) or bool((singular[..., 1:] > singular[..., :-1]).any()):
+            raise V5PipelineError(f"ridge initializer {prefix} singular values are invalid")
 
 
 def _save_checkpoint_set(

@@ -19,6 +19,8 @@ from goldenexperience.size_variant.cached_kv_manifest import (
 V5_LAYOUT = "kv_layer_head_token_head_dim"
 V5_METHOD = "head_aware_attention_preserving_transport"
 V5_FEATURE_SCHEMA = "goldenexperience.source_kv_risk_features.v1"
+TRANSPORT_V1_STRUCTURE_ID = "head_aware_transport_v1"
+TRANSPORT_V2_STRUCTURE_ID = "head_aware_transport_v2"
 SELECTIVE_RUNTIME_MEASUREMENT_PROTOCOL = "isolated_paired_request_latency_v1"
 SELECTIVE_RUNTIME_REQUEST_ORDER = "lexicographic_sample_id"
 SELECTIVE_RUNTIME_ARRIVAL_TIMESTAMPS_REPLAYED = False
@@ -60,10 +62,10 @@ class TransportSpec:
     source_window: int = 3
     layer_mixer: str = "per_target_head_window_softmax"
     head_mixer: str = "per_target_head_source_softmax"
-    projection: str = "independent_per_head_low_rank_kv"
-    residual: str = "gated_silu"
+    projection: str = "independent_per_head_low_rank_affine"
+    residual: str = "none"
     normalizer: str = "layer_head_ood_zscore"
-    structure_id: str = "head_aware_transport_v1"
+    structure_id: str = TRANSPORT_V2_STRUCTURE_ID
     loss: TransportLossContract = field(default_factory=TransportLossContract)
 
     def validate(self, source: CachedKVModelSpec) -> list[str]:
@@ -78,14 +80,28 @@ class TransportSpec:
             errors.append("transport rank exceeds source head dimension")
         if self.source_window not in {1, 3} or self.source_window > source.num_layers:
             errors.append("transport source_window must be 1 or 3 within source depth")
-        expected = {
-            "layer_mixer": "per_target_head_window_softmax",
-            "head_mixer": "per_target_head_source_softmax",
-            "projection": "independent_per_head_low_rank_kv",
-            "residual": "gated_silu",
-            "normalizer": "layer_head_ood_zscore",
-            "structure_id": "head_aware_transport_v1",
+        profiles = {
+            TRANSPORT_V1_STRUCTURE_ID: {
+                "layer_mixer": "per_target_head_window_softmax",
+                "head_mixer": "per_target_head_source_softmax",
+                "projection": "independent_per_head_low_rank_kv",
+                "residual": "gated_silu",
+                "normalizer": "layer_head_ood_zscore",
+                "structure_id": TRANSPORT_V1_STRUCTURE_ID,
+            },
+            TRANSPORT_V2_STRUCTURE_ID: {
+                "layer_mixer": "per_target_head_window_softmax",
+                "head_mixer": "per_target_head_source_softmax",
+                "projection": "independent_per_head_low_rank_affine",
+                "residual": "none",
+                "normalizer": "layer_head_ood_zscore",
+                "structure_id": TRANSPORT_V2_STRUCTURE_ID,
+            },
         }
+        expected = profiles.get(self.structure_id)
+        if expected is None:
+            errors.append("unsupported transport structure_id")
+            expected = {}
         for name, value in expected.items():
             if getattr(self, name) != value:
                 errors.append(f"unsupported transport {name}")

@@ -176,6 +176,7 @@ def test_directional_manifest_is_locked_to_selected_rank_and_seed() -> None:
         target=target,
         training=training,
         candidates=(candidate,),
+        training_initializer_sha256=_digest("initializer"),
     )
 
     assert manifest.validate(workspace=workspace, trace=trace, structure=structure) == []
@@ -295,6 +296,7 @@ def test_directional_runner_emits_one_frozen_candidate(
                     )
                 ],
                 _digest("normalizer"),
+                _digest("initializer"),
             )
 
     workspace = FakeWorkspace()

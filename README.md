@@ -37,7 +37,9 @@ and `GoldenBridge` targets `different_base_model`.
 
 The current research path is a fail-closed v5 artifact for same-family scale variants:
 
-- head-aware transport supports different source/target KV-head counts;
+- transport v2 uses train-only row-weighted ridge/SVD initialization and independent
+  per-head low-rank affine K/V maps, while legacy v1 artifacts remain readable;
+- head-aware layer/head mapping supports different source/target depths and KV-head counts;
 - a source-only sidecar and calibrated MLP admit only prefixes whose simultaneous 95%
   one-sided risk bound, Bonferroni-corrected across candidate thresholds, is at most 1%;
 - `validation_candidate` and `semantic_approved` artifacts cannot execute runtime reuse;

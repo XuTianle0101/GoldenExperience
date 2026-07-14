@@ -15,6 +15,8 @@ from goldenexperience.size_variant.cached_kv_manifest import (
     sha256_file,
 )
 from goldenexperience.size_variant.selective_manifest import (
+    TRANSPORT_V1_STRUCTURE_ID,
+    TRANSPORT_V2_STRUCTURE_ID,
     ArtifactState,
     SelectiveKVBridgeManifest,
     TransportLossContract,
@@ -26,7 +28,7 @@ class HeadAwareTransportError(RuntimeError):
     """Raised when a v5 transport or input KV object fails closed."""
 
 
-REQUIRED_TRANSPORT_TENSORS = frozenset(
+COMMON_TRANSPORT_TENSORS = frozenset(
     {
         "source_layer_ids",
         "layer_mix",
@@ -35,15 +37,32 @@ REQUIRED_TRANSPORT_TENSORS = frozenset(
         "key_normalizer_scale",
         "key_down",
         "key_up",
-        "key_gate",
-        "key_scale",
         "key_bias",
         "value_normalizer_mean",
         "value_normalizer_scale",
         "value_down",
         "value_up",
-        "value_gate",
-        "value_scale",
+        "value_bias",
+    }
+)
+V1_REQUIRED_TRANSPORT_TENSORS = COMMON_TRANSPORT_TENSORS | {
+    "key_gate",
+    "key_scale",
+    "value_gate",
+    "value_scale",
+}
+V2_REQUIRED_TRANSPORT_TENSORS = COMMON_TRANSPORT_TENSORS
+# Kept as the legacy v1 set for callers that imported this pre-v2 constant.
+REQUIRED_TRANSPORT_TENSORS = V1_REQUIRED_TRANSPORT_TENSORS
+RIDGE_INITIALIZER_TENSORS = frozenset(
+    {
+        "key_left_singular_vectors",
+        "key_singular_values",
+        "key_right_singular_vectors",
+        "key_bias",
+        "value_left_singular_vectors",
+        "value_singular_values",
+        "value_right_singular_vectors",
         "value_bias",
     }
 )
@@ -172,7 +191,6 @@ class HeadAwareKVTransport:
         """Translate `[2, source_layer, source_head, token, head_dim]` KV."""
 
         import torch
-        import torch.nn.functional as functional
 
         self._validate_source(source_kv)
         token_count = int(source_kv.shape[3])
@@ -195,22 +213,32 @@ class HeadAwareKVTransport:
         ) / self._tensor("value_normalizer_scale").unsqueeze(2)
         key_latent = torch.einsum("lhtd,lhdr->lhtr", key_input, self._tensor("key_down"))
         value_latent = torch.einsum("lhtd,lhdr->lhtr", value_input, self._tensor("value_down"))
-        key_residual = torch.einsum(
-            "lhtr,lhrd->lhtd", functional.silu(key_latent), self._tensor("key_up")
-        )
-        value_residual = torch.einsum(
-            "lhtr,lhrd->lhtd", functional.silu(value_latent), self._tensor("value_up")
-        )
-        target_key_unrotated = (
-            base_key * self._tensor("key_scale").unsqueeze(2)
-            + torch.sigmoid(self._tensor("key_gate")).unsqueeze(2) * key_residual
-            + self._tensor("key_bias").unsqueeze(2)
-        )
-        target_value = (
-            base_value * self._tensor("value_scale").unsqueeze(2)
-            + torch.sigmoid(self._tensor("value_gate")).unsqueeze(2) * value_residual
-            + self._tensor("value_bias").unsqueeze(2)
-        )
+        if self.spec.structure_id == TRANSPORT_V1_STRUCTURE_ID:
+            import torch.nn.functional as functional
+
+            key_residual = torch.einsum(
+                "lhtr,lhrd->lhtd", functional.silu(key_latent), self._tensor("key_up")
+            )
+            value_residual = torch.einsum(
+                "lhtr,lhrd->lhtd", functional.silu(value_latent), self._tensor("value_up")
+            )
+            target_key_unrotated = (
+                base_key * self._tensor("key_scale").unsqueeze(2)
+                + torch.sigmoid(self._tensor("key_gate")).unsqueeze(2) * key_residual
+                + self._tensor("key_bias").unsqueeze(2)
+            )
+            target_value = (
+                base_value * self._tensor("value_scale").unsqueeze(2)
+                + torch.sigmoid(self._tensor("value_gate")).unsqueeze(2) * value_residual
+                + self._tensor("value_bias").unsqueeze(2)
+            )
+        else:
+            target_key_unrotated = torch.einsum(
+                "lhtr,lhrd->lhtd", key_latent, self._tensor("key_up")
+            ) + self._tensor("key_bias").unsqueeze(2)
+            target_value = torch.einsum(
+                "lhtr,lhrd->lhtd", value_latent, self._tensor("value_up")
+            ) + self._tensor("value_bias").unsqueeze(2)
         target_key = _apply_rope_heads(
             target_key_unrotated,
             positions,
@@ -322,9 +350,10 @@ class HeadAwareKVTransport:
     def _validate_tensors(self) -> None:
         import torch
 
-        if set(self.tensors) != REQUIRED_TRANSPORT_TENSORS:
-            missing = sorted(REQUIRED_TRANSPORT_TENSORS - set(self.tensors))
-            unknown = sorted(set(self.tensors) - REQUIRED_TRANSPORT_TENSORS)
+        required = _required_transport_tensors(self.spec)
+        if set(self.tensors) != required:
+            missing = sorted(required - set(self.tensors))
+            unknown = sorted(set(self.tensors) - required)
             raise HeadAwareTransportError(
                 f"transport tensor set mismatch; missing={missing}, unknown={unknown}"
             )
@@ -346,11 +375,16 @@ class HeadAwareKVTransport:
                     f"{prefix}_normalizer_scale": (target_layers, target_heads, dim),
                     f"{prefix}_down": (target_layers, target_heads, dim, rank),
                     f"{prefix}_up": (target_layers, target_heads, rank, dim),
-                    f"{prefix}_gate": (target_layers, target_heads, dim),
-                    f"{prefix}_scale": (target_layers, target_heads, dim),
                     f"{prefix}_bias": (target_layers, target_heads, dim),
                 }
             )
+            if self.spec.structure_id == TRANSPORT_V1_STRUCTURE_ID:
+                shapes.update(
+                    {
+                        f"{prefix}_gate": (target_layers, target_heads, dim),
+                        f"{prefix}_scale": (target_layers, target_heads, dim),
+                    }
+                )
         for name, shape in shapes.items():
             tensor = self.tensors[name]
             if tuple(tensor.shape) != shape:
@@ -411,8 +445,18 @@ def initialize_head_aware_state(
         start = max(0, min(source.num_layers - window, center - window // 2))
         ids = torch.arange(start, start + window)
         layer_ids[target_layer] = ids.view(1, window).expand(target_heads, -1)
-        distances = (ids.float() - position).abs()
-        weights = torch.softmax(-distances, dim=0)
+        if spec.structure_id == TRANSPORT_V1_STRUCTURE_ID:
+            distances = (ids.float() - position).abs()
+            weights = torch.softmax(-distances, dim=0)
+        elif window == 1:
+            weights = torch.ones(1)
+        else:
+            low = math.floor(position)
+            high = min(source.num_layers - 1, low + 1)
+            high_weight = position - low
+            weights = torch.zeros(window)
+            weights[ids == low] = 1.0 - high_weight
+            weights[ids == high] += high_weight
         layer_mix[target_layer] = weights.view(1, window).expand(target_heads, -1)
     head_mix = torch.zeros(target_layers, target_heads, window, source_heads)
     for target_head in range(target_heads):
@@ -430,17 +474,36 @@ def initialize_head_aware_state(
         "head_mix": head_mix,
     }
     for prefix in ("key", "value"):
+        if spec.structure_id == TRANSPORT_V1_STRUCTURE_ID:
+            down = torch.zeros(target_layers, target_heads, dim, rank)
+            up = torch.zeros(target_layers, target_heads, rank, dim)
+        else:
+            down = (
+                torch.eye(dim, rank)
+                .view(1, 1, dim, rank)
+                .expand(target_layers, target_heads, -1, -1)
+            )
+            up = (
+                torch.eye(rank, dim)
+                .view(1, 1, rank, dim)
+                .expand(target_layers, target_heads, -1, -1)
+            )
         state.update(
             {
                 f"{prefix}_normalizer_mean": torch.zeros(target_layers, target_heads, dim),
                 f"{prefix}_normalizer_scale": torch.ones(target_layers, target_heads, dim),
-                f"{prefix}_down": torch.zeros(target_layers, target_heads, dim, rank),
-                f"{prefix}_up": torch.zeros(target_layers, target_heads, rank, dim),
-                f"{prefix}_gate": torch.zeros(target_layers, target_heads, dim),
-                f"{prefix}_scale": torch.ones(target_layers, target_heads, dim),
+                f"{prefix}_down": down.clone(),
+                f"{prefix}_up": up.clone(),
                 f"{prefix}_bias": torch.zeros(target_layers, target_heads, dim),
             }
         )
+        if spec.structure_id == TRANSPORT_V1_STRUCTURE_ID:
+            state.update(
+                {
+                    f"{prefix}_gate": torch.zeros(target_layers, target_heads, dim),
+                    f"{prefix}_scale": torch.ones(target_layers, target_heads, dim),
+                }
+            )
     return state
 
 
@@ -484,12 +547,22 @@ def build_trainable_head_aware_transport(
                     initial[f"{prefix}_normalizer_scale"],
                 )
                 down = initial[f"{prefix}_down"]
-                torch.nn.init.normal_(down, mean=0.0, std=0.02, generator=generator)
+                if spec.structure_id == TRANSPORT_V1_STRUCTURE_ID:
+                    torch.nn.init.normal_(down, mean=0.0, std=0.02, generator=generator)
                 setattr(self, f"{prefix}_down", torch.nn.Parameter(down))
                 setattr(self, f"{prefix}_up", torch.nn.Parameter(initial[f"{prefix}_up"]))
-                setattr(self, f"{prefix}_gate", torch.nn.Parameter(initial[f"{prefix}_gate"]))
-                setattr(self, f"{prefix}_scale", torch.nn.Parameter(initial[f"{prefix}_scale"]))
                 setattr(self, f"{prefix}_bias", torch.nn.Parameter(initial[f"{prefix}_bias"]))
+                if spec.structure_id == TRANSPORT_V1_STRUCTURE_ID:
+                    setattr(
+                        self,
+                        f"{prefix}_gate",
+                        torch.nn.Parameter(initial[f"{prefix}_gate"]),
+                    )
+                    setattr(
+                        self,
+                        f"{prefix}_scale",
+                        torch.nn.Parameter(initial[f"{prefix}_scale"]),
+                    )
 
         def _mix(self, value: Any) -> Any:
             selected = value[self.source_layer_ids]
@@ -517,16 +590,23 @@ def build_trainable_head_aware_transport(
                 latent = torch.einsum(
                     "lhtd,lhdr->lhtr", normalized, getattr(self, f"{prefix}_down")
                 )
-                residual = torch.einsum(
-                    "lhtr,lhrd->lhtd",
-                    torch.nn.functional.silu(latent),
-                    getattr(self, f"{prefix}_up"),
-                )
-                output = (
-                    base * getattr(self, f"{prefix}_scale").unsqueeze(2)
-                    + torch.sigmoid(getattr(self, f"{prefix}_gate")).unsqueeze(2) * residual
-                    + getattr(self, f"{prefix}_bias").unsqueeze(2)
-                )
+                if spec.structure_id == TRANSPORT_V1_STRUCTURE_ID:
+                    residual = torch.einsum(
+                        "lhtr,lhrd->lhtd",
+                        torch.nn.functional.silu(latent),
+                        getattr(self, f"{prefix}_up"),
+                    )
+                    output = (
+                        base * getattr(self, f"{prefix}_scale").unsqueeze(2)
+                        + torch.sigmoid(getattr(self, f"{prefix}_gate")).unsqueeze(2) * residual
+                        + getattr(self, f"{prefix}_bias").unsqueeze(2)
+                    )
+                else:
+                    output = torch.einsum(
+                        "lhtr,lhrd->lhtd",
+                        latent,
+                        getattr(self, f"{prefix}_up"),
+                    ) + getattr(self, f"{prefix}_bias").unsqueeze(2)
                 outputs.append(output)
             outputs[0] = _apply_rope_heads(
                 outputs[0],
@@ -543,15 +623,10 @@ def build_trainable_head_aware_transport(
                 "head_mix": self.head_mix_logits.softmax(dim=-1).detach().cpu(),
             }
             for prefix in ("key", "value"):
-                for suffix in (
-                    "normalizer_mean",
-                    "normalizer_scale",
-                    "down",
-                    "up",
-                    "gate",
-                    "scale",
-                    "bias",
-                ):
+                suffixes = ["normalizer_mean", "normalizer_scale", "down", "up", "bias"]
+                if spec.structure_id == TRANSPORT_V1_STRUCTURE_ID:
+                    suffixes.extend(("gate", "scale"))
+                for suffix in suffixes:
                     state[f"{prefix}_{suffix}"] = getattr(self, f"{prefix}_{suffix}").detach().cpu()
             return state
 
@@ -599,7 +674,7 @@ def head_aware_training_objective(
 
 def fit_head_aware_normalizers(
     module: Any,
-    batches: Iterable[tuple[Any, Any]],
+    batches: Iterable[tuple[Any, ...]],
 ) -> None:
     """Fit train-split-only per-layer/head normalizers used by transport and OOD."""
 
@@ -607,9 +682,17 @@ def fit_head_aware_normalizers(
 
     sums: dict[str, Any] = {}
     square_sums: dict[str, Any] = {}
-    samples = 0
+    samples = 0.0
     with torch.no_grad():
-        for source_kv, position_ids in batches:
+        for batch in batches:
+            if len(batch) == 2:
+                source_kv, position_ids = batch
+                weight = 1.0
+            elif len(batch) == 3:
+                source_kv, position_ids, raw_weight = batch
+                weight = _positive_batch_weight(raw_weight)
+            else:
+                raise ValueError("normalizer batches must contain source, positions, and weight")
             positions = torch.as_tensor(
                 position_ids,
                 dtype=torch.long,
@@ -628,13 +711,13 @@ def fit_head_aware_normalizers(
             )
             mixed = {"key": module._mix(key), "value": module._mix(source[1])}
             for prefix, value in mixed.items():
-                reduced = value.sum(dim=2)
-                square_reduced = value.square().sum(dim=2)
+                reduced = value.sum(dim=2) * weight
+                square_reduced = value.square().sum(dim=2) * weight
                 sums[prefix] = sums.get(prefix, torch.zeros_like(reduced)) + reduced
                 square_sums[prefix] = (
                     square_sums.get(prefix, torch.zeros_like(square_reduced)) + square_reduced
                 )
-            samples += int(source_kv.shape[3])
+            samples += int(source_kv.shape[3]) * weight
     if samples <= 0:
         raise ValueError("transport normalizer fitting observed no tokens")
     for prefix in ("key", "value"):
@@ -642,6 +725,209 @@ def fit_head_aware_normalizers(
         variance = (square_sums[prefix] / samples - mean.square()).clamp_min(1e-6)
         getattr(module, f"{prefix}_normalizer_mean").copy_(mean)
         getattr(module, f"{prefix}_normalizer_scale").copy_(variance.sqrt())
+
+
+def fit_head_aware_ridge_initializer(
+    module: Any,
+    batches: Iterable[tuple[Any, ...]],
+    *,
+    ridge_ratio: float = 1e-3,
+) -> dict[str, Any]:
+    """Fit a row-weighted full affine map and store its auditable SVD factors."""
+
+    import torch
+
+    if module.spec.structure_id != TRANSPORT_V2_STRUCTURE_ID:
+        raise ValueError("ridge initialization is only defined for transport v2")
+    if (
+        isinstance(ridge_ratio, bool)
+        or not isinstance(ridge_ratio, (int, float))
+        or not math.isfinite(ridge_ratio)
+        or ridge_ratio <= 0
+    ):
+        raise ValueError("ridge_ratio must be finite and positive")
+    gram: Any | None = None
+    cross: Any | None = None
+    observed_weight = 0.0
+    with torch.no_grad():
+        for batch in batches:
+            if len(batch) == 3:
+                source_kv, target_kv, position_ids = batch
+                weight = 1.0
+            elif len(batch) == 4:
+                source_kv, target_kv, position_ids, raw_weight = batch
+                weight = _positive_batch_weight(raw_weight)
+            else:
+                raise ValueError("ridge batches must contain source, target, positions, and weight")
+            positions = torch.as_tensor(
+                position_ids,
+                dtype=torch.long,
+                device=source_kv.device,
+            )
+            if source_kv.ndim != 5 or tuple(source_kv.shape[:1]) != (2,):
+                raise ValueError("ridge source KV has an invalid layout")
+            if target_kv.ndim != 5 or tuple(target_kv.shape[:1]) != (2,):
+                raise ValueError("ridge target KV has an invalid layout")
+            token_count = int(source_kv.shape[3])
+            if int(target_kv.shape[3]) != token_count or positions.numel() != token_count:
+                raise ValueError("ridge source, target, and positions have different lengths")
+            source = source_kv.float()
+            target = target_kv.float()
+            source_key = _apply_rope_heads(
+                source[0],
+                positions,
+                theta=module.source.rope_theta,
+                inverse=True,
+            )
+            target_key = _apply_rope_heads(
+                target[0],
+                positions,
+                theta=module.target.rope_theta,
+                inverse=True,
+            )
+            inputs = torch.stack((module._mix(source_key), module._mix(source[1])))
+            outputs = torch.stack((target_key, target[1]))
+            ones = torch.ones((*inputs.shape[:-1], 1), device=inputs.device)
+            augmented = torch.cat((inputs, ones), dim=-1)
+            if gram is None:
+                layers, heads, dim = inputs.shape[1], inputs.shape[2], inputs.shape[-1]
+                gram = torch.zeros(
+                    2,
+                    layers,
+                    heads,
+                    dim + 1,
+                    dim + 1,
+                    device=inputs.device,
+                )
+                cross = torch.zeros(
+                    2,
+                    layers,
+                    heads,
+                    dim + 1,
+                    dim,
+                    device=inputs.device,
+                )
+            assert cross is not None
+            gram.add_(
+                torch.einsum("alhti,alhtj->alhij", augmented, augmented),
+                alpha=weight,
+            )
+            cross.add_(
+                torch.einsum("alhti,alhtd->alhid", augmented, outputs),
+                alpha=weight,
+            )
+            observed_weight += token_count * weight
+    if gram is None or cross is None or observed_weight <= 0:
+        raise ValueError("ridge initialization observed no weighted tokens")
+    dim = int(cross.shape[-1])
+    diagonal_scale = gram.diagonal(dim1=-2, dim2=-1).mean(dim=-1).clamp_min(1e-12)
+    identity = torch.eye(dim + 1, device=gram.device).view(1, 1, 1, dim + 1, dim + 1)
+    regularized = gram + ridge_ratio * diagonal_scale[..., None, None] * identity
+    regularized[..., -1, -1] = gram[..., -1, -1]
+    try:
+        solution = torch.linalg.solve(regularized, cross)
+    except RuntimeError as exc:
+        raise ValueError("ridge normal equations are not solvable") from exc
+    raw_weight = solution[..., :dim, :]
+    raw_bias = solution[..., dim, :]
+    means = torch.stack(
+        (module.key_normalizer_mean, module.value_normalizer_mean),
+    ).to(raw_weight)
+    scales = torch.stack(
+        (module.key_normalizer_scale, module.value_normalizer_scale),
+    ).to(raw_weight)
+    normalized_weight = scales.unsqueeze(-1) * raw_weight
+    normalized_bias = torch.einsum("alhi,alhid->alhd", means, raw_weight) + raw_bias
+    if not bool(torch.isfinite(normalized_weight).all()) or not bool(
+        torch.isfinite(normalized_bias).all()
+    ):
+        raise ValueError("ridge initialization produced non-finite affine parameters")
+    try:
+        left, singular, right = torch.linalg.svd(normalized_weight, full_matrices=False)
+    except RuntimeError as exc:
+        raise ValueError("ridge affine SVD failed") from exc
+    state: dict[str, Any] = {}
+    for index, prefix in enumerate(("key", "value")):
+        state[f"{prefix}_left_singular_vectors"] = left[index].float().cpu().contiguous()
+        state[f"{prefix}_singular_values"] = singular[index].float().cpu().contiguous()
+        state[f"{prefix}_right_singular_vectors"] = right[index].float().cpu().contiguous()
+        state[f"{prefix}_bias"] = normalized_bias[index].float().cpu().contiguous()
+    _validate_ridge_initializer(state, module.target)
+    return state
+
+
+def initialize_trainable_from_ridge(
+    module: Any,
+    initializer: Mapping[str, Any],
+    *,
+    seed: int,
+) -> None:
+    """Load one deterministic rank truncation into the exact v2 training module."""
+
+    import torch
+
+    if module.spec.structure_id != TRANSPORT_V2_STRUCTURE_ID:
+        raise ValueError("ridge factors can only initialize transport v2")
+    if type(seed) is not int:
+        raise ValueError("transport initializer seed must be an integer")
+    _validate_ridge_initializer(initializer, module.target)
+    rank = module.spec.rank
+    generator = torch.Generator(device="cpu")
+    generator.manual_seed(seed)
+    with torch.no_grad():
+        for prefix in ("key", "value"):
+            left = initializer[f"{prefix}_left_singular_vectors"].to(
+                device=module.key_down.device,
+                dtype=module.key_down.dtype,
+            )
+            singular = initializer[f"{prefix}_singular_values"].to(left)
+            right = initializer[f"{prefix}_right_singular_vectors"].to(left)
+            root = singular[..., :rank].clamp_min(0).sqrt()
+            down = left[..., :rank] * root.unsqueeze(-2)
+            up = root.unsqueeze(-1) * right[..., :rank, :]
+            if seed != TRANSPORT_TRAINING_SEEDS[0]:
+                random_matrix = torch.randn(rank, rank, generator=generator)
+                rotation, triangular = torch.linalg.qr(random_matrix)
+                signs = torch.where(
+                    triangular.diagonal() < 0,
+                    -torch.ones(rank),
+                    torch.ones(rank),
+                )
+                rotation = (rotation * signs.unsqueeze(0)).to(down)
+                down = torch.matmul(down, rotation)
+                up = torch.matmul(rotation.transpose(0, 1), up)
+            getattr(module, f"{prefix}_down").copy_(down)
+            getattr(module, f"{prefix}_up").copy_(up)
+            getattr(module, f"{prefix}_bias").copy_(initializer[f"{prefix}_bias"].to(down))
+
+
+def _validate_ridge_initializer(
+    initializer: Mapping[str, Any],
+    target: CachedKVModelSpec,
+) -> None:
+    import torch
+
+    if set(initializer) != RIDGE_INITIALIZER_TENSORS:
+        raise ValueError("ridge initializer tensor set is invalid")
+    layers = target.num_layers
+    heads = target.num_key_value_heads
+    dim = target.head_dim
+    shapes = {
+        "left_singular_vectors": (layers, heads, dim, dim),
+        "singular_values": (layers, heads, dim),
+        "right_singular_vectors": (layers, heads, dim, dim),
+        "bias": (layers, heads, dim),
+    }
+    for prefix in ("key", "value"):
+        for suffix, shape in shapes.items():
+            value = initializer[f"{prefix}_{suffix}"]
+            if tuple(value.shape) != shape or value.dtype != torch.float32:
+                raise ValueError(f"ridge initializer {prefix}_{suffix} shape or dtype is invalid")
+            if not bool(torch.isfinite(value).all()):
+                raise ValueError(f"ridge initializer {prefix}_{suffix} is non-finite")
+        singular = initializer[f"{prefix}_singular_values"]
+        if bool((singular < 0).any()) or bool((singular[..., 1:] > singular[..., :-1]).any()):
+            raise ValueError(f"ridge initializer {prefix} singular values are invalid")
 
 
 def dynamic_cache_to_head_object(past_key_values: Any) -> Any:
@@ -880,6 +1166,25 @@ def transport_artifact_metadata(
         "target_weights_sha256": target.weights_sha256,
         "structure_id": spec.structure_id,
     }
+
+
+def _required_transport_tensors(spec: TransportSpec) -> frozenset[str]:
+    if spec.structure_id == TRANSPORT_V1_STRUCTURE_ID:
+        return V1_REQUIRED_TRANSPORT_TENSORS
+    if spec.structure_id == TRANSPORT_V2_STRUCTURE_ID:
+        return V2_REQUIRED_TRANSPORT_TENSORS
+    raise HeadAwareTransportError("unsupported transport structure_id")
+
+
+def _positive_batch_weight(value: Any) -> float:
+    if (
+        isinstance(value, bool)
+        or not isinstance(value, (int, float))
+        or not math.isfinite(value)
+        or value <= 0
+    ):
+        raise ValueError("batch weight must be finite and positive")
+    return float(value)
 
 
 def _compatibility_errors(source: CachedKVModelSpec, target: CachedKVModelSpec) -> list[str]:

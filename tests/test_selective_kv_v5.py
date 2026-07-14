@@ -78,6 +78,7 @@ from goldenexperience.size_variant.risk_gate import (
     unsafe_label,
 )
 from goldenexperience.size_variant.selective_manifest import (
+    TRANSPORT_V1_STRUCTURE_ID,
     AcceptedSubsetQualityEvidence,
     ArtifactState,
     DirectInjectionEvidence,
@@ -426,7 +427,37 @@ def test_trainable_transport_exports_the_exact_runtime_tensor_contract() -> None
     assert torch.isfinite(terms.total)
     assert any(parameter.grad is not None for parameter in module.parameters())
     assert bool((module.key_normalizer_scale > 0).all())
-    assert runtime.transform(source_kv).shape == native.shape
+    runtime_result = runtime.transform(source_kv, position_ids=positions)
+    assert runtime_result.shape == native.shape
+    torch.testing.assert_close(
+        runtime_result,
+        module(source_kv, positions).to(torch.bfloat16),
+        atol=0,
+        rtol=0,
+    )
+    assert "key_gate" not in runtime.tensors
+
+
+def test_legacy_v1_transport_tensor_contract_remains_loadable() -> None:
+    source = _model("qwen3-4b", size=4, layers=3, heads=4)
+    target = _model("qwen3-8b", size=8, layers=4, heads=8)
+    spec = TransportSpec(
+        weights_uri="legacy.safetensors",
+        weights_sha256=_digest("legacy"),
+        rank=32,
+        source_window=3,
+        projection="independent_per_head_low_rank_kv",
+        residual="gated_silu",
+        structure_id=TRANSPORT_V1_STRUCTURE_ID,
+    )
+    state = initialize_head_aware_state(source, target, spec)
+    transport = HeadAwareKVTransport(source, target, spec, state)
+    source_kv = torch.randn(2, 3, 4, 5, 32, dtype=torch.bfloat16)
+
+    result = transport.transform(source_kv)
+
+    assert result.shape == (2, 4, 8, 5, 32)
+    assert {"key_gate", "key_scale", "value_gate", "value_scale"} <= set(transport.tensors)
 
 
 def test_transport_loads_from_one_manifest_snapshot(tmp_path: Path, monkeypatch) -> None:

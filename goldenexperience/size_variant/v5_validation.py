@@ -35,7 +35,6 @@ from goldenexperience.size_variant.selective_manifest import (
     ArtifactState,
     SelectiveKVBridgeManifest,
     SelectiveQualityThresholds,
-    TransportSpec,
 )
 from goldenexperience.size_variant.v5_calibration import (
     RISK_CALIBRATION_PREDICTOR_DEVICE,
@@ -650,12 +649,10 @@ def build_validation_candidate(
     quality: AcceptedSubsetQualityEvidence,
     thresholds: SelectiveQualityThresholds,
 ) -> SelectiveKVBridgeManifest:
-    transport = TransportSpec(
+    transport = transport_manifest.training.transport_spec(
         weights_uri=candidate.weights.path,
         weights_sha256=candidate.weights.sha256,
         rank=candidate.rank,
-        source_window=transport_manifest.training.source_window,
-        loss=transport_manifest.training.loss,
     )
     manifest = SelectiveKVBridgeManifest(
         artifact_id="",

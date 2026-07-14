@@ -24,7 +24,6 @@ from goldenexperience.size_variant.selective_manifest import (
     RiskGateSpec,
     SelectiveKVBridgeManifest,
     SelectiveQualityThresholds,
-    TransportLossContract,
     TransportQualityEvidence,
 )
 from goldenexperience.size_variant.v5_calibration import V5RiskCalibrationManifest
@@ -36,6 +35,7 @@ from goldenexperience.size_variant.v5_collect import (
 from goldenexperience.size_variant.v5_fit import (
     CandidateTrainingMetrics,
     TransportCandidateArtifact,
+    TransportTrainingParameters,
 )
 from goldenexperience.size_variant.v5_pipeline import (
     PipelineStageRecord,
@@ -416,7 +416,7 @@ def test_semantic_stage_resumes_replays_and_grants_no_runtime_authority(
         direction="qwen3_4b_to_8b",
         source=source,
         target=target,
-        training=SimpleNamespace(source_window=3, loss=TransportLossContract()),
+        training=TransportTrainingParameters(),
         content_sha256=lambda: _digest("fit"),
     )
     candidate = _candidate()

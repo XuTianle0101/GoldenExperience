@@ -16,6 +16,11 @@ from goldenexperience.size_variant.attention_collection import causal_sample_mas
 from goldenexperience.size_variant.cached_kv_manifest import CachedKVModelSpec, sha256_file
 from goldenexperience.size_variant.head_aware_transport import (
     HeadAwareKVTransport,
+    _apply_rope_heads,
+    build_trainable_head_aware_transport,
+    fit_head_aware_normalizers,
+    fit_head_aware_ridge_initializer,
+    initialize_trainable_from_ridge,
     transport_artifact_metadata,
 )
 from goldenexperience.size_variant.v5_collect import (
@@ -34,6 +39,7 @@ from goldenexperience.size_variant.v5_fit import (
     TransportCandidateArtifact,
     TransportTrainingParameters,
     V5TransportFitManifest,
+    _row_weighted_unique_records,
     _TraceLoader,
     _validate_progress,
     run_fit_transport_stage,
@@ -192,7 +198,7 @@ def _runtime_state(path: Path) -> tuple[dict[str, Any], dict[str, str]]:
 
 def test_synchronous_transport_fit_emits_runtime_loadable_weights(tmp_path: Path) -> None:
     workspace, trace = _synthetic_trace(tmp_path)
-    fitted, normalizer_sha256 = _trainer(workspace, trace).fit(
+    fitted, normalizer_sha256, initializer_sha256 = _trainer(workspace, trace).fit(
         tmp_path / "work",
         stage_input_sha256=_digest("stage-input"),
     )
@@ -202,6 +208,7 @@ def test_synchronous_transport_fit_emits_runtime_loadable_weights(tmp_path: Path
     assert candidate.metrics.samples == 2
     assert candidate.metrics.optimizer_steps == 2
     assert len(normalizer_sha256) == 64
+    assert len(initializer_sha256) == 64
     state, metadata = _runtime_state(candidate.path)
     assert metadata == transport_artifact_metadata(
         direction=trace.direction,
@@ -225,6 +232,140 @@ def test_synchronous_transport_fit_emits_runtime_loadable_weights(tmp_path: Path
     transformed = runtime.transform(source_kv, position_ids=torch.arange(4))
     assert transformed.shape == (2, 3, 1, 4, 32)
     assert bool(torch.isfinite(transformed).all())
+
+
+def _known_affine_batch() -> tuple[
+    CachedKVModelSpec,
+    CachedKVModelSpec,
+    Any,
+    torch.Tensor,
+    torch.Tensor,
+    torch.Tensor,
+]:
+    source = _model("source")
+    target = _model("target")
+    spec = _transport_spec(_parameters())
+    module = build_trainable_head_aware_transport(source, target, spec)
+    generator = torch.Generator().manual_seed(911)
+    source_kv = torch.randn(2, 3, 1, 96, 32, generator=generator).to(torch.bfloat16)
+    positions = torch.arange(96)
+    source_value = source_kv.float()
+    source_key = _apply_rope_heads(
+        source_value[0],
+        positions,
+        theta=source.rope_theta,
+        inverse=True,
+    )
+    mixed = torch.stack((module._mix(source_key), module._mix(source_value[1])))
+    weight = torch.eye(32).view(1, 1, 1, 32, 32).expand(2, 3, 1, -1, -1).clone()
+    weight += 0.01 * torch.randn(weight.shape, generator=generator)
+    bias = 0.05 * torch.randn(2, 3, 1, 32, generator=generator)
+    target_unrotated = torch.einsum("alhti,alhid->alhtd", mixed, weight) + bias.unsqueeze(3)
+    target_key = _apply_rope_heads(
+        target_unrotated[0],
+        positions,
+        theta=target.rope_theta,
+        inverse=False,
+    )
+    target_kv = torch.stack((target_key, target_unrotated[1])).to(torch.bfloat16)
+    return source, target, spec, source_kv, target_kv, positions
+
+
+def test_full_rank_ridge_initializer_recovers_a_known_affine_map() -> None:
+    source, target, spec, source_kv, target_kv, positions = _known_affine_batch()
+    module = build_trainable_head_aware_transport(source, target, spec)
+    fit_head_aware_normalizers(module, ((source_kv, positions),))
+    initializer = fit_head_aware_ridge_initializer(
+        module,
+        ((source_kv, target_kv, positions),),
+        ridge_ratio=1e-6,
+    )
+    initialize_trainable_from_ridge(module, initializer, seed=17)
+    runtime = HeadAwareKVTransport(
+        source,
+        target,
+        spec,
+        module.runtime_state(),
+        compute_dtype=torch.float32,
+    )
+
+    transformed = runtime.transform(source_kv, position_ids=positions)
+
+    assert torch.nn.functional.mse_loss(transformed.float(), target_kv.float()) < 2e-3
+    assert (
+        torch.nn.functional.cosine_similarity(
+            transformed.float().reshape(-1, 32),
+            target_kv.float().reshape(-1, 32),
+            dim=-1,
+        ).mean()
+        > 0.999
+    )
+
+
+def test_ridge_rank_truncation_is_seeded_reproducible_and_function_preserving() -> None:
+    source, target, spec, source_kv, target_kv, positions = _known_affine_batch()
+    fitted = build_trainable_head_aware_transport(source, target, spec)
+    fit_head_aware_normalizers(fitted, ((source_kv, positions),))
+    initializer = fit_head_aware_ridge_initializer(
+        fitted,
+        ((source_kv, target_kv, positions),),
+        ridge_ratio=1e-6,
+    )
+
+    def initialized(seed: int):
+        module = build_trainable_head_aware_transport(source, target, spec)
+        with torch.no_grad():
+            for prefix in ("key", "value"):
+                for suffix in ("normalizer_mean", "normalizer_scale"):
+                    name = f"{prefix}_{suffix}"
+                    getattr(module, name).copy_(getattr(fitted, name))
+        initialize_trainable_from_ridge(module, initializer, seed=seed)
+        return module
+
+    deployment = initialized(17)
+    alternate = initialized(29)
+    repeated = initialized(29)
+
+    torch.testing.assert_close(alternate.key_down, repeated.key_down, atol=0, rtol=0)
+    assert not torch.equal(deployment.key_down, alternate.key_down)
+    torch.testing.assert_close(
+        torch.matmul(deployment.key_down, deployment.key_up),
+        torch.matmul(alternate.key_down, alternate.key_up),
+        atol=2e-5,
+        rtol=2e-5,
+    )
+
+
+def test_weighted_ridge_matches_expanded_frozen_rows() -> None:
+    source, target, spec, source_kv, target_kv, positions = _known_affine_batch()
+    second_source = torch.flip(source_kv, dims=(3,))
+    second_target = torch.flip(target_kv, dims=(3,))
+
+    weighted = build_trainable_head_aware_transport(source, target, spec)
+    fit_head_aware_normalizers(
+        weighted,
+        ((source_kv, positions, 3), (second_source, positions, 1)),
+    )
+    weighted_state = fit_head_aware_ridge_initializer(
+        weighted,
+        (
+            (source_kv, target_kv, positions, 3),
+            (second_source, second_target, positions, 1),
+        ),
+        ridge_ratio=1e-6,
+    )
+
+    expanded = build_trainable_head_aware_transport(source, target, spec)
+    expanded_rows = ((source_kv, positions),) * 3 + ((second_source, positions),)
+    fit_head_aware_normalizers(expanded, expanded_rows)
+    expanded_state = fit_head_aware_ridge_initializer(
+        expanded,
+        ((source_kv, target_kv, positions),) * 3 + ((second_source, second_target, positions),),
+        ridge_ratio=1e-6,
+    )
+
+    for name in weighted_state:
+        torch.testing.assert_close(weighted_state[name], expanded_state[name], atol=1e-5, rtol=1e-5)
 
 
 def test_trace_loader_reuses_only_compatibly_bound_shared_shards(
@@ -259,15 +400,37 @@ def test_trace_loader_reuses_only_compatibly_bound_shared_shards(
     assert calls == 1
 
 
-def _transport_spec(parameters: TransportTrainingParameters):
-    from goldenexperience.size_variant.selective_manifest import TransportSpec
+def test_ridge_initializer_groups_shared_shards_by_frozen_row_count(tmp_path: Path) -> None:
+    _, trace = _synthetic_trace(tmp_path)
+    first, second = trace.records
+    shared = replace(
+        second,
+        prefix_group_id=first.prefix_group_id,
+        prefix_sha256=first.prefix_sha256,
+        token_ids_sha256=first.token_ids_sha256,
+        token_count=first.token_count,
+        query_sample_count=first.query_sample_count,
+        key_sample_count=first.key_sample_count,
+        shard=first.shard,
+    )
 
-    return TransportSpec(
+    grouped = _row_weighted_unique_records(replace(trace, records=(first, shared)))
+
+    assert grouped == ((first, 2),)
+
+
+def test_transport_trainer_rejects_non_training_trace(tmp_path: Path) -> None:
+    workspace, trace = _synthetic_trace(tmp_path)
+
+    with pytest.raises(V5PipelineError, match="transport-train"):
+        _trainer(workspace, replace(trace, split="method_dev"))
+
+
+def _transport_spec(parameters: TransportTrainingParameters):
+    return parameters.transport_spec(
         weights_uri="candidate.safetensors",
         weights_sha256="0" * 64,
         rank=parameters.ranks[0],
-        source_window=parameters.source_window,
-        loss=parameters.loss,
     )
 
 
@@ -284,16 +447,16 @@ def test_transport_checkpoint_resume_matches_uninterrupted_fit(tmp_path: Path) -
             resumed_work,
             stage_input_sha256=_digest("stage-input"),
         )
-    resumed, resumed_normalizer = _trainer(workspace, trace, epochs=2).fit(
+    resumed, resumed_normalizer, resumed_initializer = _trainer(workspace, trace, epochs=2).fit(
         resumed_work,
         stage_input_sha256=_digest("stage-input"),
     )
-    uninterrupted, uninterrupted_normalizer = _trainer(workspace, trace, epochs=2).fit(
-        tmp_path / "uninterrupted",
-        stage_input_sha256=_digest("stage-input"),
-    )
+    uninterrupted, uninterrupted_normalizer, uninterrupted_initializer = _trainer(
+        workspace, trace, epochs=2
+    ).fit(tmp_path / "uninterrupted", stage_input_sha256=_digest("stage-input"))
 
     assert resumed_normalizer == uninterrupted_normalizer
+    assert resumed_initializer == uninterrupted_initializer
     assert resumed[0].metrics == uninterrupted[0].metrics
     assert sha256_file(resumed[0].path) == sha256_file(uninterrupted[0].path)
 
@@ -426,6 +589,7 @@ def test_fit_manifest_requires_the_complete_registered_matrix(tmp_path: Path) ->
         target=trace.target,
         training=training,
         candidates=candidates,
+        training_initializer_sha256=_digest("initializer"),
     )
 
     assert manifest.validate(workspace=workspace, trace=trace) == []

@@ -75,23 +75,34 @@ golden-v5-pipeline fit-transport \
 The stage trains the Cartesian product of ranks 32/64/128 and seeds 17/29/43. It fixes seed
 17 for later deployment, source window 3, three epochs, AdamW at `3e-4` with weight decay
 `1e-4`, gradient accumulation 8, gradient clipping at 1.0, and the manifest loss contract.
-All nine candidates consume each trace shard synchronously, so a shard is loaded once per
-epoch rather than once per candidate. The native-generation and prompt-tail values in a
-trace are bounded reference constants; they are included in the registered reported total,
-while gradients come from attention-logit KL, attention-output MSE, and transformed-KV
-anchor loss.
+All nine candidates consume each trace shard synchronously, and each immutable shared shard is
+verified and deserialized once for the complete fit rather than once per row, epoch, or candidate.
+The native-generation and prompt-tail values in a trace are bounded reference constants; they are
+included in the registered reported total, while gradients come from attention-logit KL,
+attention-output MSE, and transformed-KV anchor loss.
 
-Normalizers are fit once over transport-train traces. Checkpoint generations atomically bind
-the trace manifest, complete training parameters, exact sample/optimizer boundary, model
-state, AdamW moments and step counters, and finite cumulative metrics for every candidate.
-The pointer is published only after the full nine-file generation exists. `--resume` rejects
-partial generations, path or symlink escapes, changed hashes, missing optimizer tensors,
-changed hyperparameters, fractional progress, and non-finite state. Runtime weights use the
-same metadata contract as a final v5 manifest.
+Transport v2 first fits per-layer/head K/V normalizers using only `transport_train`. It then solves
+an augmented full-rank ridge system at ratio `1e-3`, with every shared shard weighted by its number
+of frozen manifest rows. Equal-topology directions use identity layer/head mixing, reproducing the
+successful full-affine development topology; unequal depths use deterministic two-layer linear
+interpolation in the registered window. The raw-space ridge map is converted to normalized
+coordinates and stored as immutable per-head SVD tensors. Candidate ranks are exact 32/64/128
+truncations. Seed 17 uses canonical factors, while seeds 29/43 use deterministic orthogonal latent
+rotations that preserve the initial function but produce distinct AdamW coordinate systems.
+
+The normalizer and ridge initializer have separate immutable checkpoints and hashes. The fit
+manifest records `training_initializer_sha256` in addition to `normalizer_sha256`. Checkpoint
+generations atomically bind both identities, the trace manifest, complete training parameters,
+exact sample/optimizer boundary, model state, AdamW moments and step counters, and finite cumulative
+metrics for every candidate. The pointer is published only after the full nine-file generation
+exists. `--resume` rejects partial generations, path or symlink escapes, changed hashes, missing
+optimizer tensors, changed hyperparameters, fractional progress, and non-finite state. Runtime
+weights use the same metadata contract as a final v5 manifest. Legacy v1 final artifacts remain
+loadable, but every newly fitted publication candidate is required to use v2.
 
 Generated safetensors headers are canonicalized before hashing. This removes serialization
-order from trace, checkpoint, normalizer, and weight identities: an interrupted-and-resumed
-deterministic run produces the same weight bytes as an uninterrupted run.
+order from trace, checkpoint, normalizer, initializer, and weight identities: an
+interrupted-and-resumed deterministic run produces the same weight bytes as an uninterrupted run.
 
 The one-shard real-model diagnostic and synthetic resume tests establish only executable and
 checkpoint correctness. They do not replace the registered 4,096-sample transport run,
@@ -161,10 +172,11 @@ The pipeline state itself enforces a cross-direction dependency on the completed
 `evaluate_method_dev` output, and the directional fit manifest binds the semantic structure
 receipt hash. Calling the generic stage API cannot bypass this ordering.
 
-Each directional manifest carries one content-addressed runtime weight object and its
-direction-specific normalizer/training metrics. Resume uses the same full model, optimizer,
-metric, progress, and input-binding checks as screening fit. A changed selected rank, seed,
-window, optimizer, loss, train trace, code hash, or structure receipt fails closed.
+Each directional manifest carries one content-addressed runtime weight object plus its
+direction-specific normalizer, ridge-initializer hash, and training metrics. Resume uses the same
+full model, optimizer, metric, progress, and input-binding checks as screening fit. A changed
+selected rank, seed, window, ridge contract, optimizer, loss, train trace, code hash, or structure
+receipt fails closed.
 
 ## Fit Selector-Only Risk Predictors
 

@@ -24,7 +24,6 @@ from goldenexperience.size_variant.risk_gate import (
 from goldenexperience.size_variant.selective_manifest import (
     ArtifactState,
     RiskGateSpec,
-    TransportLossContract,
     TransportQualityEvidence,
 )
 from goldenexperience.size_variant.v5_calibration import V5RiskCalibrationManifest
@@ -32,6 +31,7 @@ from goldenexperience.size_variant.v5_collect import RawBenchmarkSample, TraceOb
 from goldenexperience.size_variant.v5_fit import (
     CandidateTrainingMetrics,
     TransportCandidateArtifact,
+    TransportTrainingParameters,
 )
 from goldenexperience.size_variant.v5_pipeline import (
     PipelineStageRecord,
@@ -423,7 +423,7 @@ def test_validation_stage_resumes_and_recomputes_detailed_report(
         direction="qwen3_4b_to_8b",
         source=source,
         target=target,
-        training=SimpleNamespace(source_window=3, loss=TransportLossContract()),
+        training=TransportTrainingParameters(),
         content_sha256=lambda: _digest("fit"),
     )
     candidate = _candidate()

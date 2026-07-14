@@ -9,12 +9,13 @@ import sys
 import uuid
 from collections.abc import Callable, Mapping
 from contextlib import suppress
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 from typing import Any
 
 from goldenexperience.benchmarks.publication import PublicationBenchmarkManifest
 from goldenexperience.size_variant.cached_kv_manifest import CachedKVModelSpec
+from goldenexperience.size_variant.selective_manifest import TRANSPORT_V1_STRUCTURE_ID
 from goldenexperience.size_variant.v5_collect import (
     TraceObjectRef,
     V5TraceManifest,
@@ -23,6 +24,8 @@ from goldenexperience.size_variant.v5_collect import (
 )
 from goldenexperience.size_variant.v5_fit import (
     DEPLOYMENT_SEED,
+    LEGACY_INITIALIZER,
+    LEGACY_SEED_STRATEGY,
     SCREENING_DIRECTION,
     CandidateTrainingMetrics,
     SynchronousTransportTrainer,
@@ -41,7 +44,8 @@ from goldenexperience.size_variant.v5_pipeline import (
     V5PipelineWorkspace,
 )
 
-V5_DIRECTIONAL_FIT_SCHEMA = "goldenexperience.v5_directional_transport_fit.v1"
+V5_DIRECTIONAL_FIT_SCHEMA = "goldenexperience.v5_directional_transport_fit.v2"
+V5_LEGACY_DIRECTIONAL_FIT_SCHEMA = "goldenexperience.v5_directional_transport_fit.v1"
 
 
 @dataclass(frozen=True)
@@ -57,6 +61,7 @@ class V5DirectionalTransportFitManifest:
     target: CachedKVModelSpec
     training: TransportTrainingParameters
     candidates: tuple[TransportCandidateArtifact, ...]
+    training_initializer_sha256: str | None = None
     schema_version: str = V5_DIRECTIONAL_FIT_SCHEMA
 
     def validate(
@@ -67,7 +72,10 @@ class V5DirectionalTransportFitManifest:
         structure: FrozenTransportStructure,
     ) -> list[str]:
         errors: list[str] = []
-        if self.schema_version != V5_DIRECTIONAL_FIT_SCHEMA:
+        if self.schema_version not in {
+            V5_DIRECTIONAL_FIT_SCHEMA,
+            V5_LEGACY_DIRECTIONAL_FIT_SCHEMA,
+        }:
             errors.append("unsupported directional transport fit schema")
         if self.pipeline_id != workspace.config.pipeline_id:
             errors.append("directional transport fit belongs to another pipeline")
@@ -87,9 +95,22 @@ class V5DirectionalTransportFitManifest:
             errors.append("directional transport fit structure receipt hash mismatch")
         if not _is_sha256(self.normalizer_sha256):
             errors.append("directional transport fit normalizer hash is invalid")
+        if self.schema_version == V5_DIRECTIONAL_FIT_SCHEMA:
+            if not _is_sha256(self.training_initializer_sha256):
+                errors.append("directional transport fit initializer hash is invalid")
+        elif self.training_initializer_sha256 is not None:
+            errors.append("legacy directional fit cannot claim a ridge initializer")
         if self.source != trace.source or self.target != trace.target:
             errors.append("directional transport fit model identities differ from traces")
         expected_training = frozen_direction_training_parameters(structure)
+        if self.schema_version == V5_LEGACY_DIRECTIONAL_FIT_SCHEMA:
+            expected_training = replace(
+                expected_training,
+                structure_id=TRANSPORT_V1_STRUCTURE_ID,
+                initializer=LEGACY_INITIALIZER,
+                ridge_ratio=0.0,
+                seed_strategy=LEGACY_SEED_STRATEGY,
+            )
         if self.training != expected_training:
             errors.append("directional transport training differs from the frozen contract")
         training_errors = self.training.validate(require_registered=False)
@@ -117,7 +138,7 @@ class V5DirectionalTransportFitManifest:
         return _sha256_bytes(_canonical_json_bytes(self.to_dict()))
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        payload: dict[str, Any] = {
             "schema_version": self.schema_version,
             "pipeline_id": self.pipeline_id,
             "direction": self.direction,
@@ -131,6 +152,9 @@ class V5DirectionalTransportFitManifest:
             "training": self.training.to_dict(),
             "candidates": [asdict(item) for item in self.candidates],
         }
+        if self.schema_version == V5_DIRECTIONAL_FIT_SCHEMA:
+            payload["training_initializer_sha256"] = self.training_initializer_sha256
+        return payload
 
     @classmethod
     def from_dict(cls, payload: Mapping[str, Any]) -> V5DirectionalTransportFitManifest:
@@ -140,6 +164,15 @@ class V5DirectionalTransportFitManifest:
         training_payload["ranks"] = tuple(training_payload["ranks"])
         training_payload["seeds"] = tuple(training_payload["seeds"])
         training_payload["loss"] = TransportLossContract(**training_payload["loss"])
+        if "structure_id" not in training_payload:
+            training_payload.update(
+                {
+                    "structure_id": TRANSPORT_V1_STRUCTURE_ID,
+                    "initializer": LEGACY_INITIALIZER,
+                    "ridge_ratio": 0.0,
+                    "seed_strategy": LEGACY_SEED_STRATEGY,
+                }
+            )
         candidates = []
         for item in payload.get("candidates", ()):
             candidate = dict(item)
@@ -158,6 +191,7 @@ class V5DirectionalTransportFitManifest:
             target=CachedKVModelSpec(**payload["target"]),
             training=TransportTrainingParameters(**training_payload),
             candidates=tuple(candidates),
+            training_initializer_sha256=payload.get("training_initializer_sha256"),
             schema_version=str(payload.get("schema_version", "")),
         )
 
@@ -243,7 +277,7 @@ def run_frozen_direction_fit_stage(
             checkpoint_every_steps=checkpoint_every_steps,
             progress=progress,
         )
-        fitted, normalizer_sha256 = trainer.fit(
+        fitted, normalizer_sha256, initializer_sha256 = trainer.fit(
             work,
             stage_input_sha256=lease.input_sha256,
         )
@@ -275,6 +309,7 @@ def run_frozen_direction_fit_stage(
             target=trace.target,
             training=training,
             candidates=(candidate,),
+            training_initializer_sha256=initializer_sha256,
         )
         manifest_errors = manifest.validate(
             workspace=workspace,
@@ -293,6 +328,7 @@ def run_frozen_direction_fit_stage(
                 "selected_rank": structure.selected_rank,
                 "deployment_seed": DEPLOYMENT_SEED,
                 "frozen_structure_sha256": structure.content_sha256(),
+                "training_initializer_sha256": initializer_sha256,
                 "transport_fit_manifest_sha256": manifest.content_sha256(),
             },
         )
