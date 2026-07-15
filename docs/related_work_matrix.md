@@ -130,7 +130,19 @@ the runtime and exact-sharing comparison above.
 The official EuroSys 2026 paper list was independently retrieved from the conference's GitHub
 site at commit `3d419f688746f8edf0190a6ae505c9f51d6e6220`. Its only title-level KV match, "High
 Throughput and Low Latency LLM Serving via Adaptive KV Caching," is a same-model serving policy,
-not cross-model cache translation. Direct TLS access to the official MLSys, OSDI, SOSP, NSDI,
-ATC, FAST, EuroSys, NeurIPS, ICML, and ICLR sites was reset by the current network policy on every
-attempt. The paper therefore retains no unqualified priority claim, and the unavailable official
-indexes remain a documented submission-time check rather than being silently marked complete.
+not cross-model cache translation.
+
+A second direct-TLS pass at `2026-07-15T10:14:46Z` retried eleven official endpoints spanning
+MLSys, USENIX, SIGOPS, EuroSys, NeurIPS, PMLR/ICML, OpenReview/ICLR, and ACM DL. Every endpoint
+again returned curl exit 35 before an HTTP response. GitHub's API remained reachable, allowing a
+publisher-owned fallback check for ICML 2026: the `mlresearch` organization identifies itself as
+the Proceedings of Machine Learning Research, and its `v306` repository is labeled "Proceedings
+of ICML 2026." At commit `b3b1748fa2fac7ec916eb1dee8fee9f0691d9450`, however, the complete
+recursive tree contains only a proceedings-preparation README and pull-request template--no
+BibTeX index or paper payload. It is therefore an official placeholder, not an accepted-paper
+list, and cannot close the ICML title scan.
+
+Direct official indexes other than the fixed EuroSys list remain inaccessible or not yet
+published in an auditable repository. The paper therefore retains no unqualified priority claim,
+and these indexes remain a documented submission-time check rather than being silently marked
+complete or replaced by an unverified third-party list.

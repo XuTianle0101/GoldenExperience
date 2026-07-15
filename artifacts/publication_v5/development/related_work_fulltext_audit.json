@@ -1,10 +1,10 @@
 {
   "authority": "claim_scoping_evidence_not_empirical_result",
-  "audited_at": "2026-07-15T07:27:41Z",
+  "audited_at": "2026-07-15T10:14:46Z",
   "benchmark_manifest_sha256": "557cfe1eccd522d19e6a06177b2d86e6b1a55587b8a84cba65732fad4d2bcd4a",
   "document_sha256": {
     "docs/paper_outline.md": "dd3db25c9406c02cec76a4ee0bf78d5609873e422f87ed892796619f15715835",
-    "docs/related_work_matrix.md": "56a66ed1913ad8e510d0150ea5427f0f4b03e08d97b99ac5302731753b73acad",
+    "docs/related_work_matrix.md": "0965aab81d43180c9014ebc57a2d45b5f85c850abcac0251acc36354ddcbfde1",
     "paper/paper.md": "e2c689012aaf50a582c9af3a14dd319b7e5afcd01b8128de6d335e622a56c90d",
     "paper/references.bib": "ea73538cfdd378fe83a5f7c0352080b6237d5a5ecdd89ac9af73f9096f345c5a",
     "paper/tools/check_manuscript.py": "fa19a3baf9efbd9cdf8fdbadea996efad69f539402942ee5b388e5a6f841d697"
@@ -30,15 +30,19 @@
     "storage_placement_boundary": "SwiftCache shares idle GPU memory and NVLink across heterogeneous model workers while preserving each cache's original model ownership; it is not semantic cross-model cache reuse.",
     "unequal_head_correction": "All registered Qwen3 4B/8B/14B models have eight KV heads and head dimension 128; unequal-head support is not an empirical result."
   },
-  "official_proceedings_index_status": "partial_eurosys_verified_other_direct_tls_blocked",
-  "official_proceedings_note": "The official EuroSys 2026 paper list was retrieved from its conference-owned GitHub site. Direct TLS access to MLSys, OSDI, SOSP, NSDI, ATC, FAST, EuroSys, NeurIPS, ICML, and ICLR was reset by the current network policy on every attempt. The paper retains no unqualified first claim, and unavailable official indexes remain a documented submission-time check.",
+  "official_proceedings_index_status": "partial_eurosys_verified_icml_repository_placeholder_other_direct_tls_blocked",
+  "official_proceedings_note": "The official EuroSys 2026 paper list was retrieved from its conference-owned GitHub site. Eleven official MLSys, USENIX, SIGOPS, EuroSys, NeurIPS, PMLR/ICML, OpenReview/ICLR, and ACM endpoints reset during TLS negotiation on both direct passes. The publisher-owned PMLR v306 repository is labeled Proceedings of ICML 2026 but contains only preparation templates at the audited commit, so it is not a paper index. The paper retains no unqualified first claim, and unavailable or unpublished official indexes remain a documented submission-time check.",
   "official_proceedings_checks": {
     "direct_tls": {
-      "attempted_at": "2026-07-15T06:49:00Z",
+      "attempt_count": 2,
+      "attempted_at": [
+        "2026-07-15T06:49:00Z",
+        "2026-07-15T10:14:46Z"
+      ],
       "domains": [
         "proceedings.mlsys.org",
         "www.usenix.org",
-        "sigops.org",
+        "www.sigops.org",
         "2026.eurosys.org",
         "proceedings.neurips.cc",
         "neurips.cc",
@@ -48,7 +52,12 @@
         "api.openreview.net",
         "dl.acm.org"
       ],
-      "result": "tls_connection_reset_by_network_policy"
+      "latest_probe_curl_exit_code": 35,
+      "latest_probe_endpoint_count": 11,
+      "latest_probe_http_response_count": 0,
+      "latest_probe_snapshot_sha256": "d8077d1e52b9bbb26a74486680d20be5c7cb99fdee463b897f6b05816f8cdd9d",
+      "latest_probe_snapshot_tracked": false,
+      "result": "tls_connection_reset_by_network_policy_on_every_endpoint_and_attempt"
     },
     "eurosys_2026": {
       "conference_repository": "https://github.com/eurosys2026/eurosys2026.github.io",
@@ -63,9 +72,28 @@
           "title": "High Throughput and Low Latency LLM Serving via Adaptive KV Caching"
         }
       ]
+    },
+    "icml_2026_pmlr_repository": {
+      "disposition": "publisher_owned_placeholder_not_an_accepted_paper_index",
+      "paper_index_present": false,
+      "publisher_identity": "Proceedings of Machine Learning Research",
+      "publisher_organization": "mlresearch",
+      "publisher_profile": "https://github.com/mlresearch",
+      "readme_sha256": "c7f334cc5a5066a2eba79492068bbb7fedd26b14eb909016ad40a9ff0a12c174",
+      "readme_size_bytes": 3373,
+      "recursive_tree_entries": [
+        ".github",
+        ".github/pull_request_template.md",
+        "README.md"
+      ],
+      "recursive_tree_sha": "ad13092337125594dca23a0b1664d6d77f44ded3",
+      "repository": "https://github.com/mlresearch/v306",
+      "repository_commit": "b3b1748fa2fac7ec916eb1dee8fee9f0691d9450",
+      "repository_commit_date": "2025-10-30T15:57:49Z",
+      "repository_description": "Proceedings of ICML 2026"
     }
   },
-  "schema_version": "goldenexperience.publication_v5_related_work_audit.v2",
+  "schema_version": "goldenexperience.publication_v5_related_work_audit.v3",
   "search_snapshot": "2026-07-15",
   "search_queries": {
     "arxiv_combinations": [
@@ -209,6 +237,8 @@
     "exact_version_pdfs_hashed": true,
     "full_text_claims_checked": true,
     "official_eurosys_2026_title_list_checked": true,
+    "official_icml_2026_pmlr_repository_checked": true,
+    "official_proceedings_direct_tls_attempts": 2,
     "source_count": 16,
     "stale_vcache_ar5iv_text_rejected": true,
     "tracked_full_text_payloads": false
