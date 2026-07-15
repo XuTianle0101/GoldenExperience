@@ -1,180 +1,340 @@
 # Paper Outline
 
-## Title Candidates
+## Working Title
 
-- GoldenExperience: Cross-Model KV Cache Reuse on vLLM + LMCache MP + Mooncake Store
-- Reusing KV Cache Across Models Without Rebuilding the Serving Stack
+**Can KV Caches Cross Model Scales? A Fail-Closed Evaluation of Qwen3 Prefix
+Translation**
 
-## Abstract Shape
+Alternative titles:
 
-1. Problem: KV Cache is valuable across related model deployments, but serving stacks treat
-   it as model-local state.
-2. Gap: existing cache systems focus on storage/offload and same-model prefix reuse, not
-   controlled reuse across LoRA adapters, size variants, or different base models.
-3. Method: a small LMCache MP patch driven by model identity, reuse planning,
-   materialization, and quality/fallback accounting.
-4. Evidence: TTFT improvement and accepted reuse rate under vLLM + LMCache MP + Mooncake
-   Store, with quality gates for three model-pair scenarios.
-5. Contribution: a narrow, upstream-friendly framework that leaves inference to vLLM and
-   shared KV persistence to LMCache MP plus Mooncake Store.
+- When Cross-Model KV Reuse Fails: Full-Prefix Distillation Under Behavioral Gates
+- Beyond Cache Similarity: An Auditable Negative Study of Cross-Scale KV Translation
 
-## Main Contributions
+## Paper Status
 
-- A head-aware, attention-preserving transport for same-family parameter sizes and unequal
-  KV-head counts. Transport alone is not claimed as novel; see `related_work_matrix.md`.
-  The registered Qwen3 4B/8B/14B models all have eight KV heads, so unequal-head support is
-  an implementation capability, not an empirical result of the current study.
-- Source-only selective admission whose threshold maximizes coverage subject to a
-  Bonferroni-corrected, family-wise exact 95% one-sided behavioral-regression bound on an
-  independent calibration split.
-- A three-state artifact authority model that prevents validation or semantic-only artifacts
-  from enabling runtime reuse.
-- An LMCache MP `RETRIEVE_TRANSFORM` path that writes accepted translations directly into
-  vLLM paged KV, publishes only after all layers succeed, and never creates target Mooncake
-  objects.
-- A grouped-prefix benchmark and one-shot semantic sealed protocol that bind data, code,
-  model, transport, predictor, and threshold hashes.
+This is a negative-results paper, not a successful deployment paper. The registered
+Qwen3 4B-to-8B transport fit completed, but the independent method-development gate failed.
+No selector, calibration, other-direction, validation, semantic-sealed, or runtime stage is
+authorized in the recorded workspace. The paper must preserve that boundary in its title,
+abstract, figures, tables, and artifact claims.
 
-The provisional paper claim is the conjunction of independently calibrated source-only
-request admission with an exact finite-sample behavioral-regression bound and atomic direct
-paged materialization for cross-scale target-prefix replacement. Cross-model translation,
-cross-size Qwen transport, target-prefill skipping, TTFT improvement, head-aware mapping, and
-cache error guarantees all have prior art and are not standalone novelty claims.
+The semantic sealed split remains locked. The complete method-dev report contains 9,216
+measurements over 1,024 prompts and nine candidates. Its SHA-256 is
+`f35e9599cea4d56cb1d0a7fad888a7d1bf2cef2602c9f42950162de7662a4400`.
 
-## Evaluation Questions
+## Abstract
 
-- How often can base/LoRA deployments reuse KV safely?
-- What TTFT improvement is available when same-model size variants share prefixes?
-- Which layer subsets and projection methods are useful for GoldenScale reuse?
-- How much overhead does LMCache MP secondary lookup and materialization add?
-- When do quality gates reject reuse, and are those rejections predictive of task quality?
-- Is cross-base reuse ever useful under strict calibration and task allowlists?
+Cross-model KV-cache translation promises to skip target-model prefix prefill, but tensor
+similarity and average task scores do not establish that a translated cache preserves decoded
+behavior. We build an auditable, fail-closed evaluation stack for cross-scale Qwen3 prefix
+replacement. It binds exact model, tokenizer, data, code, optimizer, and artifact identities;
+separates transport training, method development, calibration, validation, sealed testing,
+and runtime approval; and prevents later stages from running when an earlier behavioral gate
+fails.
 
-## Current Empirical Record (2026-07-13)
+We evaluate a head-aware low-rank affine transport from Qwen3-4B to Qwen3-8B. Nine registered
+candidates (ranks 32/64/128 and seeds 17/29/43) train for three epochs on 4,096 prompts. To
+correct a sampled-cache teacher mismatch discovered in an earlier method, the final variant
+distills 16 target tokens while both teacher and student consume complete 128- to 8,192-token
+prefix caches. The full-prefix correction improves rank-128/seed-17 safe coverage from
+`115/1024` to `159/1024`, including 24 additional safe 8,192-token prompts.
 
-These results are development evidence, not final test-set claims. All cross-parameter
-quality numbers below use the 64-prompt validation split (64 task prompts, 1024 evaluated
-tokens, and token buckets 32/128/512/2048). The sealed test split has not been opened.
+The correction is insufficient. Registered rank aggregation selects rank 64, whose fixed
+deployment seed achieves task preservation `0.9769` but only `0.6172` greedy-token agreement,
+`21.47%` perplexity drift, and `142/1024 = 0.1387` oracle-safe coverage, below the
+preregistered `0.45` gate. Even a prohibited per-prompt oracle over all nine candidates covers
+only `377/1024 = 0.3682`. Function-calling prompts are often safe, while grade-school math and
+code generation largely fail. We therefore stop before calibration, sealed data, and runtime
+claims. The result isolates a useful boundary: aligning the training teacher with the complete
+deployment prefix fixes part of the long-context error, but a fixed low-rank affine KV map does
+not reliably preserve cross-task decoded behavior across model scales.
 
-### Why the hidden-state bridge was retired
+## Contributions
 
-- A rank sweep from 16 to 192 improved key cosine from 0.8793 to 0.9225 and value cosine
-  from 0.4358 to 0.6028, but decode-logit cosine and top-1 agreement remained unstable.
-- A five-layer, rank-512 multisource bridge reached key cosine 0.9388 and value cosine
-  0.6884 on three held-out prompts, with decode-logit cosine 0.8781. It still failed the
-  quality gate.
-- A general rank-1024 bridge reached decode-logit cosine 0.9129, but hidden cosine was
-  0.7750, value cosine was 0.6347, and decode top-1 match was only 2/3.
-- A prefix-specific rank-1024 bridge appeared nearly perfect on three represented-prefix
-  probes (key cosine 0.9991, value cosine 0.9940, decode-logit cosine 0.9929). Runtime
-  evaluation exposed this as prefix overfitting: the exact-answer assertion failed.
+1. **A fail-closed evidence protocol.** The workspace makes data splits and artifact authority
+   executable: a failed method-dev gate cannot create a frozen structure or reach calibration,
+   validation, sealed testing, or production approval.
+2. **A reproducible full-prefix training implementation.** It reconstructs complete source and
+   target caches on separate GPUs, uses differentiable target-token supervision, activation
+   checkpointing, deterministic grouped optimization, and atomically resumable model plus AdamW
+   state for all nine candidates.
+3. **A complete negative evaluation.** The study reports all 9,216 method-dev measurements,
+   all ranks and seeds, the registered deployment choice, and the stronger nine-candidate safe
+   union rather than selecting a favorable candidate after observing results.
+4. **A mechanism result.** Full-prefix teacher alignment substantially improves the longest
+   prefix bucket at fixed rank and seed, yet all prefix lengths remain far below the gate and
+   decoded behavior varies sharply by task.
+5. **An artifact boundary for systems claims.** Direct vLLM paged materialization, rollback,
+   and LMCache integration are implemented and tested, but the paper does not report approved
+   runtime speedups because transport quality blocked the runtime experiment.
 
-This sequence is useful negative evidence: small cosine probe sets can approve a bridge
-that does not preserve free-running task behavior. It motivated exact-answer evaluation,
-larger held-out splits, and fail-closed runtime admission.
+Transport itself is not claimed as a standalone novelty. Cross-model KV translation,
+cross-size cache reuse, target-prefill skipping, head-aware mapping, and cache distillation
+all have prior art. The closest current work is Semantic Cache Distillation. Our narrower
+contribution is the conjunction of an exact split/identity protocol, strict free-running
+behavior gates, a complete full-prefix intervention, and an honestly terminal negative result.
 
-### Runtime and storage evidence
+## Research Questions
 
-- Same-model Qwen3-14B Mooncake reuse transferred 1792 external-KV prompt tokens after a
-  vLLM restart. TTFT fell from 253.61 ms to 143.32 ms, a 110.29 ms improvement, with 111
-  Mooncake GET events. This establishes that the underlying LMCache/Mooncake path works.
-- The prefix-specific cross-parameter bridge materialized 111 target chunks and vLLM
-  consumed 1776 external-KV prompt tokens, but target TTFT was 25201.50 ms, versus
-  143.32 ms for same-model reuse. Synchronous transformation and publication dominated
-  the request, and the exact-answer assertion failed.
-- The later isolated cost experiment measured 223.83 ms native-target prefill P95 versus
-  769.00 ms Mooncake read-transform-put P95, a 3.4357 ratio against the 0.70 limit.
-- API rollback removed temporary object keys, but 6.69 GB of backing files remained.
-  Physical reclamation is therefore a correctness requirement for a later runtime phase,
-  not evidence that can be counted toward approval.
+- **RQ1:** Does making the train-time teacher and student consume the complete deployment
+  prefix improve behavior over sampled-prefix target-logit distillation?
+- **RQ2:** Can any registered rank or seed meet the `0.45` oracle-safe coverage gate without
+  changing the runtime operator or thresholds?
+- **RQ3:** Which failure criteria, tasks, and prefix lengths account for unsafe reuse?
+- **RQ4:** Do high average task-preservation scores imply token-level behavioral safety?
+- **RQ5:** Which system claims remain justified when the quality gate stops the pipeline before
+  calibration and runtime evaluation?
 
-### Bridge-construction ablations
+## Experimental Design
 
-- The original rank-256 fixed map produced key cosine near 0.85, value cosine 0.59-0.61,
-  zero bridged task score in both directions, and extreme perplexity drift. Learned
-  per-channel scaling raised key cosine to about 0.897 and value cosine to 0.71, but did
-  not make forward generation useful.
-- Increasing rank without regularization was not a capacity fix. With ridge 1000, rank
-  512 became the best small-corpus setting: forward task/greedy reached 0.9375/0.8281 and
-  reverse reached 0.8125/0.6094, while value cosine remained only 0.8272/0.8223.
-- On the expanded 256-train/64-validation corpus, the SiLU residual raised forward task
-  score from 0.015625 to 0.171875 and reverse task score from 0.796875 to 0.84375. It was
-  retained as the structural baseline despite remaining far below the output gates.
-- Train-only monotonic CKA alignment improved forward task score from 0.171875 to 0.25,
-  but reduced reverse task score from 0.84375 to 0.578125, worsened tensor cosine in both
-  directions, and increased forward perplexity drift. Normalized-depth alignment stayed
-  as the default.
-- Updating all 83,968,000 up-projection and bias parameters at learning rate 1e-4 caused
-  continuation collapse. Restricting refinement to the nonlinear-up matrices at 3e-6
-  was stable, but teacher-forced prompt-tail refinement initially added only four short,
-  mostly code-task passes. Aligning the teacher with native greedy continuations was the
-  change that produced the large task gain.
+### Models and direction
 
-### Current cached-KV bridge
+- Screening direction: Qwen3-4B -> Qwen3-8B.
+- Both models use 36 layers, eight KV heads, head dimension 128, and bfloat16 caches.
+- The implementation supports unequal KV-head counts, but this experiment does not evaluate
+  them. No unequal-head empirical claim is permitted.
+- Other registered directions are intentionally not fit after the screening failure.
 
-The selected validation configuration is rank 512, source window 3, a scaled SiLU
-residual bridge, and four nonlinear-up-only refinement steps at learning rate 3e-6. The
-mixed objective combines native-generation loss at weight 1.0 with prompt-tail
-distillation at weight 0.25.
+### Data and isolation
 
-| Metric (gate) | 8B->14B before | 8B->14B mixed | 14B->8B before | 14B->8B mixed |
+- `transport_train`: 4,096 prompts, the only split used to fit normalizers, the ridge/SVD
+  initializer, and transport parameters.
+- `method_dev`: 1,024 independent prompts, used for rank aggregation and the fixed stop gate.
+- Prefix buckets: 128, 512, 2,048, and 8,192 tokens, 256 method-dev prompts each.
+- Tasks: function calling, grade-school math, competition math, long-context QA, and Python
+  code generation.
+- Selector, calibration, validation, semantic sealed, and runtime payloads are unavailable to
+  fitting and method selection. The semantic payload remains unopened after failure.
+
+### Registered candidates and optimization
+
+- Ranks: 32, 64, 128.
+- Seeds: 17, 29, 43; seed 17 is the fixed deployment identity.
+- Source-layer window: 3.
+- Three epochs, 512 optimizer steps per epoch, gradient accumulation 8.
+- AdamW learning rate `3e-4`, weight decay `1e-4`, gradient clipping 1.0.
+- Loss weights: generation CE 1.0, teacher-logit KL 0.25, sampled attention KL 0.5,
+  sampled attention-output MSE 0.5, and sampled target-KV anchor 0.1.
+- Full-prefix transforms use bfloat16, 256-token activation-checkpointed chunks, and candidate
+  microbatches of three under the default native CUDA allocator.
+
+### Safety and selection
+
+A prompt is unsafe if any condition holds:
+
+- native task pass becomes a bridge failure;
+- 16-token greedy agreement is below 0.98;
+- teacher-forced perplexity drift exceeds 2%.
+
+For each rank, metrics are averaged over all three seeds. Rank selection is lexicographic:
+mean task preservation, mean oracle-safe coverage, mean greedy agreement, then lower mean P95
+transform time. Only seed 17 at the selected rank can deploy. Publication requires deployment
+oracle-safe coverage at least 0.45.
+
+## Main Results
+
+### All registered candidates
+
+| Rank | Seed | Train total | Task preservation | Greedy agreement | PPL drift | Safe prompts | Coverage |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 32 | 17 | 0.491949 | 0.981683 | 0.624207 | 19.83% | 167 | 0.163086 |
+| 32 | 29 | 0.496785 | 0.980915 | 0.630127 | 19.20% | 156 | 0.152344 |
+| 32 | 43 | 0.546806 | 0.980558 | 0.622559 | 20.76% | 143 | 0.139648 |
+| 64 | 17 | 0.433484 | 0.976862 | 0.617249 | 21.47% | 142 | 0.138672 |
+| 64 | 29 | 0.548010 | 0.984084 | 0.635254 | 43.66% | 180 | 0.175781 |
+| 64 | 43 | 0.432065 | 0.983086 | 0.600830 | 22.13% | 146 | 0.142578 |
+| 128 | 17 | 0.412274 | 0.971258 | 0.615234 | 20.86% | 159 | 0.155273 |
+| 128 | 29 | 0.758873 | 0.979771 | 0.549866 | 33.38% | 114 | 0.111328 |
+| 128 | 43 | 0.405280 | 0.980242 | 0.648438 | 15.89% | 177 | 0.172852 |
+
+No row in this table is selected post hoc. Rank 64 wins the registered rank-level ordering
+because its mean task preservation is `0.9813439`, slightly above rank 32 at `0.9810520`.
+Deployment therefore uses rank 64/seed 17 even though other individual seeds have higher
+coverage.
+
+### Rank-level selection
+
+| Rank | Mean task | Mean coverage | Mean greedy | Mean P95 transform |
+| ---: | ---: | ---: | ---: | ---: |
+| 32 | 0.981052 | 0.151693 | 0.625631 | 98.072 ms |
+| 64 | **0.981344** | **0.152344** | 0.617778 | 98.445 ms |
+| 128 | 0.977090 | 0.146484 | 0.604513 | 99.119 ms |
+
+The selected deployment candidate misses the coverage gate by `0.311328125`. Its 882 unsafe
+prompts include 735 greedy-agreement failures and 865 perplexity-drift failures; 695 prompts
+fail both criteria.
+
+### Rank and seed cannot rescue the method
+
+| Oracle choice set | Safe prompts | Coverage |
+| --- | ---: | ---: |
+| All three rank-32 seeds | 245 | 0.239258 |
+| All three rank-64 seeds | 262 | 0.255859 |
+| All three rank-128 seeds | 270 | 0.263672 |
+| All nine candidates | 377 | 0.368164 |
+
+The final row is a deliberately optimistic diagnostic that chooses a different candidate for
+each prompt using target-derived outcomes. It is not deployable, yet it still fails 0.45. This
+rules out rank or seed cherry-picking as an explanation for the registered failure.
+
+### Full-prefix alignment helps, but does not solve behavior preservation
+
+The cleanest intervention comparison holds rank 128 and seed 17 fixed between sampled-prefix
+v3 and full-prefix v4.
+
+| Metric | v3 sampled prefix | v4 full prefix | Change |
+| --- | ---: | ---: | ---: |
+| Safe prompts | 115 | 159 | +44 |
+| Oracle-safe coverage | 0.112305 | 0.155273 | +0.042969 |
+| Greedy agreement | 0.579712 | 0.615234 | +0.035522 |
+| PPL drift | 21.46% | 20.86% | -0.60 pp |
+| Task preservation | 0.985625 | 0.971258 | -0.014368 |
+
+| Prefix tokens | v3 safe | v4 safe | Change |
+| ---: | ---: | ---: | ---: |
+| 128 | 30 | 36 | +6 |
+| 512 | 37 | 36 | -1 |
+| 2,048 | 29 | 44 | +15 |
+| 8,192 | 19 | 43 | +24 |
+
+The largest improvement occurs where the sampled-cache teacher most strongly differed from the
+deployment teacher. However, v4 coverage remains below 0.18 for every individual candidate.
+Teacher alignment was a real error source, not the only error source.
+
+### Failure is task-dependent, not only length-dependent
+
+The registered rank-64/seed-17 deployment candidate has the following task coverage:
+
+| Task | Safe / total | Coverage | Greedy agreement | PPL drift |
 | --- | ---: | ---: | ---: | ---: |
-| Key cosine (>=0.95) | 0.931665 | 0.931665 | 0.929008 | 0.929008 |
-| Value cosine (>=0.95) | 0.798981 | 0.798946 | 0.792346 | 0.792324 |
-| Next-token agreement (>=0.98) | 0.816406 | 0.823242 | 0.743164 | 0.751953 |
-| Greedy continuation match (>=0.98) | 0.082031 | 0.837891 | 0.636719 | 0.738281 |
-| Perplexity drift (<=2%) | 25.13% | 23.21% | 40.35% | 35.03% |
-| Bridge task score (>=0.95) | 0.09375 | 0.90625 | 0.84375 | 0.84375 |
-| Task-score drop (<=1%) | 90.625% | 9.375% | 15.625% | 15.625% |
+| Function calling | 38 / 48 | 0.791667 | 0.981771 | 2.60% |
+| Competition math | 63 / 416 | 0.151442 | 0.612680 | 13.64% |
+| Grade-school math | 29 / 416 | 0.069712 | 0.551833 | 21.04% |
+| Long-context QA | 11 / 72 | 0.152778 | 0.649306 | 48.77% |
+| Python code generation | 1 / 72 | 0.013889 | 0.746528 | 66.55% |
 
-Generation-aligned refinement produces a large forward task/greedy gain. The reverse
-direction confirms bidirectional improvements in greedy match, next-token agreement, and
-perplexity drift, but it preserves rather than improves task score. Both directions still
-fail seven quality checks, so neither bridge is approved.
+Coverage rises only modestly from 0.117 at 128 tokens to 0.164 at 8,192 tokens. Once the
+teacher sees the full prefix, prefix length no longer explains the dominant residual failure.
+The transport generalizes unevenly across suffix/task behavior.
 
-### Checkpoint-selection and objective ablations
+### Average task preservation is an insufficient gate
 
-- A four-prompt teacher-forced holdout failed to detect an eight-step exact-answer
-  regression. Checkpoint selection now uses 16 train-only prompts, free-runs 16 greedy
-  tokens, and ranks checkpoints by task score, greedy match, then teacher objective.
-- The 16-prompt free-running holdout selected step 4 in both directions. Forward holdout
-  task score moved from 0.25 to 1.0 and greedy match from 0.1719 to 0.8789; reverse task
-  score remained 1.0 while greedy match moved from 0.6641 to 0.8203.
-- Against pure native-generation refinement in the forward direction, the mixed objective
-  preserved task score 0.90625, improved next-token agreement by 0.00586, and reduced
-  perplexity drift by another 0.49 percentage points, at a 0.00293 greedy-match cost.
+All nine candidates report task preservation above 0.97 while greedy agreement ranges from
+0.55 to 0.65 and perplexity drift ranges from 15.9% to 43.7%. Native task scores are low on
+many prompts and coarse task metrics can remain unchanged when token distributions diverge.
+The result supports reporting free-running token identity and teacher-forced drift alongside
+semantic task metrics rather than treating task preservation alone as cache safety.
 
-### Evidence boundary and retained provenance
+## Method Progression and Evidence Boundary
 
-- The authoritative aggregate record is
-  `artifacts/cached_kv/bidirectional_mixed_refinement_summary_20260713.json`; direction
-  summaries retain raw-result paths and SHA-256 digests.
-- The two mixed raw per-prompt result files are retained for analysis of the remaining six
-  forward and ten reverse exact-answer failures. Earlier smoke outputs, superseded bridge
-  weights, and machine-specific runtime payloads are not publication artifacts.
-- Validation failure keeps the sealed test closed. Chunk batching, batch serialization,
-  further cost optimization, and Mooncake physical reclamation remain deferred until all
-  validation gates pass and the sealed test subsequently succeeds.
+| Version | Generation supervision | Deployment coverage | Nine-candidate union | Outcome |
+| --- | --- | ---: | ---: | --- |
+| v2 | detached report-only terms | 0.232422 | 0.343750 | failed |
+| v3 | differentiable sampled-prefix teacher | 0.112305 | 0.303711 | failed |
+| v4 | differentiable full-prefix teacher | 0.138672 | 0.368164 | failed |
+
+Deployment ranks differ under the registered ordering, so the table is descriptive rather than
+a controlled ablation. The fixed rank-128/seed-17 comparison above is the appropriate mechanism
+comparison.
+
+Method-dev legitimately served as a development split across these iterations, but it is no
+longer an independent confirmation set for another adaptive method. A future success claim must
+use new code, a new workspace, and newly frozen development evidence. The current validation and
+semantic sealed splits must not be opened to compensate for method-dev failure.
+
+## Systems Scope
+
+The repository implements:
+
+- immutable model/data/code identity checks;
+- resumable full-prefix transport fitting;
+- source-only risk prediction and exact calibration contracts;
+- one-shot sealed-data guards;
+- direct atomic scattering into vLLM paged KV with rollback;
+- LMCache MP source retrieval without target-object publication.
+
+Only the first two items contribute real publication-v5 model evidence in this run. Later stages
+have deterministic unit and integration tests, but no approved real-model execution because the
+quality dependency failed. The paper may describe their design and fail-closed enforcement, but
+must not report accepted-reuse rate, TTFT improvement, production safety, or zero-target-put
+runtime evidence for cross-model reuse.
+
+Same-model Mooncake reuse and older rank-512 bridge measurements are retained as development
+context. They establish that the serving substrate executes and that earlier bridges also fail;
+they are not evidence that v4 cross-scale translation is deployable.
+
+## Related-Work Positioning
+
+- Same-model prefix caching and KV offload establish the serving substrate, not cross-model
+  behavioral equivalence.
+- Cross-model and cross-layer cache translation already exist; novelty cannot rest on applying a
+  learned map between Qwen sizes.
+- Semantic Cache Distillation is the closest learned cross-model cache precedent.
+- GoldenExperience differs in its exact fail-closed evidence chain, cross-scale prefix-replacement
+  setting, complete rank/seed accounting, and atomic vLLM materialization contract.
+- The empirical contribution is a falsification boundary: even full-prefix target supervision
+  leaves a large gap between average semantic preservation and strict decoded-behavior safety.
+
+The full prior-art claim audit is in `docs/related_work_matrix.md` and
+`artifacts/publication_v5/development/related_work_fulltext_audit.json`.
 
 ## Required Figures
 
-- Architecture: vLLM, LMCache MP, Mooncake Store, and GoldenExperience patch hooks.
-- Taxonomy table for the three reuse scenarios.
-- TTFT and accepted-reuse rate for base/LoRA serving.
-- Quality versus latency for GoldenScale projection strategies.
-- Fallback reason breakdown.
-- Patch overhead: lookup, materialization, accounting.
-- Validation-quality trajectory: hidden-state bridge, generation-aligned refinement, and
-  mixed refinement in both directions.
-- Native prefill versus Mooncake read-transform-put P95, including the 0.70 admission
-  threshold.
+1. **Pipeline and stop boundary:** data splits, artifact states, and the method-dev failure that
+   prevents all later arrows.
+2. **Candidate matrix:** safe coverage for every rank/seed with the 0.45 gate and registered
+   deployment marker.
+3. **Teacher intervention:** v3 versus v4 safe counts by prefix bucket at fixed rank/seed.
+4. **Task heterogeneity:** safe coverage, greedy agreement, and perplexity drift by task.
+5. **Failure intersections:** greedy, drift, and task-regression overlap for the deployment
+   candidate.
+6. **Method progression:** deployment and oracle-union coverage for v2, v3, and v4, with a warning
+   that deployment ranks differ.
 
-## Limitations to State
+## Required Tables
 
-- GoldenExperience does not claim to improve LMCache MP offload or vLLM inference kernels.
-- Cross-base reuse is experimental and disabled without calibration.
-- Reuse quality must be evaluated per model pair, task, and prefix distribution.
-- Cosine and one-step logit agreement are not sufficient proxies for free-running exact
-  answers; checkpoint selection and final admission require free-running task evaluation.
-- Upstream vLLM, LMCache, and Mooncake APIs may change, so the patch must remain small and
-  rebased.
+- Exact model and software identities.
+- Dataset provenance, licenses, split sizes, and isolation checks.
+- Full nine-candidate fit and method-dev metrics.
+- Rank aggregation and registered selection.
+- Token-bucket and task breakdowns.
+- Full-prefix fixed-candidate ablation.
+- Artifact hashes, checkpoint validation, and sealed-state evidence.
+- Prior-art comparison with claims explicitly excluded from novelty.
+
+## Limitations and Threats to Validity
+
+- The real-model result covers one direction, Qwen3-4B -> Qwen3-8B. The stop rule prevents
+  evidence for the other three directions.
+- All registered Qwen models use eight KV heads; unequal-head support is untested.
+- Method-dev is a development split, and repeated v2/v3/v4 diagnosis means no further adaptive
+  iteration can use it as independent confirmation.
+- The 0.98/2%/0.45 gates are intentionally strict. The paper establishes failure under this
+  declared safety target, not impossibility under every application tolerance.
+- Candidate ranks stop at 128 and the runtime operator is a fixed token-independent affine map.
+  Larger, nonlinear, or token-conditioned transports may behave differently but require a new
+  protocol instance.
+- Dataset composition is dominated by math tasks; task-stratified results must accompany the
+  aggregate.
+- Native task accuracy is low for several scorers, which makes preservation easier to satisfy and
+  strengthens the case for token/drift gates.
+- No approved cross-model runtime latency or throughput experiment exists. Unit-tested direct
+  materialization is not a measured speedup.
+- The semantic sealed split remains unopened, so there is intentionally no final-test estimate.
+
+## Artifact Checklist
+
+- Fit receipt: `artifacts/publication_v5/stages/qwen3_4b_to_8b.fit_transport.v4.json`.
+- Failed method-dev receipt:
+  `artifacts/publication_v5/stages/qwen3_4b_to_8b.evaluate_method_dev.v4.failed.json`.
+- Mechanism diagnostic:
+  `artifacts/publication_v5/development/v4_method_dev_diagnostic.json`.
+- Implementation verification:
+  `artifacts/publication_v5/development/v4_implementation_verification.json`.
+- Preregistered method: `docs/transport_v4.md`.
+- Pipeline contract and terminal status: `docs/v5_pipeline.md`.
+- Related-work audit: `docs/related_work_matrix.md`.
+
+The final artifact package should also include a compressed canonical copy of the full
+method-dev report, a checksum manifest, generated tables/figures, an environment inventory,
+and commands that verify every retained object without accessing sealed content.
