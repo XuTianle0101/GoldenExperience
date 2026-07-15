@@ -33,6 +33,25 @@ machine-dependent rendered manuscript. The final project audit runs tests, lint,
 package builds, link checks, evidence regeneration, source-identity verification, and a locked
 sealed-state check.
 
+## Reproducible Release Containers
+
+Setuptools produces identical file contents but may retain sub-second temporary-directory mtimes
+in an sdist. Build normally, then canonicalize both distribution containers with the registered
+release epoch:
+
+```bash
+SOURCE_DATE_EPOCH=1784073600 python3 -m build --outdir /tmp/ge-release-raw
+python3 paper/tools/canonicalize_release.py \
+  --input-dir /tmp/ge-release-raw \
+  --output-dir /tmp/ge-release-canonical \
+  --source-date-epoch 1784073600
+```
+
+The canonicalizer sorts archive members, fixes tar/ZIP/gzip timestamps and ownership metadata,
+removes variable container metadata, and rejects duplicate or path-traversing members. It does not
+change packaged file bytes. Running the process from two clean source archives must produce
+byte-identical wheels and sdists.
+
 ## Evidence Boundary
 
 - Authoritative fit evidence: `artifacts/publication_v5/stages/`.
