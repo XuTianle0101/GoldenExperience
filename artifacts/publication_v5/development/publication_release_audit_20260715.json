@@ -40,6 +40,13 @@
       "source_seed_bytes_preserved": 264241152,
       "source_seed_files_preserved": 112
     },
+    "post_audit_release_workspace_cleanup": {
+      "repository_bytecode_cache_apparent_bytes_removed": 589451,
+      "repository_bytecode_cache_directories_removed": 6,
+      "temporary_path_apparent_bytes_removed": 217544510,
+      "temporary_paths_removed": 7,
+      "total_apparent_bytes_removed": 218133961
+    },
     "prior_release_cache_cleanups": {
       "final_verification_reclaimed_bytes": 152482428,
       "full_test_reclaimed_bytes": 5306252
@@ -286,7 +293,7 @@
       "status": "passed"
     }
   },
-  "recorded_at": "2026-07-15T09:08:45Z",
+  "recorded_at": "2026-07-15T09:43:28Z",
   "repository_binding": {
     "audited_release_content_commit": "80a85a3cc59d4cb078953792c54a4fd4e3f5a669",
     "distribution_excludes_this_audit": true,
