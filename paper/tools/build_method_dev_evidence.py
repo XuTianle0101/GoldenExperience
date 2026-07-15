@@ -75,6 +75,11 @@ def _parse_args() -> argparse.Namespace:
         action="store_true",
         help="Rebuild in memory and fail if tracked outputs differ.",
     )
+    parser.add_argument(
+        "--from-archive",
+        action="store_true",
+        help="Use the tracked deterministic report archive even when the workspace report exists.",
+    )
     return parser.parse_args()
 
 
@@ -83,17 +88,42 @@ def _reject_sealed_path(path: Path) -> None:
         raise ValueError(f"refusing to access sealed path: {path}")
 
 
-def _load_json(path: Path) -> tuple[dict[str, Any], bytes]:
-    _reject_sealed_path(path)
-    raw = path.read_bytes()
-
+def _parse_json(raw: bytes, source: Path) -> dict[str, Any]:
     def reject_constant(value: str) -> None:
-        raise ValueError(f"non-finite JSON constant in {path}: {value}")
+        raise ValueError(f"non-finite JSON constant in {source}: {value}")
 
     payload = json.loads(raw, parse_constant=reject_constant)
     if not isinstance(payload, dict):
-        raise ValueError(f"expected a JSON object: {path}")
+        raise ValueError(f"expected a JSON object: {source}")
+    return payload
+
+
+def _load_json(path: Path) -> tuple[dict[str, Any], bytes]:
+    _reject_sealed_path(path)
+    raw = path.read_bytes()
+    payload = _parse_json(raw, path)
     return payload, raw
+
+
+def _load_report(path: Path, *, from_archive: bool) -> tuple[dict[str, Any], bytes]:
+    resolved = path.resolve()
+    default = DEFAULT_REPORT.resolve()
+    _reject_sealed_path(resolved)
+    if not from_archive and resolved.is_file():
+        return _load_json(resolved)
+    if resolved != default:
+        reason = (
+            "--from-archive requires the default report path" if from_archive else "missing report"
+        )
+        raise ValueError(f"{reason}: {resolved}")
+
+    archive = OUTPUT_DIR / ARCHIVE_NAME
+    _reject_sealed_path(archive)
+    try:
+        raw = gzip.decompress(archive.read_bytes())
+    except (OSError, EOFError) as exc:
+        raise ValueError(f"invalid tracked report archive: {archive}") from exc
+    return _parse_json(raw, default), raw
 
 
 def _sha256(raw: bytes) -> str:
@@ -662,10 +692,10 @@ def _source_object(path: Path, raw: bytes, role: str) -> dict[str, Any]:
     }
 
 
-def _build(report_path: Path) -> dict[str, bytes]:
+def _build(report_path: Path, *, from_archive: bool = False) -> dict[str, bytes]:
     report_path = report_path.resolve()
     _reject_sealed_path(report_path)
-    report, report_raw = _load_json(report_path)
+    report, report_raw = _load_report(report_path, from_archive=from_archive)
     fit, fit_raw = _load_json(FIT_RECEIPT)
     failed, failed_raw = _load_json(FAILED_RECEIPT)
     diagnostic, diagnostic_raw = _load_json(DIAGNOSTIC)
@@ -800,7 +830,7 @@ def _write_or_check(artifacts: Mapping[str, bytes], *, check: bool) -> None:
 
 def main() -> None:
     args = _parse_args()
-    artifacts = _build(args.report)
+    artifacts = _build(args.report, from_archive=args.from_archive)
     _write_or_check(artifacts, check=args.check)
 
 

@@ -34,6 +34,14 @@ Verify that every tracked byte is reproducible without rewriting files:
 python3 paper/tools/build_method_dev_evidence.py --check
 ```
 
-The generator reads only the explicit method-dev report, fit receipt, failed-stage receipt, and
-post-failure diagnostic. It rejects any input or output path containing `sealed` and never reads
-the semantic-sealed payload.
+In a clean clone, the ignored workspace report is absent. The same check automatically falls back
+to the tracked deterministic archive. Use the explicit form to exercise that path even when the
+workspace report is present:
+
+```bash
+python3 paper/tools/build_method_dev_evidence.py --check --from-archive
+```
+
+The generator reads only the explicit method-dev report (or its byte-identical tracked archive),
+fit receipt, failed-stage receipt, and post-failure diagnostic. It rejects any input or output path
+containing `sealed` and never reads the semantic-sealed payload.
