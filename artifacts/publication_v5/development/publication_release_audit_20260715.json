@@ -1,0 +1,225 @@
+{
+  "authority": "publication_packaging_and_consistency_evidence_not_runtime_approval",
+  "claims_boundary": {
+    "cross_model_runtime_speedup_measured": false,
+    "independent_confirmation_from_current_method_dev": false,
+    "publication_result": "terminal_negative_result_at_registered_method_dev_gate",
+    "runtime_approval": false,
+    "semantic_sealed_approval": false,
+    "validation_approval": false
+  },
+  "cleanup": {
+    "earlier_protocol_cleanup_receipt": "artifacts/publication_v5/development/cache_cleanup_20260715.json",
+    "final_verification_cache_cleanup": {
+      "reclaimed_bytes": 152482428,
+      "removed": [
+        ".mypy_cache",
+        ".ruff_cache",
+        "repository Python bytecode caches"
+      ]
+    },
+    "full_test_cache_cleanup": {
+      "reclaimed_bytes": 5306252,
+      "removed": [
+        "build",
+        ".ruff_cache",
+        "repository Python bytecode caches"
+      ]
+    },
+    "preserved": [
+      ".venv",
+      "artifacts/cache/publication_v5_workspace_v5",
+      "tracked publication evidence"
+    ]
+  },
+  "distribution": {
+    "build_environment": "clean temporary source copy with isolated build dependencies",
+    "entry_point_smoke_checks": [
+      {
+        "command": "golden-patch-manifest --help",
+        "status": "passed"
+      },
+      {
+        "command": "golden-publication-benchmark --help",
+        "status": "passed"
+      },
+      {
+        "command": "golden-v5-pipeline --help",
+        "status": "passed"
+      }
+    ],
+    "sdist": {
+      "excluded": [
+        "artifacts/cache",
+        "raw JSONL benchmark payloads",
+        "semantic sealed payload",
+        "artifacts/publication_v5/development/publication_release_audit_*.json"
+      ],
+      "filename": "goldenexperience-0.1.0.tar.gz",
+      "included": [
+        "paper manuscript and bibliography",
+        "compressed method-dev report archive",
+        "derived evidence tables",
+        "CSV, SVG, and PDF figures",
+        "tracked stage receipts",
+        "tracked development diagnostics"
+      ],
+      "paper_checks_after_extraction": "passed",
+      "release_audit_exclusion_reason": "avoid a self-referential distribution hash",
+      "sha256": "ba08d86f6f3512622bc41726a61f5a68530cd4a4c01975c52b26b2b1bda5d015",
+      "size_bytes": 1334379
+    },
+    "wheel": {
+      "filename": "goldenexperience-0.1.0-py3-none-any.whl",
+      "isolated_import": "passed",
+      "sha256": "720b9fefea444a9a9821609a3d99e5ec093b862bf30e65685eaf78c5316e32d9",
+      "size_bytes": 365698
+    }
+  },
+  "pipeline_binding": {
+    "benchmark_manifest": {
+      "content_sha256": "557cfe1eccd522d19e6a06177b2d86e6b1a55587b8a84cba65732fad4d2bcd4a",
+      "file_sha256": "d46b242519d354d50e5f20e2e1f619a2b04259f77967dd4a708d0993cfaf58b6"
+    },
+    "config": {
+      "content_sha256": "d4c75bbd169f6229553cd51d40fcac265bcbe6777412c74cf93715bf8ad4bf00",
+      "file_sha256": "06337f13db63a79f9a25a390665f2637da1268db3b0f5b09884683a04ebbc0ee"
+    },
+    "direction": "qwen3_4b_to_8b",
+    "pipeline_id": "v5-pipeline-1c6fed3dc231893debb58298",
+    "protocol_disposition": "selector_calibration_validation_semantic_sealed_and_runtime_stages_blocked",
+    "sealed_payload_accessed": false,
+    "semantic_sealed_state": "locked",
+    "stage_status": {
+      "calibrate": "not_run_blocked",
+      "collect_method_dev": "completed",
+      "collect_risk_calibration": "not_run_blocked",
+      "collect_runtime_audit": "not_run_blocked",
+      "collect_selector_train": "not_run_blocked",
+      "collect_transport_train": "completed",
+      "collect_validation": "not_run_blocked",
+      "evaluate_method_dev": "failed_registered_gate",
+      "fit_transport": "completed",
+      "fit_risk": "not_run_blocked",
+      "runtime_audit": "not_run_blocked",
+      "semantic_sealed": "not_opened_locked",
+      "validation": "not_run_blocked"
+    },
+    "workspace": "artifacts/cache/publication_v5_workspace_v5"
+  },
+  "publication_artifacts": {
+    "evidence_manifest": {
+      "path": "artifacts/publication_v5/evidence/method_dev_evidence_manifest.v4.json",
+      "sha256": "2e767a86a5a31bf5767605bf092937282772d893e83c8fe9819523e4554f1832"
+    },
+    "figure_manifest": {
+      "figure_count": 6,
+      "formats": [
+        "csv",
+        "svg",
+        "pdf"
+      ],
+      "path": "artifacts/publication_v5/figures/figures_manifest.v4.json",
+      "sha256": "63d0159fa63ec655a2aaffaf58fb69fa4b6b052ab9b29e997ab224e61d8422c9"
+    },
+    "manuscript": {
+      "audited_word_count": 6188,
+      "path": "paper/paper.md",
+      "reference_count": 23,
+      "sha256": "f919dabbeb06888080ba1cde1bb6a016a4422f696f8bf10762309c5c65267e5d"
+    },
+    "method_dev_report": {
+      "path": "artifacts/publication_v5/evidence/method_dev_report.v4.json.gz",
+      "sha256": "41fc85b79002a7958ea3b5a8d190b63cbff1385df9ab4491e20f93321b79e512",
+      "size_bytes": 702193,
+      "uncompressed_sha256": "f35e9599cea4d56cb1d0a7fad888a7d1bf2cef2602c9f42950162de7662a4400"
+    },
+    "references": {
+      "path": "paper/references.bib",
+      "sha256": "a5731c593bf79adb1a71c44a13a6a7a98c536949a54023ef4fb5d62c0c7a50cf"
+    }
+  },
+  "quality_gates": {
+    "citation_cff": {
+      "schema_version": "1.2.0",
+      "status": "passed"
+    },
+    "evidence_reproduction": {
+      "command": "python3 paper/tools/build_method_dev_evidence.py --check --from-archive",
+      "status": "passed"
+    },
+    "figure_reproduction": {
+      "command": "python3 paper/tools/build_figures.py --check",
+      "status": "passed"
+    },
+    "formatter": {
+      "checked_file_count": 146,
+      "excluded_immutable_files": [
+        {
+          "path": "goldenexperience/size_variant/v5_directional_fit.py",
+          "sha256": "a9017fe63bac6bed9aeae0df559a5bb3828d618a72461dd55102e6d116f67bad"
+        },
+        {
+          "path": "goldenexperience/size_variant/v5_fit.py",
+          "sha256": "1e4bd1e90d1b3da44f37250ef95b89b1c27331e4cdc7d3384c979e029f6f2523"
+        },
+        {
+          "path": "goldenexperience/size_variant/v5_generation.py",
+          "sha256": "c2514a74faa2e40a81e375f6b52623223466ca8d91104a4574befc48e8cbc1cd"
+        },
+        {
+          "path": "tests/test_v5_directional_fit.py",
+          "sha256": "922ce1db69e4ccd13042a002ecf5aabc21915dd59a0f52feee7d81238a5e55af"
+        },
+        {
+          "path": "tests/test_v5_fit.py",
+          "sha256": "0d6f1c2aeb6c3313e77a7eea27a7cdf257da845984911a7d2252c46741f7ffae"
+        }
+      ],
+      "exclusion_reason": "formatting would change executable or test files bound by the published v4 evidence hashes",
+      "status": "passed"
+    },
+    "local_markdown_links": {
+      "checked_links": 26,
+      "checked_markdown_files": 25,
+      "status": "passed"
+    },
+    "manuscript_consistency": {
+      "command": "python3 paper/tools/check_manuscript.py",
+      "status": "passed"
+    },
+    "mypy": {
+      "command": "mypy goldenexperience",
+      "source_file_count": 96,
+      "status": "passed"
+    },
+    "pytest_with_coverage": {
+      "combined_coverage_pct": 69.2,
+      "command": "python -m coverage run -m pytest && python -m coverage report",
+      "duration_seconds": 79.96,
+      "fail_under_pct": 68.0,
+      "passed": 362,
+      "status": "passed",
+      "warnings": 50,
+      "warnings_disposition": "upstream deprecations from SWIG, OpenTelemetry, Torch, and FlashInfer"
+    },
+    "ruff_lint": {
+      "command": "ruff check .",
+      "status": "passed"
+    }
+  },
+  "recorded_at": "2026-07-15T06:26:58Z",
+  "repository_binding": {
+    "audited_tree_base_commit": "031653b2c563f0085358ba2c8448b8ed6e3f4969",
+    "executable_source_sha256": "b3d0dcb81e5a528937c1a80858273e2e8f8b1876be3d3691e222959867ef2760",
+    "package_name": "goldenexperience",
+    "package_version": "0.1.0",
+    "release_changes_included": [
+      ".github/workflows/ci.yml",
+      "MANIFEST.in",
+      "README.md",
+      "README.zh-CN.md"
+    ]
+  },
+  "schema_version": "goldenexperience.publication_v5_release_audit.v1"
+}

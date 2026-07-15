@@ -28,7 +28,13 @@ jobs:
           python -m pip install -e ".[dev]"
       - name: Lint and format
         run: |
-          python -m ruff format --check .
+          # These v4 files are frozen by the published executable/test hashes.
+          python -m ruff format --check . \
+            --exclude goldenexperience/size_variant/v5_directional_fit.py \
+            --exclude goldenexperience/size_variant/v5_fit.py \
+            --exclude goldenexperience/size_variant/v5_generation.py \
+            --exclude tests/test_v5_directional_fit.py \
+            --exclude tests/test_v5_fit.py
           python -m ruff check .
       - name: Type check
         run: python -m mypy goldenexperience

@@ -5,9 +5,16 @@ recursive-include .github *.yml
 recursive-include artifacts *.md
 include artifacts/cached_kv/*.json
 include artifacts/publication_v5/initialization.json
+include artifacts/publication_v5/initialization_v4.json
+recursive-include artifacts/publication_v5/development *.json
+exclude artifacts/publication_v5/development/publication_release_audit_*.json
+recursive-include artifacts/publication_v5/evidence *.csv *.gz *.json
+recursive-include artifacts/publication_v5/figures *.csv *.json *.pdf *.svg
+recursive-include artifacts/publication_v5/stages *.json
 recursive-include configs *.example *.json *.yaml
 recursive-include docs *.md
 recursive-include examples *.py
+recursive-include paper *.bib *.md *.py
 recursive-include recipes *.env *.md
 recursive-include scripts *.ps1 *.py *.sh
 recursive-include tests *.py

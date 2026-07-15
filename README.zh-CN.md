@@ -102,7 +102,7 @@ python3 -m pip install -e ".[dev]"
 ```bash
 pytest
 ruff check goldenexperience tests scripts paper/tools
-mypy goldenexperience tests scripts
+mypy goldenexperience
 python3 -m build
 ```
 
