@@ -1,10 +1,31 @@
 cff-version: 1.2.0
-message: "If you use GoldenExperience, please cite this software and the associated paper."
-title: "GoldenExperience: Cross-Model KV Cache Reuse"
+message: >-
+  If you use GoldenExperience, cite the negative-result paper below and do not describe this
+  version as an approved cross-model serving speedup.
+title: "GoldenExperience: Fail-Closed Cross-Model KV Cache Research"
 type: software
+abstract: >-
+  GoldenExperience implements an auditable cross-model KV-cache translation and serving
+  framework for vLLM, LMCache MP, and Mooncake Store. The publication-v5 Qwen3-4B to Qwen3-8B
+  full-prefix transport fails its registered method-development safety gate; later calibration,
+  validation, sealed, and runtime stages remain blocked.
 authors:
   - name: "GoldenExperience Contributors"
 repository-code: "https://github.com/XuTianle0101/GoldenExperience"
+url: "https://github.com/XuTianle0101/GoldenExperience"
 license: Apache-2.0
 version: 0.1.0
 date-released: 2026-07-13
+keywords:
+  - KV cache
+  - cross-model reuse
+  - language-model serving
+  - negative results
+  - reproducibility
+preferred-citation:
+  type: article
+  title: "Can KV Caches Cross Model Scales? A Fail-Closed Evaluation of Qwen3 Prefix Translation"
+  authors:
+    - name: "GoldenExperience Contributors"
+  year: 2026
+  url: "https://github.com/XuTianle0101/GoldenExperience/blob/main/paper/paper.md"

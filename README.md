@@ -2,65 +2,120 @@
 
 [English](README.md) | [中文](README.zh-CN.md)
 
-GoldenExperience is a **cross-model KV Cache reuse framework** for the shared KV serving
-substrate built from **vLLM + LMCache MP + Mooncake Store**.
+GoldenExperience is an artifact-first research framework for cross-model KV-cache translation on
+the shared **vLLM + LMCache MP + Mooncake Store** serving substrate.
 
-The runtime boundary is deliberately narrow:
+> **Research status:** the current publication result is a terminal negative result, not an
+> approved deployment. The registered Qwen3-4B to Qwen3-8B v4 transport fit completed, but its
+> method-development safety gate failed. Selector fitting, calibration, other directions,
+> validation, semantic-sealed evaluation, and cross-model runtime auditing remain blocked.
 
-- vLLM owns model loading, scheduling, decoding, and inference correctness.
-- LMCache MP owns shared KV lookup, offload, eviction, and prefetch orchestration.
-- Mooncake Store owns the persistent L2 metadata/storage root used across engine restarts.
-- GoldenExperience adds the control plane for **reusing KV Cache across models**.
-- If a reuse plan is not safe or not calibrated, the stack falls back to the original
-  vLLM + LMCache MP behavior.
+[Full paper](paper/paper.md) | [Evidence package](artifacts/publication_v5/evidence/README.md) |
+[Figures and data](artifacts/publication_v5/figures/README.md) |
+[Pipeline contract](docs/v5_pipeline.md) | [Claim audit](docs/related_work_matrix.md)
 
-## What This Project Focuses On
+## Result At A Glance
 
-GoldenExperience is not an inference engine and does not replace cache storage. It is
-intended to be carried as a small LMCache MP patch plus Python control-plane library, with
-runtime metadata flowing through the vLLM/LMCache MP connector path into lookup and retrieve
-logic.
+Nine registered candidates (ranks 32, 64, and 128 crossed with seeds 17, 29, and 43) trained for
+three epochs on 4,096 prompts. The frozen rank aggregation selected rank 64; seed 17 remained the
+deployment identity.
 
-The research/development target is three GoldenExperience reuse tracks:
+| Metric | Registered result | Required |
+| --- | ---: | ---: |
+| Task preservation | 0.976862 | Reported, not sufficient alone |
+| 16-token greedy agreement | 0.617249 | At least 0.98 per safe prompt |
+| Aggregate perplexity drift | 21.47% | At most 2% per safe prompt |
+| Oracle-safe prompts | 142 / 1,024 | - |
+| Oracle-safe coverage | **0.138672** | **At least 0.45** |
+| All-nine post-hoc oracle | 377 / 1,024 = 0.368164 | Still below 0.45 |
 
-| Track Name | Scenario | Goal | Default Strategy | Safety Gate |
-| --- | --- | --- | --- | --- |
-| GoldenLoRA | Base model <-> LoRA model | Reuse KV between a model and its LoRA fine-tuned variant | Adapter-delta gated aliasing | Same base, tokenizer, KV layout, LoRA drift probe |
-| GoldenScale | Same model, different parameter sizes | Reuse KV across variants such as 8B <-> 14B | Direct alias if shapes match; otherwise hidden-state bridge | Layer/head mapping and hidden bridge calibration |
-| GoldenBridge | Different base models | Explore broader cross-base reuse | Learned translator | Explicit calibration set, tokenizer bridge, task allowlist |
+Full-prefix supervision does help the mechanism: at fixed rank 128 and seed 17, safe count rises
+from 115 to 159, with a net gain of 24 in the 8,192-token bucket. It does not make the fixed
+low-rank affine operator behaviorally reliable across tasks.
 
-The names map to the implementation scenarios as follows: `GoldenLoRA` targets
-`model_lora_mutual_reuse`, `GoldenScale` targets `same_model_different_parameter_size`,
-and `GoldenBridge` targets `different_base_model`.
+![All candidates miss the gate](artifacts/publication_v5/figures/fig01_candidate_coverage.svg)
 
-## Selective Cached-KV v5
+The complete method-dev report contains 9,216 measurements and has uncompressed SHA-256
+`f35e9599cea4d56cb1d0a7fad888a7d1bf2cef2602c9f42950162de7662a4400`.
 
-The current research path is a fail-closed v5 artifact for same-family scale variants:
+## What Is Implemented
 
-- transport v2 uses train-only row-weighted ridge/SVD initialization and independent
-  per-head low-rank affine K/V maps, while legacy v1 artifacts remain readable;
-- head-aware layer/head mapping supports different source/target depths and KV-head counts;
-- a source-only sidecar and calibrated MLP admit only prefixes whose simultaneous 95%
-  one-sided risk bound, Bonferroni-corrected across candidate thresholds, is at most 1%;
-- `validation_candidate` and `semantic_approved` artifacts cannot execute runtime reuse;
-- final `approved` artifacts use `RETRIEVE_TRANSFORM` to scatter directly into vLLM paged
-  KV without publishing target Mooncake objects.
+GoldenExperience is not an inference engine and does not replace cache storage. It adds a narrow
+control and evidence plane around existing serving components:
 
-The implementation contract and present evidence boundary are documented in
-`docs/selective_kv_v5.md`; the real-data freeze is documented in
-`docs/publication_dataset.md`. No v5 artifact is currently approved; retained rank-512 Qwen3
-results are development failures, not production or paper claims.
+- **Cross-model planning:** model identity, KV topology, prefix binding, strategy selection, and
+  fail-closed fallback for base/LoRA, scale-variant, and exploratory cross-base scenarios.
+- **Head-aware transport:** RoPE-aware layer/head mixing and independent low-rank affine K/V maps,
+  with train-only normalizers and ridge/SVD initialization.
+- **Reproducible fitting:** grouped full-prefix supervision, deterministic rank/seed screening,
+  atomic checkpoints with complete AdamW state, and independently replayable method-dev reports.
+- **Evidence pipeline:** content-bound data/model/code identities, split-specific collection,
+  artifact authority states, one-shot sealed guards, and stage dependencies that enforce the stop.
+- **Selective-admission protocol:** source-only sidecars, a frozen risk predictor, exact calibrated
+  bounds, validation, and selector baselines. These surfaces are tested but were not executed after
+  the current method-dev failure.
+- **Runtime integration:** LMCache MP secondary lookup, direct atomic scatter into vLLM paged KV,
+  rollback, and no translated target-object publication. This implementation has no approved v4
+  real-model runtime result.
 
-Run the bounded real-model implementation smoke on two GPUs with:
+Implementation capability and empirical authority are deliberately separate:
+
+| Stage | Current state | What the repository may claim |
+| --- | --- | --- |
+| Transport collection and fit | Completed | Exact fitted candidates and provenance |
+| Method development | **Failed** | Terminal negative result and mechanism diagnostics |
+| Other-direction fits | Blocked | Implementation only |
+| Selector and calibration | Blocked | Tested protocol only |
+| Validation | Blocked | No `validation_candidate` |
+| Semantic sealed | **Locked** | Payload remains unopened; no final-test estimate |
+| Runtime audit | Blocked | No accepted-reuse or cross-model TTFT claim |
+
+## Reproduce The Publication Artifacts
+
+The paper tooling uses only the Python standard library and never needs the sealed payload.
 
 ```bash
-python3 -m pip install -e ".[hf]"
-golden-v5-smoke --output artifacts/cache/qwen3_4b_to_8b_smoke.json
+# Works in a clean clone from the tracked deterministic report archive.
+python3 paper/tools/build_method_dev_evidence.py --check --from-archive
+
+# Rebuild every plotted CSV/SVG/PDF in memory and compare bytes.
+python3 paper/tools/build_figures.py --check
+
+# Check claims, numbers, references, links, hashes, and the locked workspace receipt.
+python3 paper/tools/check_manuscript.py
 ```
 
-The command verifies real prefill, head-structured DynamicCache conversion, target attention
-capture, transport shape, and finite five-term loss. Its report is permanently marked
-`diagnostic_only`; it cannot open the sealed split or approve an artifact.
+Every generator rejects input and output paths containing `sealed`. The evidence archive
+round-trips to the original 8,043,391-byte report, and every figure is tracked as CSV, accessible
+SVG, and deterministic vector PDF.
+
+## Install And Test
+
+Create a Python 3.10+ environment:
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python3 -m pip install -e ".[dev]"
+```
+
+Run the engineering checks:
+
+```bash
+pytest
+ruff check goldenexperience tests scripts paper/tools
+mypy goldenexperience tests scripts
+python3 -m build
+```
+
+Run the planner demonstration:
+
+```bash
+python3 scripts/smoke_cross_model_plan.py
+```
+
+The planner output demonstrates control-plane behavior; it does not create a publication-v5
+approved artifact.
 
 ## Architecture
 
@@ -75,470 +130,121 @@ client -> vLLM OpenAI-compatible server
              v
       Mooncake Store on local TCP + SSD
              |
-             | metadata sidecars, secondary lookup, materialization, accounting
+             | source lookup + sidecar gate + transform
              v
-      GoldenExperience planner and LMCache patch surface
+      GoldenExperience direct paged-KV materializer
+             |
+             +-- success: publish all translated layers atomically
+             +-- failure: invalidate partial blocks and use native prefill
 ```
 
-The patch surface is described by `PatchManifest.default()`:
+Runtime ownership remains narrow:
 
-1. `engine_request_metadata`: attach `ModelRef` and prefix metadata before LMCache MP lookup.
-2. `lmcache_cross_model_lookup`: on a same-model miss, query cross-model candidates.
-3. `calibrated_risk_gate`: evaluate the source sidecar before source KV is read.
-4. `lmcache_retrieve_transform`: batch-read, transform, and atomically scatter paged KV.
-5. `goldenexperience_materializer`: retain the read-compatible v4 materializer path.
-6. `quality_gate_accounting`: record confidence, calibration, and fallback reasons.
+- vLLM owns model loading, scheduling, decoding, and inference correctness.
+- LMCache MP owns shared KV lookup, offload, eviction, and prefetch orchestration.
+- Mooncake Store owns persistent L2 metadata and objects across engine restarts.
+- GoldenExperience owns cross-model identity, planning, translation, admission metadata,
+  materialization, and fallback accounting.
 
 ## Repository Layout
 
-The source tree is organized in the same spirit as C2C: a core Python package, thin script
-entrypoints, configs, runnable recipes, docs, examples, tests, and artifacts. C2C's repo
-separates `rosetta/` as the package from `script/`, `bash/`, `recipe/`, and `resource/`;
-GoldenExperience follows that shape with runtime orchestration under `goldenexperience/`,
-thin launchers under `scripts/`, and reproducible run overlays under `recipes/`.
-
 ```text
 goldenexperience/
-  runtime/           vLLM + LMCache MP + Mooncake runtime checks and baseline scheduler.
-  reuse/             ModelRef, KVShape, ReuseRequest, ReusePlan, scenario planner.
-  lmcache_patch/     Patch manifest and sidecar key metadata for LMCache MP deltas.
-  size_variant/      GoldenScale calibration, layer mapping, and projection scaffolds.
-  benchmarks/        Synthetic and model-backed benchmark harnesses.
-  cache_core/        Legacy in-repo cache block metadata utilities for tests/prototypes.
-  tiered_store/      Legacy synthetic tiering prototype; not the product runtime path.
-scripts/
-  kv_baseline/       Thin shell launchers plus stdlib OpenAI-compatible client/summarizer.
-recipes/             Source-able env overlays for reproducible runtime launches.
-docs/                Design, shared KV substrate, experiment matrix, artifact, paper notes.
-configs/             Runtime env examples and cross-model reuse experiment configuration.
-examples/            Minimal planning examples.
-tests/               Unit tests for planner, runtime config, and baseline generation.
+  benchmarks/       Frozen benchmark builders and deterministic scorers.
+  cli/              Console entry points, including the publication-v5 pipeline.
+  lmcache_patch/    Patch manifest and LMCache sidecar metadata.
+  reuse/            ModelRef, KVShape, requests, plans, and scenario planner.
+  runtime/          vLLM/LMCache/Mooncake checks, adapters, and baseline orchestration.
+  size_variant/     Transport, fitting, risk, validation, sealed, and runtime contracts.
+artifacts/
+  publication_v5/  Receipts, negative-result evidence, CSV/SVG/PDF figures, diagnostics.
+  kv_baseline/      Curated same-model substrate manifests; raw runs are ignored.
+configs/            Runtime examples and frozen publication source identities.
+docs/               Method preregistration, pipeline, data, design, and claim boundaries.
+paper/              Full manuscript, bibliography, reproducibility and audit tools.
+recipes/            Source-able runtime environment overlays.
+scripts/            Thin operational and diagnostic launchers.
+tests/              Unit and integration tests.
 ```
 
-## Quick Start
+## Publication-v5 Protocol
 
-Create a Python 3.10+ environment and install the local project:
+The frozen benchmark separates fitting, development, selection, calibration, validation, final
+semantic evaluation, and runtime measurement:
 
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-python3 -m pip install -e ".[dev]"
-pytest
-```
+| Split | Rows | Current access |
+| --- | ---: | --- |
+| `transport_train` | 4,096 | Used for the registered fit |
+| `method_dev` | 1,024 | Used; terminal gate failed |
+| `selector_train` | 2,048 | Blocked |
+| `risk_calibration` | 2,048 | Blocked |
+| `validation` | 2,048 | Blocked |
+| `semantic_sealed_test` | 2,048 | Locked and unopened |
+| `runtime_audit` | 512 | Blocked |
 
-Run the planner smoke test:
+Method-dev has now informed v2, v3, and v4. It cannot serve as an independent confirmation set for
+another adaptive method. A future success claim requires changed code, a new content-bound
+workspace, and a newly frozen development split. The current validation and semantic payloads must
+not be opened to continue method design.
 
-```bash
-python3 scripts/smoke_cross_model_plan.py
-```
+## Same-Model Serving Substrate
 
-Build the Qwen3 8B <-> 14B GoldenScale calibration scaffold:
-
-```bash
-golden-scale-collect --output artifacts/golden_scale/prompts.json
-golden-scale-fit \
-  --direction bidirectional \
-  --prompt-manifest artifacts/golden_scale/prompts.json \
-  --output-dir artifacts/golden_scale
-golden-scale-validate artifacts/golden_scale/qwen3_8b_to_14b_hidden_bridge_v0.json
-golden-scale-bench artifacts/golden_scale/qwen3_14b_to_8b_hidden_bridge_v0.json
-```
-
-## Deployment Flow
-
-GoldenExperience deploys as a Python package inside the same environment as vLLM, LMCache,
-and Mooncake. It is not a standalone daemon.
-
-Runtime ownership:
-
-- vLLM starts the OpenAI-compatible inference server and owns request scheduling/generation.
-- LMCache MP owns shared KV lookup, storage policy, offload, eviction, and prefetch.
-- Mooncake Store owns persistent L2 metadata and SSD-backed objects.
-- GoldenExperience owns `ModelRef`, `ReuseRequest`, `ReusePlan`, patch metadata, and
-  quality/fallback accounting.
-
-### 1. Install Runtime Packages
-
-Use package mode when you only need to run the stack and Mooncake binaries are already
-available on `PATH`:
+The repository also contains a real same-model offload/reuse baseline for validating vLLM,
+LMCache MP, and Mooncake independently of cross-model quality. Install the pinned runtime stack:
 
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate
 ./scripts/install_runtime.sh --mode package
 ```
 
-Package mode is fail-closed to the verified CUDA 13 stack (`vllm==0.24.0`,
-`lmcache==0.4.6`). It never replaces CuPy behind the resolver. Use source mode for CUDA
-12 or another runtime matrix until that stack has its own adapter compatibility tests.
-
-Use source mode when you need to patch LMCache or debug vLLM/LMCache/Mooncake internals:
+Then launch the same-model baseline:
 
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate
-./scripts/install_runtime.sh --mode source
-```
-
-`--mode source` clones vLLM, LMCache, and Mooncake into `third_party/`. It installs editable
-vLLM and LMCache copies with `BUILD_MOONCAKE=1` by default; build Mooncake according to
-upstream instructions and ensure `mooncake_master` plus `mooncake_http_metadata_server` are
-on `PATH`. Override defaults when using forks:
-
-```bash
-GE_THIRD_PARTY_DIR=third_party \
-GE_VLLM_REPO_URL=https://github.com/vllm-project/vllm.git \
-GE_LMCACHE_REPO_URL=https://github.com/LMCache/LMCache.git \
-GE_MOONCAKE_REPO_URL=https://github.com/kvcache-ai/Mooncake.git \
-./scripts/install_runtime.sh --mode source
-```
-
-Install only GoldenExperience if the runtime stack is already available:
-
-```bash
-./scripts/install_runtime.sh --mode golden-only
-```
-
-The script prefers `uv pip install` when `uv` is installed; otherwise it falls back to
-`python3 -m pip install`. After installing dependencies it runs
-`scripts/patch_lmcache_mooncake_runtime.py` by default. That reproducibility patch creates
-the Mooncake `libmooncake_store.so` alias expected by LMCache, selects the Python
-`MooncakeDistributedStore` SET/GET adapter by default, and bypasses the native
-`batchIsExist` lookup crash path with an LMCache MP in-process key index. Set
-`GE_PATCH_MOONCAKE_RUNTIME=0` only if you intentionally want the unpatched upstream path.
-It runs a strict `vLLM`/`LMCache`/`Mooncake` runtime check for package and golden-only
-modes; source mode defaults to a warning because Mooncake still needs its upstream build
-step. Use `--runtime-check strict|warn|skip` to override this. Runtime install details
-should still be checked against upstream vLLM, LMCache, and Mooncake docs when changing
-CUDA, Python, or package versions.
-
-### 2. Verify Planner and Runtime
-
-```bash
-python3 scripts/smoke_cross_model_plan.py --check-runtime --strict-runtime
-python3 scripts/patch_lmcache_mooncake_runtime.py --check
-```
-
-Expected planner output includes three rows:
-
-- `model_lora_mutual_reuse`: ready base/LoRA plan.
-- `same_model_different_parameter_size`: calibrated GoldenScale projection plan.
-- `different_base_model`: conservative unready cross-base plan.
-
-The runtime check reports `vLLM`, `LMCache`, and `Mooncake`. If any are missing, install the
-runtime stack before starting model-backed serving.
-
-### 3. Generate Patch Manifest
-
-```bash
-golden-patch-manifest --output docs/patch_manifest.md
-```
-
-### 4. Run the Shared KV Baseline
-
-The recommended launch path is the engineered Python scheduler exposed by the thin shell
-wrapper:
-
-```bash
-GE_MODEL_PATH=Qwen/Qwen3-8B \
-GE_PORT=30000 \
-scripts/kv_baseline/run_vllm_lmcache_mooncake_kv_baseline.sh -- --tensor-parallel-size 1
-```
-
-You can also call the console entry point directly after installation:
-
-```bash
-GE_MODEL_PATH=Qwen/Qwen3-8B golden-kv-baseline -- --tensor-parallel-size 1
-```
-
-### 5. Run the Same-Model KV Offload/Reuse Baseline
-
-Use this baseline after vLLM, LMCache, Mooncake, and GoldenExperience are installed in the
-same Python environment. The default path is now `vLLM + LMCache MP + Mooncake Store`:
-
-1. start Mooncake master plus HTTP metadata service on local TCP,
-2. start a standalone LMCache MP server with `type=mooncake_store` L2,
-3. start vLLM with `LMCacheMPConnector`,
-4. send an offload request, restart only vLLM, then send the same reuse request.
-
-This keeps the shared KV substrate outside the inference process. Cross-model work can later
-plug into LMCache MP persistent L2 instead of depending on engine-local caches.
-
-```bash
-source .venv/bin/activate
 source recipes/kv_baseline_mooncake_local.env
-
 GE_MODEL_PATH=Qwen/Qwen3-8B \
 GE_PORT=30000 \
 scripts/kv_baseline/run_vllm_lmcache_mooncake_kv_baseline.sh -- --tensor-parallel-size 1
 ```
 
-Default local TCP + SSD settings:
+Raw runs are written below `artifacts/kv_baseline/<run_id>/` and ignored by Git. Keep only curated
+manifests under `artifacts/kv_baseline/manifests/`. A successful same-model baseline proves that the
+storage substrate works; it is not evidence that v4 cross-model translation is safe or fast.
 
-- `GE_KV_BACKEND=mp`, `GE_ENGINE=vllm`, `GE_LMCACHE_MP_L2_ADAPTER_TYPE=mooncake_store`.
-- `GE_MOONCAKE_MASTER_HOST=127.0.0.1`, `GE_MOONCAKE_MASTER_PORT=50051`.
-- `GE_MOONCAKE_METADATA_PORT=8080`, producing `http://127.0.0.1:8080/metadata`.
-- `GE_LMCACHE_MP_HTTP_PORT=8081`, so LMCache MP HTTP does not collide with Mooncake metadata.
-- `GE_MOONCAKE_PROTOCOL=tcp`, `GE_MOONCAKE_STORAGE_ROOT=$GE_KV_CACHE_DIR/mooncake`.
-- `GE_MOONCAKE_PER_OP_WORKERS_JSON='{"lookup":2,"retrieve":8,"store":4}'`.
-- `LMCACHE_MOONCAKE_PYTHON_ADAPTER=1`, using Python Mooncake Store SET/GET while keeping
-  `LMCACHE_MOONCAKE_NATIVE_EXISTS=0` to avoid native `batchIsExist`.
-- Mooncake master defaults include `--client_ttl=600`, `--root_fs_dir` from the storage
-  root, and `--cluster_id` from `GE_RUN_ID`; override with `GE_MOONCAKE_MASTER_EXTRA_ARGS`
-  when needed.
-
-Default outputs are written under `artifacts/kv_baseline/<run_id>/`:
-
-- `metadata.json`: model, prompt, MP connector, Mooncake endpoints, adapter JSON, pids, and logs.
-- `lmc_config.yaml`: generated run config with `LMCacheMPConnector` and Mooncake Store L2.
-- `requests/offload.json`: first request output, usage, end-to-end latency, and TTFT.
-- `requests/reuse.json`: second request with the same prompt after vLLM restart.
-- `logs/lmcache_mp_server.log`: persistent LMCache MP server evidence.
-- `logs/mooncake_master.log` and `logs/mooncake_metadata_server.log`: Mooncake service evidence.
-- `metrics/offload.prom` and `metrics/reuse.prom`: vLLM external KV transfer counters.
-- `summary.json`: request deltas plus store/retrieve/L2/Mooncake counters.
-
-Raw KV baseline run directories are ignored by Git. Keep only curated manifests under
-`artifacts/kv_baseline/manifests/` and store large KV seed payloads in an external artifact
-store:
+Use source mode only when patching upstream components:
 
 ```bash
-python3 scripts/kv_baseline/export_kv_seed_manifest.py \
-  artifacts/kv_baseline/<run_id> \
-  --artifact-uri s3://bucket/ge-kv-seeds/<artifact_id>.tar.zst \
-  --output artifacts/kv_baseline/manifests/<run_id>.json
+./scripts/install_runtime.sh --mode source
 ```
 
-The script generates a long deterministic disk-offload prompt by default when
-`GE_FORCE_DISK_OFFLOAD=1`. Set `GE_PROMPT_FILE` and `GE_PROMPT_ID` to use your own prompt
-manifest, or tune `GE_DISK_PROMPT_REPEAT` if the generated prompt exceeds the model context.
+The pinned package-mode compatibility matrix is `vllm==0.24.0` and `lmcache==0.4.6` on the verified
+CUDA 13 stack. See the runtime scripts and `docs/shared_kv_substrate.md` before changing CUDA,
+Python, or upstream revisions.
 
-Useful overrides:
+## Artifact Authority And Safety
 
-```bash
-GE_MODEL_PATH=/models/Qwen3-8B \
-GE_MODEL_NAME=/models/Qwen3-8B \
-GE_RUN_ID=qwen3_8b_mooncake_restart_001 \
-GE_MOONCAKE_STORAGE_ROOT=/ssd/ge-kv/mooncake \
-GE_MOONCAKE_GLOBAL_SEGMENT_SIZE=4294967296 \
-GE_MOONCAKE_LOCAL_BUFFER_SIZE=4294967296 \
-scripts/kv_baseline/run_vllm_lmcache_mooncake_kv_baseline.sh -- --tensor-parallel-size 1
-```
+Runtime loading is state-gated:
 
-Interpretation checklist:
+| Artifact state | Offline use | Open sealed split | Automatic cross-model reuse |
+| --- | --- | --- | --- |
+| `validation_candidate` | Yes | No | No |
+| `semantic_approved` | Yes | Already completed once | No |
+| `approved` | Yes | Already completed once | Yes |
 
-1. Confirm `requests/offload.json` contains the expected answer.
-2. Confirm `summary.json` reports `offload_has_disk_evidence=true`,
-   `reuse_has_cache_evidence=true`, and `disk_reuse_success=true`.
-3. Confirm `metrics/reuse.prom` has `vllm:external_prefix_cache_hits_total > 0` and
-   `vllm:prompt_tokens_by_source_total{source="external_kv_transfer"} > 0`, while the
-   offload phase is dominated by `source="local_compute"`.
-4. Confirm `logs/lmcache_mp_server.log` includes Python Mooncake Store evidence:
-   `MooncakeStore SET`, `MooncakeStore EXISTS`, `MooncakeStore GET`, and
-   `L2 prefetch load completed`.
-5. Confirm `metadata.json` records `mooncake.enabled=true`, `l2_adapter_type=mooncake_store`,
-   the Mooncake storage root, and distinct offload/reuse vLLM service pids.
-6. Confirm the Mooncake storage root contains non-empty files, then keep the whole
-   `artifacts/kv_baseline/<run_id>/` directory as the same-model baseline for
-   later cross-model KV reuse experiments.
+There is currently no artifact in any of these three states for publication v5. A missing,
+corrupt, mismatched, uncalibrated, or unapproved artifact always falls back to native target
+prefill.
 
-Compatibility and diagnostics:
+Do not inspect, sample, hash, or repurpose the semantic payload. Only the dedicated one-shot opener
+may read it, and only after all four registered validation directions pass. That prerequisite is
+not satisfied in the current workspace.
 
-```bash
-# Use the older MP filesystem L2 adapter instead of Mooncake Store.
-GE_LMCACHE_MP_L2_ADAPTER_TYPE=fs \
-scripts/kv_baseline/run_vllm_lmcache_mooncake_kv_baseline.sh -- --tensor-parallel-size 1
-```
+## Citation
 
-Set `GE_KEEP_LMCACHE_MP_AFTER_RUN=1` or `GE_KEEP_MOONCAKE_AFTER_RUN=1` when you want to
-inspect live services after a run.
+Citation metadata is in [CITATION.cff](CITATION.cff). The preferred citation is the negative-result
+paper, **"Can KV Caches Cross Model Scales? A Fail-Closed Evaluation of Qwen3 Prefix
+Translation."** Please do not cite this version as evidence of an approved cross-model serving
+speedup.
 
-The default Mooncake baseline intentionally uses the Python Mooncake Store SET/GET path
-because the native C++ `batchIsExist` path has shown compatibility crashes on missing keys
-in the package stack used for the local baseline. To test the native path explicitly, set
-`LMCACHE_MOONCAKE_PYTHON_ADAPTER=0` and `LMCACHE_MOONCAKE_NATIVE_EXISTS=1`.
+## License
 
-### Current Runtime Status
-
-The runtime now has two cross-size paths:
-
-- `scripts/run_cross_model_runtime.py`: the earlier `native_target_seed` proof. It
-  creates target-shaped KV with a target-model prefill, restarts target vLLM, and
-  verifies LMCache/Mooncake external KV retrieval.
-- `scripts/run_qwen3_cached_kv_runtime.py`: the quality-gated cached-KV path. It binds
-  lookup to the current source request,
-  reads complete source Mooncake objects, applies a direction-specific safetensors bridge,
-  and atomically publishes target keys only after identity, quality, exact-I/O, and runtime
-  cost gates pass.
-
-The retired hidden-state and prefix-specific bridge experiments are summarized in
-`docs/paper_outline.md`. Their machine-specific manifests and training scripts were
-removed after consolidation: the apparent prefix-specific cosine pass failed its runtime
-task assertion and was not a general-purpose 8B -> 14B bridge.
-The old two-model prefill materializer is now experiment-only and cannot inject Mooncake
-objects. No cached-KV bridge is automatically approved until a global held-out artifact
-passes both the accuracy and end-to-end cost gates.
-Set `GE_CACHED_KV_DIRECTION=8b_to_14b` or `14b_to_8b`; each direction uses a separate
-manifest and the runtime swaps the local model defaults accordingly.
-The runtime uses deterministic LMCache `blake3` rolling hashes by default. Set
-`GE_SOURCE_PROMPT_FILE`/`GE_SOURCE_PROMPT_ID` and
-`GE_TARGET_PROMPT_FILE`/`GE_TARGET_PROMPT_ID` to exercise different requests: only the
-longest sequence of exact, complete prefix chunks is eligible for materialization, and
-the target computes every divergent or partial-tail token locally.
-
-## GoldenScale Reuse
-
-The first GoldenScale MVP targets bidirectional `Qwen/Qwen3-8B` and
-`Qwen/Qwen3-14B` reuse. GoldenExperience treats each direction as an independent
-artifact because 8B->14B and 14B->8B need different layer maps, hidden bridge specs, target KV restore specs, cost
-estimates, and quality gates.
-
-The artifact flow is:
-
-```text
-shared prompts
-  -> golden-scale-collect
-  -> golden-scale-fit
-  -> CalibrationManifest JSON per direction
-  -> golden-scale-validate
-  -> planner READY only when calibration/artifact gates pass
-```
-
-The MVP artifact contains:
-
-- `LayerMap`: covers every target layer and maps it to source layer ids.
-- `HiddenBridgeSpec`: maps `pre_kv_hidden` from small-model width to large-model width.
-- `KVRestoreSpec`: records target-model W_K/W_V/RoPE restore contract and GQA KV layout.
-- `ProjectionSpec`: retained as a legacy KV-projection baseline/control artifact.
-- `QualityGateResult`: offline/shadow metrics such as hidden cosine, KV cosine, attention proxy cosine, and perplexity drift.
-- sidecar ids: `pair_id`, `direction`, `calibration_id`, `layer_map_id`, `hidden_bridge_id`, `restore_id`,
-  source/target config hashes, state kind, and fallback reason.
-
-Runtime behavior remains conservative:
-
-- Prefix token ids must match exactly; chunk alignment is required.
-- The production materializer consumes `[2, source_layers, chunk_tokens, kv_width]`
-  Mooncake objects directly. It inverse-rotates cached Qwen3 keys, applies a learned
-  direction-specific per-channel baseline plus joint low-rank and ridge-regularized SiLU
-  KV map, reapplies target RoPE at absolute positions, and emits the target layer layout
-  without loading or prefilling either model.
-- Measured artifact load, exact source read, transform, and target write time must be <=
-  70% of the isolated native target prefill cost before target keys are published.
-- Long-lived materializer workers keep verified bridge tensors resident. Every cache hit
-  rechecks manifest, bridge, model-directory, config, tokenizer, and shard stat identities;
-  any change forces complete content verification before reuse.
-- Tokenizer compatibility is content-addressed over vocabulary, merge/model files, special
-  tokens, and semantic tokenizer settings. The default chat renderer is recorded separately
-  as `chat_template_sha256`; it is not confused with token-ID compatibility. Exact per-request
-  prefix/token hashes still have to match before cached KV can be read.
-- Any tokenizer, RoPE, model/config/weight identity, artifact, prompt binding, object
-  layout, exact-I/O, quality, or cost mismatch falls back to the original target prefill.
-
-### Cached-KV Training
-
-The checked-in dataset recipe has 256 train, 64 validation, and 64 sealed-test prompts
-with explicit, disjoint IDs, groups, and content hashes. Every split covers four task
-categories and 32/128/512/2048-token buckets. Prompts use the model's Qwen3 chat template
-with thinking explicitly disabled so native and bridged task assertions share a bounded
-decode contract. Regenerate it deterministically, then tune against validation without
-opening the test split:
-
-```bash
-python3 scripts/generate_qwen3_cached_kv_dataset.py
-python3 scripts/train_qwen3_cached_kv_bridge.py \
-  --direction 8b_to_14b \
-  --dataset configs/qwen3_cached_kv_prompts.json \
-  --output artifacts/cached_kv/qwen3_8b_to_14b.json
-```
-
-The default fit uses rank 512, ridge 1000, and 2048 supervised positions distributed as
-32 positions across 64 training prompts. Override both sampling flags together when
-running a larger fit; sparse eight-position prompt sampling is known to regress validation.
-
-Run the same command with `--direction 14b_to_8b` for the reverse artifact. Add
-`--finalize` only for the selected hyperparameters; this evaluates the sealed 64-prompt
-test split and writes safetensors plus a content-addressed manifest. A separate runtime
-cost report with measured Mooncake P95 read-transform-write and native-prefill latency is
-required for approval. Without it, even perfect offline metrics remain fail closed.
-
-Use `--emit-validation-candidate` to write unapproved safetensors for a non-publishing
-runtime cost benchmark. Production loading still rejects this artifact; only the explicit
-benchmark loader accepts its fully content-addressed structure without granting approval.
-
-Measure a candidate with real Mooncake source objects and an independently recorded native
-target-prefill report. The benchmark writes only unique temporary target keys, verifies
-their exact remote sizes, rolls every key back, and never publishes an external index:
-
-```bash
-python3 scripts/benchmark_qwen3_cached_kv_cost.py \
-  --candidate-manifest artifacts/cached_kv/qwen3_8b_to_14b.candidate.json \
-  --source-model /workspace/volume/softdata/models/Qwen3-8B \
-  --target-model /workspace/volume/softdata/models/Qwen3-14B \
-  --mooncake-setup /path/to/mooncake_setup.json \
-  --source-key source-key-from-current-prompt \
-  --chunk-size 256 \
-  --native-prefill-report /path/to/native_prefill.json \
-  --output artifacts/cached_kv/qwen3_8b_to_14b.cost.json
-```
-
-Finalization recomputes the report P95 values and accepts them only when the report binds
-the exact bridge weights, candidate manifest, direction, validation split, source/target
-model weights, real Mooncake backend, and a 20-sample native vLLM prefill report. Both
-report SHA values become part of the content-addressed final manifest.
-
-Run a resident materializer worker with one JSON request and compact JSON response per
-line. Send `mode=preload_cached_kv_bridge` first to load an already approved artifact
-without touching Mooncake, then send normal `mode=cached_kv` requests:
-
-```bash
-python3 -m goldenexperience.runtime.cross_model_materializer --serve-jsonl
-```
-
-## Minimal Planner Example
-
-```python
-from goldenexperience.reuse import CrossModelReusePlanner, KVShape, ModelRef, ReuseRequest
-
-shape = KVShape(num_layers=36, num_key_value_heads=8, head_dim=128)
-base = ModelRef(
-    model_id="qwen3-8b",
-    family="qwen",
-    architecture="qwen3",
-    tokenizer_id="qwen3",
-    parameter_count_b=8,
-    kv_shape=shape,
-)
-lora = ModelRef(
-    model_id="qwen3-8b-lora-math",
-    family="qwen",
-    architecture="qwen3",
-    tokenizer_id="qwen3",
-    parameter_count_b=8,
-    base_model_id="qwen3-8b",
-    lora_adapter_id="math-adapter",
-    kv_shape=shape,
-)
-
-plan = CrossModelReusePlanner().plan(
-    ReuseRequest(source=base, target=lora, prefix_hash="shared-system-prompt")
-)
-print(plan.scenario.value, plan.strategy.value, plan.status.value)
-```
-
-Render the LMCache patch contract:
-
-```bash
-golden-patch-manifest --output docs/patch_manifest.md
-```
-
-## Development Roadmap
-
-- M0: Lock the project boundary around vLLM + LMCache MP + Mooncake Store + GoldenExperience metadata.
-- M1: Implement LMCache secondary lookup sidecar for base/LoRA mutual reuse.
-- M2: Add layer/head mapping and calibrated projection for same-model size variants.
-- M3: Add experimental learned translator interface for different-base reuse.
-- M4: Build vLLM model-backed benchmarks and quality/fallback accounting.
-- M5: Keep the patch small enough to rebase on upstream LMCache.
-
-See `docs/design.md`, `docs/experiment_matrix.md`, and `docs/artifact.md` for the detailed
-framework plan.
+GoldenExperience is released under the [Apache-2.0 license](LICENSE). Dataset redistribution is
+subject to the upstream licenses recorded in `configs/publication_sources.qwen3-v5.json`.

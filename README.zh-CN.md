@@ -2,58 +2,117 @@
 
 [English](README.md) | [中文](README.zh-CN.md)
 
-GoldenExperience 是一个面向 **vLLM + LMCache MP + Mooncake Store** 共享 KV 底座的
-**跨模型 KV Cache 复用框架**。
+GoldenExperience 是一个 artifact-first 的跨模型 KV Cache 转换研究框架，运行底座为
+**vLLM + LMCache MP + Mooncake Store**。
 
-新的运行时边界刻意保持狭窄：
+> **当前研究状态：** publication v5 得到的是终止性的负结果，不是已获批的部署系统。
+> Qwen3-4B 到 Qwen3-8B 的注册 v4 transport 已完成训练，但 method-dev 安全门失败。
+> selector、calibration、其他方向、validation、semantic sealed 评估以及跨模型 runtime audit
+> 均被协议阻断。
 
-- vLLM 负责模型加载、调度、解码以及推理正确性。
-- LMCache MP 负责共享 KV 查询、卸载、淘汰和预取编排。
-- Mooncake Store 负责跨 engine 重启可持久化的 L2 metadata 与 SSD 存储根目录。
-- GoldenExperience 为 **跨模型复用 KV Cache** 添加控制平面。
-- 如果复用计划不安全或未经校准，系统会回退到原始的 vLLM + LMCache MP 行为。
+[完整论文](paper/paper.md) | [证据包](artifacts/publication_v5/evidence/README.md) |
+[图表与绘图数据](artifacts/publication_v5/figures/README.md) |
+[Pipeline 合同](docs/v5_pipeline.md) | [相关工作与 claim 审计](docs/related_work_matrix.md)
 
-## 项目关注点
+## 核心结果
 
-GoldenExperience 不尝试成为推理引擎，也不替换缓存存储。它旨在作为 LMCache MP
-之上的小型补丁和 Python control-plane 存在，让运行时元数据通过 vLLM/LMCache MP
-connector 路径进入 lookup/retrieve 逻辑。
+九个注册候选由 rank 32/64/128 与 seed 17/29/43 的笛卡尔积组成，在 4,096 条训练样本上
+训练三个 epoch。冻结的 rank 聚合规则选择 rank 64，部署 identity 固定为 seed 17。
 
-研究/开发目标包含三条 GoldenExperience 复用路线：
+| 指标 | 注册结果 | 要求 |
+| --- | ---: | ---: |
+| Task preservation | 0.976862 | 仅报告，不能单独作为安全结论 |
+| 16-token greedy agreement | 0.617249 | 每条 safe prompt 至少 0.98 |
+| Aggregate perplexity drift | 21.47% | 每条 safe prompt 至多 2% |
+| Oracle-safe prompts | 142 / 1,024 | - |
+| Oracle-safe coverage | **0.138672** | **至少 0.45** |
+| 全九候选事后 oracle | 377 / 1,024 = 0.368164 | 仍低于 0.45 |
 
-| 路线名称 | 场景 | 目标 | 默认策略 | 安全门控 |
-| --- | --- | --- | --- | --- |
-| GoldenLoRA | 基座模型 <-> LoRA 模型 | 在模型及其 LoRA 微调变体之间复用 KV | 由 adapter-delta 门控的别名复用 | 相同基座、tokenizer、KV 布局、LoRA 漂移探针 |
-| GoldenScale | 同一模型的不同参数规模 | 在 8B <-> 14B 等变体之间复用 KV | 形状匹配时直接别名；否则hidden-state bridge | 层/头映射与hidden bridge 校准 |
-| GoldenBridge | 不同基座模型 | 探索更广泛的跨基座复用 | 学习式转换器 | 显式校准集、tokenizer 桥接、任务白名单 |
+Full-prefix supervision 确实改善了目标机制：固定 rank 128/seed 17 后，safe count 从 115
+提高到 159，其中 8,192-token bucket 净增加 24 条。但固定低秩 affine operator 仍不能在不同
+任务间稳定保持 decoded behavior。
 
-这些名称与实现场景的映射关系如下：`GoldenLoRA` 对应 `model_lora_mutual_reuse`，
-`GoldenScale` 对应 `same_model_different_parameter_size`，`GoldenBridge` 对应
-`different_base_model`。
+![所有候选均未达到门槛](artifacts/publication_v5/figures/fig01_candidate_coverage.svg)
 
-## Selective Cached-KV v5
+完整 method-dev 报告含 9,216 条 measurement；未压缩报告 SHA-256 为
+`f35e9599cea4d56cb1d0a7fad888a7d1bf2cef2602c9f42950162de7662a4400`。
 
-当前研究主线是同架构家族尺度变体的 fail-closed v5 artifact：transport v2 使用仅训练集、
-按冻结行加权的 ridge/SVD 初始化和逐 head 低秩 affine K/V 映射，同时继续读取 v1 artifact；
-head-aware 层/头映射支持不同深度与 KV head 数；source-only sidecar 与统计校准 MLP 只接纳经候选阈值 Bonferroni
-校正后、同时 95% 单侧风险上界不超过 1% 的前缀；`validation_candidate` 和
-`semantic_approved` 都不能启动线上复用；只有最终
-`approved` artifact 才能通过 `RETRIEVE_TRANSFORM` 直接写入 vLLM paged KV，且不生成
-target Mooncake object。
+## 已实现内容
 
-完整合同与当前证据边界见 `docs/selective_kv_v5.md`。仓库目前没有获批的 v5 artifact；
-保留的 Qwen3 rank-512 结果只是失败的开发基线，不构成生产或论文主张。
+GoldenExperience 不替代推理引擎或缓存存储，只在现有服务组件周围增加狭窄的控制平面与
+证据平面：
 
-可在两张 GPU 上运行有界的真实模型实现 smoke：
+- **跨模型规划：** model identity、KV topology、prefix binding、策略选择，以及
+  base/LoRA、尺度变体和探索性跨 base 场景的 fail-closed fallback。
+- **Head-aware transport：** RoPE-aware 的 layer/head mixing、独立低秩 affine K/V map、
+  train-only normalizer 与 ridge/SVD 初始化。
+- **可复现训练：** grouped full-prefix supervision、确定性 rank/seed screening、包含完整
+  AdamW 状态的原子 checkpoint，以及可独立 replay 的 method-dev report。
+- **证据 pipeline：** 内容绑定的数据/模型/代码 identity、split 隔离 collection、artifact
+  authority state、one-shot sealed guard，以及真正执行 stop rule 的 stage dependency。
+- **选择性准入协议：** source-only sidecar、冻结 risk predictor、exact calibration bound、
+  validation 和 selector baseline。这些实现有测试，但当前 workspace 在 method-dev 失败后
+  没有执行它们。
+- **运行时集成：** LMCache MP secondary lookup、直接原子 scatter 到 vLLM paged KV、失败
+  rollback，以及不发布 translated target object。当前没有获批的 v4 真实模型 runtime 结果。
+
+实现能力与经验性 authority 明确分离：
+
+| Stage | 当前状态 | 仓库可以支持的主张 |
+| --- | --- | --- |
+| Transport collection 与 fit | 已完成 | 精确 fitted candidates 与 provenance |
+| Method development | **失败** | 终止性负结果与 mechanism diagnostic |
+| 其他方向 fit | 被阻断 | 仅有实现 |
+| Selector 与 calibration | 被阻断 | 仅有经过测试的协议 |
+| Validation | 被阻断 | 不存在 `validation_candidate` |
+| Semantic sealed | **locked** | payload 未打开，没有 final-test estimate |
+| Runtime audit | 被阻断 | 没有 accepted-reuse 或跨模型 TTFT 主张 |
+
+## 复现论文证据
+
+论文工具只依赖 Python 标准库，不需要也不会访问 sealed payload。
 
 ```bash
-python3 -m pip install -e ".[hf]"
-golden-v5-smoke --output artifacts/cache/qwen3_4b_to_8b_smoke.json
+# 干净 clone 可直接从 tracked deterministic report archive 检查。
+python3 paper/tools/build_method_dev_evidence.py --check --from-archive
+
+# 在内存中重建所有 CSV/SVG/PDF，并逐字节对照 tracked 文件。
+python3 paper/tools/build_figures.py --check
+
+# 检查 claim、数值、引用、链接、hash 与 locked workspace receipt。
+python3 paper/tools/check_manuscript.py
 ```
 
-该命令验证真实 prefill、head-structured DynamicCache 转换、目标 attention 采集、transport
-shape 与五项有限 loss。报告固定标记为 `diagnostic_only`，不能打开 sealed split，也不能批准
-任何 artifact。
+所有生成器都会拒绝 input/output path 中含有 `sealed` 的路径。证据 archive 解压后与原始
+8,043,391-byte report 完全一致；每张图均保留 CSV、accessible SVG 和 deterministic vector
+PDF。
+
+## 安装与测试
+
+创建 Python 3.10+ 环境：
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python3 -m pip install -e ".[dev]"
+```
+
+运行工程检查：
+
+```bash
+pytest
+ruff check goldenexperience tests scripts paper/tools
+mypy goldenexperience tests scripts
+python3 -m build
+```
+
+运行 planner 示例：
+
+```bash
+python3 scripts/smoke_cross_model_plan.py
+```
+
+该输出只演示 control-plane 行为，不会创建 publication-v5 approved artifact。
 
 ## 架构
 
@@ -68,372 +127,115 @@ client -> vLLM OpenAI-compatible server
              v
       Mooncake Store on local TCP + SSD
              |
-             | metadata sidecars, secondary lookup, materialization, accounting
+             | source lookup + sidecar gate + transform
              v
-      GoldenExperience planner and LMCache patch surface
+      GoldenExperience direct paged-KV materializer
+             |
+             +-- success: 原子发布所有 translated layers
+             +-- failure: 使 partial blocks 失效并执行 native prefill
 ```
 
-补丁面由 `PatchManifest.default()` 描述：
+运行时职责保持狭窄：
 
-1. `engine_request_metadata`：在 LMCache MP 查询前附加 `ModelRef` 和前缀元数据。
-2. `lmcache_cross_model_lookup`：同模型未命中时，查询跨模型候选。
-3. `calibrated_risk_gate`：读取 source sidecar，在读取 source KV 前执行统计准入。
-4. `lmcache_retrieve_transform`：批量读取、转换并原子 scatter 到 vLLM paged KV。
-5. `goldenexperience_materializer`：保留 v4 artifact 的只读兼容路径。
-6. `quality_gate_accounting`：记录置信度、校准状态和回退原因。
+- vLLM 负责模型加载、调度、解码与推理正确性。
+- LMCache MP 负责共享 KV 查询、卸载、淘汰和预取编排。
+- Mooncake Store 负责跨 engine 重启持久化的 L2 metadata 与 objects。
+- GoldenExperience 负责跨模型 identity、planning、translation、admission metadata、
+  materialization 与 fallback accounting。
 
 ## 仓库结构
 
-仓库组织参考 C2C 的思路：核心 Python 包、薄脚本入口、配置、可复现实验 recipe、文档、
-示例、测试和 artifact 分层。C2C 将核心包 `rosetta/` 与 `script/`、`bash/`、
-`recipe/`、`resource/` 分开；GoldenExperience 对应地把工程化调度放在
-`goldenexperience/runtime/`，把薄 shell 入口放在 `scripts/`，把可 source 的运行配置放在
-`recipes/`。
-
 ```text
 goldenexperience/
-  runtime/           vLLM + LMCache MP + Mooncake runtime 检查与 baseline 调度器。
-  reuse/             ModelRef, KVShape, ReuseRequest, ReusePlan, scenario planner.
-  lmcache_patch/     Patch manifest and sidecar key metadata for LMCache MP deltas.
-  size_variant/      GoldenScale calibration, layer mapping, projection scaffolds.
-  benchmarks/        Synthetic and model-backed benchmark harnesses.
-  cache_core/        Legacy in-repo cache block metadata utilities for tests/prototypes.
-  tiered_store/      Legacy synthetic tiering prototype; not the product runtime path.
-scripts/
-  kv_baseline/       薄 shell 启动器，以及 stdlib OpenAI-compatible client/summarizer。
-recipes/             可 source 的 env overlay，用于可复现运行时启动。
-docs/                Design, shared KV substrate, experiment matrix, artifact, paper notes.
-configs/             Runtime env examples and cross-model reuse experiment configuration.
-examples/            Minimal planning examples.
-tests/               Unit tests for planner, runtime config, and baseline generation.
+  benchmarks/       冻结 benchmark builder 与确定性 scorer。
+  cli/              Console entry points，包括 publication-v5 pipeline。
+  lmcache_patch/    Patch manifest 与 LMCache sidecar metadata。
+  reuse/            ModelRef、KVShape、request、plan 与 scenario planner。
+  runtime/          vLLM/LMCache/Mooncake 检查、adapter 与 baseline orchestration。
+  size_variant/     Transport、fit、risk、validation、sealed 与 runtime contract。
+artifacts/
+  publication_v5/  Receipt、负结果证据、CSV/SVG/PDF 图表与 diagnostic。
+  kv_baseline/      精选同模型底座 manifest；raw run 被 Git 忽略。
+configs/            Runtime 示例与冻结的 publication source identity。
+docs/               方法预注册、pipeline、数据、设计与 claim boundary。
+paper/              完整论文、参考文献、复现和审计工具。
+recipes/            可 source 的 runtime environment overlay。
+scripts/            薄 operational/diagnostic launcher。
+tests/              Unit 与 integration tests。
 ```
 
-## 快速开始
+## Publication-v5 协议
 
-创建 Python 3.10+ 环境并安装本地项目：
+冻结 benchmark 将训练、方法开发、选择器、校准、验证、最终语义评估与运行时测量分开：
 
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-python3 -m pip install -e ".[dev]"
-pytest
-```
+| Split | 行数 | 当前访问状态 |
+| --- | ---: | --- |
+| `transport_train` | 4,096 | 已用于注册 fit |
+| `method_dev` | 1,024 | 已使用；终止门失败 |
+| `selector_train` | 2,048 | 被阻断 |
+| `risk_calibration` | 2,048 | 被阻断 |
+| `validation` | 2,048 | 被阻断 |
+| `semantic_sealed_test` | 2,048 | locked 且未打开 |
+| `runtime_audit` | 512 | 被阻断 |
 
-运行 planner 冒烟测试：
+Method-dev 已经为 v2、v3、v4 提供设计反馈，不能再作为下一种 adaptive method 的独立
+confirmation set。未来的成功主张必须绑定新代码、新 workspace 和新冻结的 development split；
+不能打开当前 validation 或 semantic payload 来继续调方法。
 
-```bash
-python3 scripts/smoke_cross_model_plan.py
-```
+## 同模型服务底座
 
-构建 Qwen3 8B <-> 14B 的 GoldenScale 校准脚手架：
-
-```bash
-golden-scale-collect --output artifacts/golden_scale/prompts.json
-golden-scale-fit \
-  --direction bidirectional \
-  --prompt-manifest artifacts/golden_scale/prompts.json \
-  --output-dir artifacts/golden_scale
-golden-scale-validate artifacts/golden_scale/qwen3_8b_to_14b_hidden_bridge_v0.json
-golden-scale-bench artifacts/golden_scale/qwen3_14b_to_8b_hidden_bridge_v0.json
-```
-
-## 部署流程
-
-GoldenExperience 作为 Python 包部署在与 vLLM、LMCache 和 Mooncake 相同的环境中。
-它不是独立 daemon。
-
-运行时职责：
-
-- vLLM 启动 OpenAI-compatible 推理服务器，并负责请求调度与生成。
-- LMCache MP 负责共享 KV 查询、存储策略、卸载、淘汰和预取。
-- Mooncake Store 负责持久化 L2 metadata 和 SSD-backed objects。
-- GoldenExperience 负责 `ModelRef`、`ReuseRequest`、`ReusePlan`、补丁元数据以及质量/回退计数。
-
-### 1. 安装运行时包
-
-只需要运行栈且 Mooncake 二进制已经在 `PATH` 上时，使用 package 模式：
+仓库保留真实的同模型 offload/reuse baseline，用于独立验证 vLLM、LMCache MP 和 Mooncake，
+而不是证明跨模型质量。安装 pinned runtime stack：
 
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate
 ./scripts/install_runtime.sh --mode package
 ```
 
-package 模式会 fail closed 到已验证的 CUDA 13 组合（`vllm==0.24.0`、
-`lmcache==0.4.6`），且不会绕过依赖解析器替换 CuPy。CUDA 12 或其他运行时组合需使用
-source 模式，直到对应 adapter 兼容性测试落地。
-
-需要补丁 LMCache 或调试 vLLM/LMCache/Mooncake 内部逻辑时使用 source 模式：
+启动同模型 baseline：
 
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate
-./scripts/install_runtime.sh --mode source
-```
-
-`--mode source` 会把 vLLM、LMCache 和 Mooncake 克隆到 `third_party/`。脚本会以
-editable 方式安装 vLLM 和 LMCache，并默认带上 `BUILD_MOONCAKE=1`；Mooncake 请按上游
-说明构建，并确保 `mooncake_master` 和 `mooncake_http_metadata_server` 位于 `PATH`。
-使用 fork 时可以覆盖默认值：
-
-```bash
-GE_THIRD_PARTY_DIR=third_party \
-GE_VLLM_REPO_URL=https://github.com/vllm-project/vllm.git \
-GE_LMCACHE_REPO_URL=https://github.com/LMCache/LMCache.git \
-GE_MOONCAKE_REPO_URL=https://github.com/kvcache-ai/Mooncake.git \
-./scripts/install_runtime.sh --mode source
-```
-
-如果运行时栈已经可用，只安装 GoldenExperience：
-
-```bash
-./scripts/install_runtime.sh --mode golden-only
-```
-
-脚本在安装了 `uv` 时优先使用 `uv pip install`，否则回退到 `python3 -m pip install`。
-安装依赖后默认会执行 `scripts/patch_lmcache_mooncake_runtime.py`。这个可复现补丁会补齐
-LMCache 期望的 Mooncake `libmooncake_store.so` 别名，默认选择 Python
-`MooncakeDistributedStore` SET/GET adapter，并用 LMCache MP 进程内 key index 绕过 native
-`batchIsExist` lookup 崩溃路径。只有在明确想测试未补丁上游路径时，才设置
-`GE_PATCH_MOONCAKE_RUNTIME=0`。package 和 golden-only 模式结束时会严格检查
-`vLLM`、`LMCache` 和 `Mooncake` 是否可用；source 模式默认只警告，因为 Mooncake 仍需要按
-上游步骤构建。可用 `--runtime-check strict|warn|skip` 覆盖该行为。当修改 CUDA、Python 或
-包版本时，仍应对照 vLLM、LMCache 和 Mooncake 上游文档检查细节。
-
-### 2. 验证 Planner 和运行时
-
-```bash
-python3 scripts/smoke_cross_model_plan.py --check-runtime --strict-runtime
-python3 scripts/patch_lmcache_mooncake_runtime.py --check
-```
-
-预期 planner 输出包含三行：
-
-- `model_lora_mutual_reuse`：已就绪的基座/LoRA 计划。
-- `same_model_different_parameter_size`：已校准的 GoldenScale 投影计划。
-- `different_base_model`：保守的、未就绪的跨基座计划。
-
-运行时检查会报告 `vLLM`、`LMCache` 和 `Mooncake`。如有缺失，请先安装运行时栈，再启动基于模型的服务。
-
-### 3. 生成补丁清单
-
-```bash
-golden-patch-manifest --output docs/patch_manifest.md
-```
-
-### 4. 运行共享 KV baseline
-
-推荐启动路径是工程化 Python 调度器，shell 仅作为薄入口：
-
-```bash
-GE_MODEL_PATH=Qwen/Qwen3-8B \
-GE_PORT=30000 \
-scripts/kv_baseline/run_vllm_lmcache_mooncake_kv_baseline.sh -- --tensor-parallel-size 1
-```
-
-安装后也可以直接调用 console entry point：
-
-```bash
-GE_MODEL_PATH=Qwen/Qwen3-8B golden-kv-baseline -- --tensor-parallel-size 1
-```
-
-### 5. 运行同模型 KV 卸载/复用基线
-
-当 vLLM、LMCache、Mooncake 和 GoldenExperience 已安装在同一个 Python 环境后，
-使用该基线。默认路径已经切换为 `vLLM + LMCache MP + Mooncake Store`：
-
-1. 在本机 TCP 上启动 Mooncake master 和 HTTP metadata 服务；
-2. 启动独立 LMCache MP server，并把 L2 配置为 `type=mooncake_store`；
-3. 使用 `LMCacheMPConnector` 启动 vLLM；
-4. 发送 offload 请求，只重启 vLLM，再发送相同 reuse 请求。
-
-这样共享 KV 底座位于推理进程之外，后续跨模型复用只需要接入 LMCache MP 的持久
-L2，而不依赖 engine 进程内缓存。
-
-```bash
-source .venv/bin/activate
 source recipes/kv_baseline_mooncake_local.env
-
 GE_MODEL_PATH=Qwen/Qwen3-8B \
 GE_PORT=30000 \
 scripts/kv_baseline/run_vllm_lmcache_mooncake_kv_baseline.sh -- --tensor-parallel-size 1
 ```
 
-默认本机 TCP + SSD 设置：
+Raw run 位于 `artifacts/kv_baseline/<run_id>/` 并被 Git 忽略；只应在
+`artifacts/kv_baseline/manifests/` 保留精选 manifest。同模型 baseline 成功只能说明存储底座
+工作正常，不能证明 v4 跨模型转换安全或更快。
 
-- `GE_KV_BACKEND=mp`、`GE_ENGINE=vllm`、`GE_LMCACHE_MP_L2_ADAPTER_TYPE=mooncake_store`。
-- `GE_MOONCAKE_MASTER_HOST=127.0.0.1`、`GE_MOONCAKE_MASTER_PORT=50051`。
-- `GE_MOONCAKE_METADATA_PORT=8080`，生成 `http://127.0.0.1:8080/metadata`。
-- `GE_LMCACHE_MP_HTTP_PORT=8081`，避免 LMCache MP HTTP 与 Mooncake metadata 冲突。
-- `GE_MOONCAKE_PROTOCOL=tcp`、`GE_MOONCAKE_STORAGE_ROOT=$GE_KV_CACHE_DIR/mooncake`。
-- `GE_MOONCAKE_PER_OP_WORKERS_JSON='{"lookup":2,"retrieve":8,"store":4}'`。
-- `LMCACHE_MOONCAKE_PYTHON_ADAPTER=1`，使用 Python Mooncake Store SET/GET 路径；
-  `LMCACHE_MOONCAKE_NATIVE_EXISTS=0` 用于避开 native `batchIsExist`。
-- Mooncake master 默认带上 `--client_ttl=600`、来自 storage root 的 `--root_fs_dir`，
-  以及来自 `GE_RUN_ID` 的 `--cluster_id`；需要覆盖时使用 `GE_MOONCAKE_MASTER_EXTRA_ARGS`。
-
-默认输出会写入 `artifacts/kv_baseline/<run_id>/`：
-
-- `metadata.json`：模型、提示、MP connector、Mooncake endpoint、adapter JSON、pid 和日志路径。
-- `lmc_config.yaml`：包含 `LMCacheMPConnector` 和 Mooncake Store L2 的生成配置。
-- `requests/offload.json`：第一次请求的输出、usage、端到端延迟和 TTFT。
-- `requests/reuse.json`：vLLM 重启后使用相同提示的第二次请求。
-- `logs/lmcache_mp_server.log`：持久 LMCache MP server 证据。
-- `logs/mooncake_master.log` 和 `logs/mooncake_metadata_server.log`：Mooncake 服务证据。
-- `metrics/offload.prom` 和 `metrics/reuse.prom`：vLLM external KV transfer 计数器。
-- `summary.json`：请求差值，以及 store/retrieve/L2/Mooncake 的日志计数。
-
-原始 KV baseline run 目录会被 Git 忽略。Git 里只保留
-`artifacts/kv_baseline/manifests/` 下的精选 manifest，大的 KV seed payload 放到外部
-artifact store：
+需要修改上游组件时才使用 source mode：
 
 ```bash
-python3 scripts/kv_baseline/export_kv_seed_manifest.py \
-  artifacts/kv_baseline/<run_id> \
-  --artifact-uri s3://bucket/ge-kv-seeds/<artifact_id>.tar.zst \
-  --output artifacts/kv_baseline/manifests/<run_id>.json
+./scripts/install_runtime.sh --mode source
 ```
 
-默认在 `GE_FORCE_DISK_OFFLOAD=1` 时生成较长的确定性 disk-offload prompt。要使用
-自定义 prompt manifest，请设置 `GE_PROMPT_FILE` 和 `GE_PROMPT_ID`；如果生成 prompt 超过
-模型上下文，可调小 `GE_DISK_PROMPT_REPEAT`。
+已验证的 package-mode 组合为 CUDA 13、`vllm==0.24.0`、`lmcache==0.4.6`。修改 CUDA、
+Python 或上游 revision 前，请先阅读 runtime scripts 与 `docs/shared_kv_substrate.md`。
 
-常用覆盖项：
+## Artifact Authority 与安全边界
 
-```bash
-GE_MODEL_PATH=/models/Qwen3-8B \
-GE_MODEL_NAME=/models/Qwen3-8B \
-GE_RUN_ID=qwen3_8b_mooncake_restart_001 \
-GE_MOONCAKE_STORAGE_ROOT=/ssd/ge-kv/mooncake \
-GE_MOONCAKE_GLOBAL_SEGMENT_SIZE=4294967296 \
-GE_MOONCAKE_LOCAL_BUFFER_SIZE=4294967296 \
-scripts/kv_baseline/run_vllm_lmcache_mooncake_kv_baseline.sh -- --tensor-parallel-size 1
-```
+Runtime loader 由 state gate 控制：
 
-解释检查清单：
+| Artifact state | 离线使用 | 打开 sealed split | 自动跨模型复用 |
+| --- | --- | --- | --- |
+| `validation_candidate` | 可以 | 不可以 | 不可以 |
+| `semantic_approved` | 可以 | 已 one-shot 完成 | 不可以 |
+| `approved` | 可以 | 已 one-shot 完成 | 可以 |
 
-1. 确认 `requests/offload.json` 包含预期答案。
-2. 确认 `summary.json` 中 `offload_has_disk_evidence=true`、
-   `reuse_has_cache_evidence=true`、`disk_reuse_success=true`。
-3. 确认 `metrics/reuse.prom` 中 `vllm:external_prefix_cache_hits_total > 0`，并且
-   `vllm:prompt_tokens_by_source_total{source="external_kv_transfer"} > 0`；offload 阶段应主要是
-   `source="local_compute"`。
-4. 确认 `logs/lmcache_mp_server.log` 包含 Python Mooncake Store 证据：
-   `MooncakeStore SET`、`MooncakeStore EXISTS`、`MooncakeStore GET` 和
-   `L2 prefetch load completed`。
-5. 确认 `metadata.json` 记录 `mooncake.enabled=true`、`l2_adapter_type=mooncake_store`、
-   Mooncake storage root，以及不同的 offload/reuse vLLM 服务 pid。
-6. 确认 Mooncake storage root 内有非空文件，然后保留完整的
-   `artifacts/kv_baseline/<run_id>/` 目录，作为后续跨模型 KV 复用实验的同模型基线。
+Publication v5 当前不存在上述任何一种 artifact。任何缺失、损坏、identity 不匹配、未校准或
+未获批的 artifact 都必须回退到 native target prefill。
 
-兼容和诊断：
+不要检查、抽样、hash 或改作他用 semantic payload。只有 dedicated one-shot opener 能读取它，
+且前提是四个注册方向全部通过 validation。当前 workspace 不满足该前提。
 
-```bash
-# 使用旧的 MP filesystem L2 adapter，而不是 Mooncake Store。
-GE_LMCACHE_MP_L2_ADAPTER_TYPE=fs \
-scripts/kv_baseline/run_vllm_lmcache_mooncake_kv_baseline.sh -- --tensor-parallel-size 1
-```
+## 引用
 
-需要运行结束后检查 live 服务时，可设置 `GE_KEEP_LMCACHE_MP_AFTER_RUN=1` 或
-`GE_KEEP_MOONCAKE_AFTER_RUN=1`。
+引用元数据见 [CITATION.cff](CITATION.cff)。首选引用是负结果论文
+**“Can KV Caches Cross Model Scales? A Fail-Closed Evaluation of Qwen3 Prefix Translation.”**
+请勿把当前版本引用为已获批跨模型 serving speedup 的证据。
 
-默认 Mooncake baseline 有意使用 Python Mooncake Store SET/GET 路径，因为本地 baseline 所用
-package 组合里的 native C++ `batchIsExist` 路径在 missing key 上出现过兼容性崩溃。如果要显式
-测试 native 路径，设置 `LMCACHE_MOONCAKE_PYTHON_ADAPTER=0` 和
-`LMCACHE_MOONCAKE_NATIVE_EXISTS=1`。
+## 许可证
 
-### 当前运行时状态
-
-现在有两条跨参数量 runtime 路径：
-
-- `scripts/run_cross_model_runtime.py`：较早的 `native_target_seed` proof。它用目标模型
-  prefill 生成 target-shaped KV，重启目标 vLLM，并验证 LMCache/Mooncake 外部 KV retrieval。
-- `scripts/run_qwen3_cached_kv_runtime.py`：带质量门的 cached-KV 路径。它先做 source
-  offload，在目标 miss 后查找源模型 Mooncake keys，调用 resident materializer，并仅在
-  identity、quality、exact-I/O 和 runtime cost 门全部通过后原子发布 target keys。
-
-已停止的 hidden-state 和 prefix-specific bridge 实验已汇总到 `docs/paper_outline.md`。
-整理后删除了机器相关 manifest 与专用训练脚本：prefix-specific 方案虽然在小规模 cosine
-probe 上通过，但 runtime task assertion 失败，不能作为通用 8B -> 14B bridge。
-
-## GoldenScale 复用
-
-首个 GoldenScale MVP 面向 `Qwen/Qwen3-8B` 与 `Qwen/Qwen3-14B` 的双向复用。GoldenExperience 会把每个方向视为独立 artifact，因为 8B->14B 和 14B->8B 需要不同的层映射、hidden bridge 规格、目标 KV restore 规格、成本估计和质量门控。
-
-artifact 流程为：
-
-```text
-shared prompts
-  -> golden-scale-collect
-  -> golden-scale-fit
-  -> CalibrationManifest JSON per direction
-  -> golden-scale-validate
-  -> planner READY only when calibration/artifact gates pass
-```
-
-MVP artifact 包含：
-
-- `LayerMap`：覆盖每个目标层，并将其映射到源层 id。
-- `HiddenBridgeSpec`：把小模型 `pre_kv_hidden` 映射到大模型 hidden 宽度。
-- `KVRestoreSpec`：记录目标模型 W_K/W_V/RoPE restore contract 与 GQA KV layout。
-- `ProjectionSpec`：保留为旧 KV projection baseline/control。
-- `QualityGateResult`：离线/影子门控指标，例如 hidden cosine、KV cosine、attention proxy cosine 和 perplexity drift。
-- sidecar ids：`pair_id`、`direction`、`calibration_id`、`layer_map_id`、`hidden_bridge_id`、`restore_id`、state kind、源/目标配置哈希以及回退原因。
-
-运行时行为保持保守：
-
-- 前缀 token ids 必须完全匹配；要求 chunk 对齐。
-- materializer 先执行 `h_small -> h_large_hat`，再由目标模型 W_K/W_V/RoPE restore 出完整目标形状 KV。
-- `estimated_materialization_ms` 必须 <= 目标 prefill 成本的 70%。
-- tokenizer 兼容哈希覆盖词表、merge/model 文件、special token 与影响 token ID 的配置；默认
-  chat renderer 另以 `chat_template_sha256` 留存溯源。每个请求的 prefix/token 哈希仍必须完全
-  一致，才允许读取源 KV。
-- 任何 tokenizer、RoPE、配置哈希、artifact、层映射、hidden bridge、restore 或质量不匹配，都会回退到原始的 vLLM + LMCache MP 目标 prefill 路径。
-
-## 最小 Planner 示例
-
-```python
-from goldenexperience.reuse import CrossModelReusePlanner, KVShape, ModelRef, ReuseRequest
-
-shape = KVShape(num_layers=36, num_key_value_heads=8, head_dim=128)
-base = ModelRef(
-    model_id="qwen3-8b",
-    family="qwen",
-    architecture="qwen3",
-    tokenizer_id="qwen3",
-    parameter_count_b=8,
-    kv_shape=shape,
-)
-lora = ModelRef(
-    model_id="qwen3-8b-lora-math",
-    family="qwen",
-    architecture="qwen3",
-    tokenizer_id="qwen3",
-    parameter_count_b=8,
-    base_model_id="qwen3-8b",
-    lora_adapter_id="math-adapter",
-    kv_shape=shape,
-)
-
-plan = CrossModelReusePlanner().plan(
-    ReuseRequest(source=base, target=lora, prefix_hash="shared-system-prompt")
-)
-print(plan.scenario.value, plan.strategy.value, plan.status.value)
-```
-
-渲染 LMCache 补丁契约：
-
-```bash
-golden-patch-manifest --output docs/patch_manifest.md
-```
-
-## 开发路线图
-
-- M0：围绕 vLLM + LMCache MP + Mooncake Store + GoldenExperience 元数据锁定项目边界。
-- M1：为基座/LoRA 相互复用实现 LMCache 二级查询 sidecar。
-- M2：为同模型不同规模变体添加层/头映射与校准投影。
-- M3：为不同基座复用添加实验性的学习式转换器接口。
-- M4：构建基于 vLLM 模型的 benchmark，以及质量/回退计数。
-- M5：保持补丁足够小，以便随上游 LMCache rebase。
-
-详见 `docs/design.md`、`docs/experiment_matrix.md` 和 `docs/artifact.md` 获取完整框架计划。
+GoldenExperience 使用 [Apache-2.0 license](LICENSE)。数据集再分发还需遵守
+`configs/publication_sources.qwen3-v5.json` 中记录的上游许可证。
