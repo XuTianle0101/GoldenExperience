@@ -47,6 +47,13 @@
       "temporary_paths_removed": 7,
       "total_apparent_bytes_removed": 218133961
     },
+    "related_work_release_verification_cleanup": {
+      "repository_cache_apparent_bytes_removed": 4932382,
+      "repository_python_bytecode_directories_removed": 17,
+      "temporary_path_apparent_bytes_removed": 402762576,
+      "temporary_paths_removed": 125,
+      "total_apparent_bytes_removed": 407694958
+    },
     "prior_release_cache_cleanups": {
       "final_verification_reclaimed_bytes": 152482428,
       "full_test_reclaimed_bytes": 5306252
@@ -109,20 +116,22 @@
         "tracked stage receipts",
         "tracked development diagnostics",
         "related-work full-text audit",
+        "offline related-work audit verifier and mutation tests",
         "release canonicalizer and tests",
         "storage cleanup receipts"
       ],
-      "member_count": 294,
+      "member_count": 296,
       "paper_checks_after_extraction": "passed",
+      "related_work_checks_after_extraction": "passed",
       "release_audit_exclusion_reason": "avoid a self-referential distribution hash",
-      "sha256": "6956e1670e2dfdc0244343f7ae1956a521c99c42aa5b514b43df433822c9f638",
-      "size_bytes": 1332218
+      "sha256": "060d094635c7f3659d642cd7135392b244bc5b70b22386d9f74e5453e0585183",
+      "size_bytes": 1337881
     },
     "wheel": {
       "filename": "goldenexperience-0.1.0-py3-none-any.whl",
       "isolated_import": "passed",
-      "sha256": "aa8c2f98faa5b07c5a023cbcbb4d87bea2de33f99ab5ace909e3a54faafa69ee",
-      "size_bytes": 363357
+      "sha256": "0665cbe2d09b218b4fe152085bf2a50db4df81353635fe7a471a0dd37028b282",
+      "size_bytes": 363404
     }
   },
   "pipeline_binding": {
@@ -188,11 +197,13 @@
       "sha256": "ea73538cfdd378fe83a5f7c0352080b6237d5a5ecdd89ac9af73f9096f345c5a"
     },
     "related_work_audit": {
+      "direct_tls_attempts": 2,
       "exact_version_full_text_sources": 16,
-      "official_proceedings_index_status": "partial_eurosys_verified_other_direct_tls_blocked",
+      "offline_verifier": "paper/tools/check_related_work.py",
+      "official_proceedings_index_status": "partial_eurosys_verified_icml_repository_placeholder_other_direct_tls_blocked",
       "path": "artifacts/publication_v5/development/related_work_fulltext_audit.json",
-      "schema_version": "goldenexperience.publication_v5_related_work_audit.v2",
-      "sha256": "d0b8b29d213bb4cb73b759c3b80bd78d4f29a63fdefb73a81cb38c163e8cc21f"
+      "schema_version": "goldenexperience.publication_v5_related_work_audit.v3",
+      "sha256": "62d025e312538d4f6f85e2c49931d8e9300b97d98dc07304d732e3c81cc21d2a"
     }
   },
   "quality_gates": {
@@ -217,7 +228,7 @@
       "status": "passed"
     },
     "formatter": {
-      "checked_file_count": 148,
+      "checked_file_count": 150,
       "excluded_immutable_files": [
         {
           "path": "goldenexperience/size_variant/v5_directional_fit.py",
@@ -267,9 +278,10 @@
     "pytest_with_coverage": {
       "combined_coverage_pct": 69.2,
       "command": "python -m coverage run -m pytest && python -m coverage report",
-      "duration_seconds": 98.26,
+      "coverage_command_wall_seconds": 86.806,
       "fail_under_pct": 68.0,
-      "passed": 365,
+      "passed": 374,
+      "pytest_duration_seconds": 83.22,
       "status": "passed",
       "warnings": 50,
       "warnings_disposition": "upstream deprecations from SWIG, OpenTelemetry, Torch, and FlashInfer"
@@ -288,14 +300,22 @@
       "passed": 3,
       "status": "passed"
     },
+    "related_work_audit_verification": {
+      "command": "python3 paper/tools/check_related_work.py",
+      "direct_tls_attempts_recorded": 2,
+      "document_hashes_checked": 6,
+      "fixed_version_sources_checked": 16,
+      "mutation_tests_passed": 9,
+      "status": "passed"
+    },
     "ruff_lint": {
       "command": "ruff check .",
       "status": "passed"
     }
   },
-  "recorded_at": "2026-07-15T09:43:28Z",
+  "recorded_at": "2026-07-15T10:47:29Z",
   "repository_binding": {
-    "audited_release_content_commit": "80a85a3cc59d4cb078953792c54a4fd4e3f5a669",
+    "audited_release_content_commit": "d79846d3a4d334402b8148471867f0a42a2a7405",
     "distribution_excludes_this_audit": true,
     "executable_source_sha256": "b3d0dcb81e5a528937c1a80858273e2e8f8b1876be3d3691e222959867ef2760",
     "package_name": "goldenexperience",
@@ -305,8 +325,12 @@
       "f2851e6 [paper] audit newly overlapping KV-cache work",
       "9550369 [chore] reclaim cached-KV cost residue",
       "c7be881 [data] close historical bridge failure analysis",
-      "80a85a3 [release] canonicalize distribution metadata"
+      "80a85a3 [release] canonicalize distribution metadata",
+      "06d5789 [release] refresh canonical publication audit",
+      "74d7a54 [chore] record final release cleanup",
+      "6a11d61 [paper] record repeated proceedings access boundary",
+      "d79846d [quality] make related-work audit offline-verifiable"
     ]
   },
-  "schema_version": "goldenexperience.publication_v5_release_audit.v2"
+  "schema_version": "goldenexperience.publication_v5_release_audit.v3"
 }
