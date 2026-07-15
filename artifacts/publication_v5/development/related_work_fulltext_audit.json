@@ -1,29 +1,94 @@
 {
   "authority": "claim_scoping_evidence_not_empirical_result",
-  "audited_at": "2026-07-14T21:04:15Z",
+  "audited_at": "2026-07-15T07:27:41Z",
   "benchmark_manifest_sha256": "557cfe1eccd522d19e6a06177b2d86e6b1a55587b8a84cba65732fad4d2bcd4a",
   "document_sha256": {
-    "docs/paper_outline.md": "11b9d1295b0d2dfa7c913367f1b50b355fdeb8d59760d71e9243b7d936964689",
-    "docs/related_work_matrix.md": "1a735fb7d0dce5bb12042133a8afa5957c9ccd7d97cf628ef2035a7ac7933ce5"
+    "docs/paper_outline.md": "dd3db25c9406c02cec76a4ee0bf78d5609873e422f87ed892796619f15715835",
+    "docs/related_work_matrix.md": "56a66ed1913ad8e510d0150ea5427f0f4b03e08d97b99ac5302731753b73acad",
+    "paper/paper.md": "e2c689012aaf50a582c9af3a14dd319b7e5afcd01b8128de6d335e622a56c90d",
+    "paper/references.bib": "ea73538cfdd378fe83a5f7c0352080b6237d5a5ecdd89ac9af73f9096f345c5a",
+    "paper/tools/check_manuscript.py": "fa19a3baf9efbd9cdf8fdbadea996efad69f539402942ee5b388e5a6f841d697"
   },
   "documents_updated": [
     "docs/paper_outline.md",
-    "docs/related_work_matrix.md"
+    "docs/related_work_matrix.md",
+    "paper/paper.md",
+    "paper/references.bib",
+    "paper/tools/check_manuscript.py"
   ],
   "executable_code_sha256": "b3d0dcb81e5a528937c1a80858273e2e8f8b1876be3d3691e222959867ef2760",
   "findings": {
     "closest_serving_predecessor": "Semantic Cache Distillation skips consumer prefill and reconstructs cache state, but is restricted to one Transformer topology with different weights, uses deterministic offline profiling, and reports no independent request-level behavioral-risk gate or page-native runtime path.",
+    "co_designed_exact_sharing_prior_art": "Activated LoRA, PrefillShare, and ICaRus provide real vLLM cache reuse by constraining adapter activation or training specialized decoders around a frozen cache producer; they do not translate caches between independently trained Qwen scales.",
     "cross_size_transport_prior_art": "Dense Latent Communication evaluates all six Qwen3 4B/8B/14B directions with RoPE disentanglement, depth alignment, and per-KV-group K/V transforms.",
     "guarantee_prior_art": "vCache provides a response-cache error guarantee through an online randomized policy under i.i.d. and correctly specified sigmoid assumptions; GoldenExperience cannot claim the first cache error guarantee.",
+    "learned_communication_prior_art": "Latent Cache Flow compresses cross-architecture cache communication into receiver-cache residuals and reports an ICML 2026 cross-context result; its receiver still prefills and its cross-context pair uses the same Qwen3-0.6B model.",
+    "online_context_reuse_prior_art": "KVCOMM uses an online anchor pool to estimate same-model cache offsets across recurring prefix contexts; its paper explicitly leaves different-weight and different-attention agents for future work.",
     "privacy_boundary": "LCGuard addresses empirical reconstruction privacy rather than behavioral preservation and explicitly disclaims a formal privacy guarantee.",
     "proxykv_boundary": "ProxyKV maps target-shaped per-key importance scores for pruning and never reconstructs K/V values.",
-    "runtime_boundary": "The audited translation papers do not demonstrate an atomic LMCache/vLLM paged scatter with rollback and no target object publication.",
+    "runtime_boundary": "Activated LoRA, PrefillShare, and ICaRus invalidate a broad first-vLLM-integration claim; the narrower unverified boundary is atomic scatter of a translated foreign cache into existing pages with rollback and no translated target object publication.",
+    "storage_placement_boundary": "SwiftCache shares idle GPU memory and NVLink across heterogeneous model workers while preserving each cache's original model ownership; it is not semantic cross-model cache reuse.",
     "unequal_head_correction": "All registered Qwen3 4B/8B/14B models have eight KV heads and head dimension 128; unequal-head support is not an empirical result."
   },
-  "official_proceedings_index_status": "open_network_unavailable",
-  "official_proceedings_note": "The environment retrieved exact arXiv records and versioned full text, but TLS connections to several official proceedings/index APIs were reset. The final official MLSys/OSDI/SOSP/NSDI/ATC/FAST/EuroSys/NeurIPS/ICML/ICLR index pass remains open and unqualified first claims remain prohibited.",
-  "schema_version": "goldenexperience.publication_v5_related_work_audit.v1",
-  "search_snapshot": "2026-07-14",
+  "official_proceedings_index_status": "partial_eurosys_verified_other_direct_tls_blocked",
+  "official_proceedings_note": "The official EuroSys 2026 paper list was retrieved from its conference-owned GitHub site. Direct TLS access to MLSys, OSDI, SOSP, NSDI, ATC, FAST, EuroSys, NeurIPS, ICML, and ICLR was reset by the current network policy on every attempt. The paper retains no unqualified first claim, and unavailable official indexes remain a documented submission-time check.",
+  "official_proceedings_checks": {
+    "direct_tls": {
+      "attempted_at": "2026-07-15T06:49:00Z",
+      "domains": [
+        "proceedings.mlsys.org",
+        "www.usenix.org",
+        "sigops.org",
+        "2026.eurosys.org",
+        "proceedings.neurips.cc",
+        "neurips.cc",
+        "proceedings.mlr.press",
+        "icml.cc",
+        "openreview.net",
+        "api.openreview.net",
+        "dl.acm.org"
+      ],
+      "result": "tls_connection_reset_by_network_policy"
+    },
+    "eurosys_2026": {
+      "conference_repository": "https://github.com/eurosys2026/eurosys2026.github.io",
+      "paper_list_path": "papers.html",
+      "paper_list_sha256": "6ca604bb4ca627fc704c9f3cc3f0323946ce5a2c145bf453361ad61d4933fa8c",
+      "paper_list_size_bytes": 92717,
+      "repository_commit": "3d419f688746f8edf0190a6ae505c9f51d6e6220",
+      "title_level_kv_matches": [
+        {
+          "disposition": "same_model_adaptive_cache_policy_not_cross_model_translation",
+          "doi": "10.1145/3767295.3803570",
+          "title": "High Throughput and Low Latency LLM Serving via Adaptive KV Caching"
+        }
+      ]
+    }
+  },
+  "schema_version": "goldenexperience.publication_v5_related_work_audit.v2",
+  "search_snapshot": "2026-07-15",
+  "search_queries": {
+    "arxiv_combinations": [
+      "cross-model AND KV cache",
+      "cross-model AND cache reuse",
+      "multi-model AND KV cache",
+      "heterogeneous AND KV cache",
+      "model-to-model AND cache",
+      "cross-architecture AND KV",
+      "latent communication AND KV cache",
+      "KV cache AND translation"
+    ],
+    "candidate_metadata_snapshot_sha256": "28a82c5c2e6c8c27513a988a772a77b00b8b15f242fa29f41eb7873a0d1482b5",
+    "fixed_source_metadata_snapshot_sha256": "2707309ca7100204eeed4d5e47566e90caab87edc49dcad43c7f23adfc9f6f5d",
+    "result_snapshots_sha256": {
+      "cross_architecture": "ceb79e4c61ee420ff4d9a22b0f4366a565505c3c3cf6d45bf7f2b2bb42908d34",
+      "cross_model_reuse": "b980240d813afe85b9beee61ddcb369bc3909dc8939e52095c500e52264ec296",
+      "heterogeneous": "bcf57b3d88e496eea2a56446c8b7e9edb93c0e9f25e0d7c53af23e77d432459f",
+      "latent_communication": "1e7289e5c7d635c1fb8bde1c0cba0d905216009240c56842631accb9fb51e480",
+      "model_to_model": "ee96612f5bae09def5b6d4eda9e51d9a86e435dffad0a5718a90fd939b0647c2",
+      "multi_model": "defc2c6e3c94291486a3207943bca07f65525032604dd2e6f1e4e964e0573bec"
+    }
+  },
   "sources": [
     {
       "arxiv_id": "2411.02820v4",
@@ -87,12 +152,64 @@
       "pdf_size_bytes": 11317773,
       "title": "When Less Latent Leads to Better Relay: Information-Preserving Compression for Latent Multi-Agent LLM Collaboration",
       "venue": null
+    },
+    {
+      "arxiv_id": "2510.12872v2",
+      "pdf_sha256": "3acffcc4468b17cf5193a64ec998c6517af42acb247fc230171da92f0f9eb8df",
+      "pdf_size_bytes": 16020388,
+      "title": "KVCOMM: Online Cross-context KV-cache Communication for Efficient LLM-based Multi-agent Systems",
+      "venue": "NeurIPS 2025"
+    },
+    {
+      "arxiv_id": "2512.17910v1",
+      "pdf_sha256": "7b8dada4cae7d76cc49ddfb1cb4b2b6cc345c78d5a2dd3a5d48fde3069f87806",
+      "pdf_size_bytes": 2790386,
+      "title": "Efficient Multi-Adapter LLM Serving via Cross-Model KV-Cache Reuse with Activated LoRA",
+      "venue": null
+    },
+    {
+      "arxiv_id": "2512.17914v1",
+      "pdf_sha256": "94abf147de25f9fbd1b52a58ff0d1bb6bb0bcd4d7e82d2698563ecb3a3d6e949",
+      "pdf_size_bytes": 386657,
+      "title": "Q-KVComm: Efficient Multi-Agent Communication Via Adaptive KV Cache Compression",
+      "venue": null
+    },
+    {
+      "arxiv_id": "2602.12029v1",
+      "pdf_sha256": "f4ff823be6187f0c4d57c3e68316ffa7ecdc76f1988dffaa82e948a52ee2d646",
+      "pdf_size_bytes": 544300,
+      "title": "PrefillShare: A Shared Prefill Module for KV Reuse in Multi-LLM Disaggregated Serving",
+      "venue": null
+    },
+    {
+      "arxiv_id": "2603.13281v1",
+      "pdf_sha256": "e67d20667cd445d9ccec7c61eed995ac06bf0c093ad6e5b09aa80466349ce99f",
+      "pdf_size_bytes": 3494410,
+      "title": "ICaRus: Identical Cache Reuse for Efficient Multi Model Inference",
+      "venue": "ICLR 2026"
+    },
+    {
+      "arxiv_id": "2605.22863v2",
+      "pdf_sha256": "2a9db5425c91f8405b0b074b1fc75a5cbb56ac67fc6d15e8fd53621b6bfda0dd",
+      "pdf_size_bytes": 1103830,
+      "title": "Latent Cache Flow: Model-to-Model Communication Without Text",
+      "venue": "ICML 2026"
+    },
+    {
+      "arxiv_id": "2606.16135v1",
+      "pdf_sha256": "6f530d61e68f77d6cc664400aac84dbf0e23da3ee53765451c2e9a86a411cc25",
+      "pdf_size_bytes": 990649,
+      "title": "SwiftCache: Efficient LLM Serving for Multi-turn Conversations with Heterogeneous KV Cache Sharing",
+      "venue": null
     }
   ],
   "verification": {
     "arxiv_current_versions_checked": true,
+    "broad_arxiv_keyword_combinations_checked": true,
     "exact_version_pdfs_hashed": true,
     "full_text_claims_checked": true,
+    "official_eurosys_2026_title_list_checked": true,
+    "source_count": 16,
     "stale_vcache_ar5iv_text_rejected": true,
     "tracked_full_text_payloads": false
   }

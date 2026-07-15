@@ -70,9 +70,12 @@ not reliably preserve cross-task decoded behavior across model scales.
 
 Transport itself is not claimed as a standalone novelty. Cross-model KV translation,
 cross-size cache reuse, target-prefill skipping, head-aware mapping, and cache distillation
-all have prior art. The closest current work is Semantic Cache Distillation. Our narrower
-contribution is the conjunction of an exact split/identity protocol, strict free-running
-behavior gates, a complete full-prefix intervention, and an honestly terminal negative result.
+all have prior art. Semantic Cache Distillation and Latent Cache Flow are the closest learned
+translation/communication precedents; Activated LoRA, PrefillShare, and ICaRus additionally
+establish exact cache sharing in real vLLM paths by co-designing the models around a shared
+cache producer. Our narrower contribution is the conjunction of an exact split/identity
+protocol, strict free-running behavior gates, a complete full-prefix intervention, and an
+honestly terminal negative result.
 
 ## Research Questions
 
@@ -269,7 +272,9 @@ they are not evidence that v4 cross-scale translation is deployable.
   behavioral equivalence.
 - Cross-model and cross-layer cache translation already exist; novelty cannot rest on applying a
   learned map between Qwen sizes.
-- Semantic Cache Distillation is the closest learned cross-model cache precedent.
+- Semantic Cache Distillation and Latent Cache Flow are the closest learned cache-transfer
+  precedents, while Activated LoRA, PrefillShare, and ICaRus delimit exact sharing through
+  constrained model training rather than post-hoc cross-scale translation.
 - GoldenExperience differs in its exact fail-closed evidence chain, cross-scale prefix-replacement
   setting, complete rank/seed accounting, and atomic vLLM materialization contract.
 - The empirical contribution is a falsification boundary: even full-prefix target supervision

@@ -84,12 +84,16 @@ def _expand_citations(value: str) -> set[int]:
     return citations
 
 
-def _check_references(paper: str, bibliography: str) -> None:
+def _check_references(paper: str, bibliography: str) -> int:
     body, rendered_references = paper.split("\n## References\n", 1)
     reference_numbers = [
         int(value) for value in re.findall(r"^\[(\d+)\] ", rendered_references, re.MULTILINE)
     ]
-    _require(reference_numbers == list(range(1, 24)), "rendered references are not 1 through 23")
+    _require(len(reference_numbers) >= 30, "manuscript has too few audited references")
+    _require(
+        reference_numbers == list(range(1, len(reference_numbers) + 1)),
+        "rendered references are not contiguous",
+    )
 
     citations: set[int] = set()
     for match in re.finditer(r"\[([0-9]+(?:-[0-9]+)?(?:, [0-9]+(?:-[0-9]+)?)*)\]", body):
@@ -100,8 +104,12 @@ def _check_references(paper: str, bibliography: str) -> None:
     )
 
     bib_keys = re.findall(r"^@[A-Za-z]+\{([^,]+),", bibliography, re.MULTILINE)
-    _require(len(bib_keys) == 23 and len(set(bib_keys)) == 23, "BibTeX entry count differs")
+    _require(
+        len(bib_keys) == len(reference_numbers) and len(set(bib_keys)) == len(bib_keys),
+        "BibTeX entry count differs",
+    )
     _require(bibliography.count("{") == bibliography.count("}"), "BibTeX braces are unbalanced")
+    return len(reference_numbers)
 
 
 def _check_tables(paper: str) -> None:
@@ -226,7 +234,7 @@ def main() -> None:
     )
     _require(not any(value in paper.lower() for value in forbidden), "manuscript overclaims")
 
-    _check_references(paper, bibliography)
+    reference_count = _check_references(paper, bibliography)
     _check_tables(paper)
     _check_links(paper)
     _check_candidate_table(paper, _load_csv(EVIDENCE_DIR / "method_dev_candidates.v4.csv"))
@@ -238,7 +246,7 @@ def main() -> None:
     print(f"manuscript_sha256={_sha256(paper_raw)}")
     print(f"bibliography_sha256={_sha256(bibliography_raw)}")
     print(f"word_count={word_count}")
-    print("figures=6 references=23 evidence=verified sealed_state=locked")
+    print(f"figures=6 references={reference_count} evidence=verified sealed_state=locked")
 
 
 if __name__ == "__main__":

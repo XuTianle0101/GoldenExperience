@@ -189,6 +189,12 @@ chunks and selectively recomputes tokens [4]. Mooncake and LMCache treat KV as a
 storage and transfer object [5, 23]. These systems establish the substrate for persistent and
 page-managed caches, but they generally treat cache contents as model-local.
 
+SwiftCache places one model's exact prefix-cache bytes in idle memory on another model's GPU and
+uses NVLink for retrieval [29]. The heterogeneous models share memory capacity, not cache
+semantics. KVCOMM instead repositions same-model shared-text caches under changed contexts and
+estimates their offsets from an online anchor pool [24]. Its heterogeneous-weight extension remains
+future work. Neither system translates a cache between independently trained model scales.
+
 GoldenExperience retains that serving substrate rather than replacing it. Its runtime design
 retrieves a source object through LMCache, transforms it, and scatters it atomically into existing
 vLLM pages. However, the present paper reports no cross-model runtime execution because offline
@@ -203,23 +209,33 @@ importance for pruning rather than reconstructing K/V values [10]. Less Latent R
 same-model latent communication [14]. These works address valuable but different operators from
 complete target-prefix replacement.
 
+Activated LoRA reuses exact base-generated prefixes before adapter activation [25]. PrefillShare
+freezes a shared prefill module [26], while ICaRus freezes a logical encoder [27]; both train
+specialized decoders to consume the resulting common cache. These systems demonstrate real vLLM
+cross-model reuse and measured serving gains, but they co-design derivatives around one cache
+producer rather than translate caches between independently trained scales.
+
 Semantic Cache Distillation reconstructs most consumer cache layers from compact codes, patches
-selected layers, and skips consumer prefill [12]. It is the closest serving-oriented predecessor.
-Its audited evaluation keeps one Transformer topology while changing weights and uses fixed
-offline profiling rather than an independently calibrated source-only request gate. Dense Latent
-Communication uses RoPE disentanglement, depth alignment, and per-KV-group transforms across all
-six Qwen3 4B/8B/14B directions [13]. Consequently, neither cross-size Qwen transport nor
-RoPE-aware per-head mapping is new in isolation.
+selected layers, and skips consumer prefill [12]. It is the closest target-prefill-skipping learned
+predecessor. Latent Cache Flow compresses cross-architecture cache communication into residual
+edits of a receiver cache [28]; its receiver still prefills, and its cross-context result uses two
+instances of one model. Q-KVComm studies small-model quantized cache transfer with distributional
+alignment [30], not page-native prefix replacement. Dense Latent Communication uses RoPE
+disentanglement, depth alignment, and per-KV-group transforms across all six Qwen3 4B/8B/14B
+directions [13]. Consequently, neither cross-size Qwen transport, compact cache communication,
+RoPE-aware mapping, nor vLLM cross-model integration is new in isolation.
 
 LCGuard studies reconstruction privacy for communicated latent state [11]. Our safety target is
 behavioral preservation, not representation privacy; neither axis implies the other.
 
 ### 3.3 Admission and statistical guarantees
 
-Most cross-model KV systems use a fixed offline configuration, learned gate, or quality/latency
-trade-off [6-8, 10-14]. vCache supplies a user-selected response-error guarantee for semantic
-response caching through an online randomized policy under modeling assumptions [9]. It therefore
-precludes any broad claim that GoldenExperience is the first cache system with an error guarantee.
+Most cross-model KV systems use a fixed offline configuration, learned gate, training constraint,
+or quality/latency trade-off [6-8, 10-14, 25-30]. KVCOMM is an online exception, but its anchor
+decision estimates same-model context offsets rather than target behavioral regression [24].
+vCache supplies a user-selected response-error guarantee for semantic response caching through an
+online randomized policy under modeling assumptions [9]. It therefore precludes any broad claim
+that GoldenExperience is the first cache system with an error guarantee.
 
 GoldenExperience implements a different, currently unexecuted contract: a frozen source-only risk
 predictor, an independent calibration split, and a Bonferroni-adjusted family of exact one-sided
@@ -811,3 +827,24 @@ Association* 56(293), 1961.
 
 [23] Y. Liu et al. "LMCache: An Efficient KV Cache Layer for Enterprise-Scale LLM Inference."
 arXiv:2510.09665v2, 2025.
+
+[24] H. Ye et al. "KVCOMM: Online Cross-context KV-cache Communication for Efficient LLM-based
+Multi-agent Systems." *NeurIPS*, 2025.
+
+[25] A. Li, K. Greenewald, T. Parnell, and N. Azizan. "Efficient Multi-Adapter LLM Serving via
+Cross-Model KV-Cache Reuse with Activated LoRA." arXiv:2512.17910v1, 2025.
+
+[26] S. Woo et al. "PrefillShare: A Shared Prefill Module for KV Reuse in Multi-LLM Disaggregated
+Serving." arXiv:2602.12029v1, 2026.
+
+[27] S. Woo et al. "ICaRus: Identical Cache Reuse for Efficient Multi Model Inference." *ICLR*,
+2026.
+
+[28] M. Rossi, P. Raghunath, and E. Wu. "Latent Cache Flow: Model-to-Model Communication Without
+Text." *ICML*, 2026.
+
+[29] J. Hu et al. "SwiftCache: Efficient LLM Serving for Multi-turn Conversations with
+Heterogeneous KV Cache Sharing." arXiv:2606.16135v1, 2026.
+
+[30] B. Kriuk and L. Ng. "Q-KVComm: Efficient Multi-Agent Communication Via Adaptive KV Cache
+Compression." arXiv:2512.17914v1, 2025.
