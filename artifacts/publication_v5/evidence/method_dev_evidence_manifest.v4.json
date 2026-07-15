@@ -1,0 +1,120 @@
+{
+  "artifacts": [
+    {
+      "media_type": "application/gzip",
+      "path": "artifacts/publication_v5/evidence/method_dev_report.v4.json.gz",
+      "role": "canonical_compressed_method_dev_report",
+      "sha256": "41fc85b79002a7958ea3b5a8d190b63cbff1385df9ab4491e20f93321b79e512",
+      "size_bytes": 702193,
+      "uncompressed_sha256": "f35e9599cea4d56cb1d0a7fad888a7d1bf2cef2602c9f42950162de7662a4400",
+      "uncompressed_size_bytes": 8043391
+    },
+    {
+      "media_type": "text/csv",
+      "path": "artifacts/publication_v5/evidence/method_dev_candidates.v4.csv",
+      "role": "all_registered_candidate_metrics",
+      "sha256": "42b0173f14b198094aa483b9b4903e3616250065f2c033e7d3c28a15ea4d2b02",
+      "size_bytes": 2148
+    },
+    {
+      "media_type": "text/csv",
+      "path": "artifacts/publication_v5/evidence/method_dev_ranks.v4.csv",
+      "role": "registered_rank_aggregation_and_safe_sets",
+      "sha256": "64d05757f611b539658d0921b7b7c6d6f8793192c1a84ab00339df976952beb6",
+      "size_bytes": 895
+    },
+    {
+      "media_type": "text/csv",
+      "path": "artifacts/publication_v5/evidence/method_dev_tasks.v4.csv",
+      "role": "deployment_candidate_task_breakdown",
+      "sha256": "b6612370ecc83cc4d706dd3b0f7b89a9b643b931f3c6a686e701903b69387db7",
+      "size_bytes": 826
+    },
+    {
+      "media_type": "text/csv",
+      "path": "artifacts/publication_v5/evidence/method_dev_token_buckets.v4.csv",
+      "role": "deployment_candidate_token_bucket_breakdown",
+      "sha256": "c575ff3bb0a86f66051f3b7c016907dd7601e7d0ee521c492df156fcbc06c001",
+      "size_bytes": 548
+    },
+    {
+      "media_type": "text/csv",
+      "path": "artifacts/publication_v5/evidence/method_dev_failure_overlap.v4.csv",
+      "role": "deployment_candidate_failure_intersections",
+      "sha256": "c0e2292aafe5d07193b979bf4affd3be4a475a7b9c8f7bfa34f726020839c538",
+      "size_bytes": 523
+    },
+    {
+      "media_type": "text/csv",
+      "path": "artifacts/publication_v5/evidence/method_dev_safe_sets.v4.csv",
+      "role": "fixed_and_post_hoc_candidate_choice_sets",
+      "sha256": "64b2aafd7f8ef2f8ec9c0c30eba78dae5bfb128456b1c738b08fe4efb54fb529",
+      "size_bytes": 536
+    }
+  ],
+  "authority": "curated_terminal_negative_result_evidence_not_runtime_approval",
+  "code_sha256": "b3d0dcb81e5a528937c1a80858273e2e8f8b1876be3d3691e222959867ef2760",
+  "counts": {
+    "candidate_count": 9,
+    "measurement_count": 9216,
+    "sample_count": 1024
+  },
+  "direction": "qwen3_4b_to_8b",
+  "pipeline_id": "v5-pipeline-1c6fed3dc231893debb58298",
+  "post_hoc_all_candidate_oracle": {
+    "deployable": false,
+    "oracle_safe_coverage": 0.3681640625,
+    "safe_count": 377
+  },
+  "protocol_disposition": "selector_calibration_validation_semantic_sealed_and_runtime_stages_blocked",
+  "registered_deployment": {
+    "candidate_id": "transport-r64-s17-ad350a2afbad",
+    "gate_passed": false,
+    "greedy_agreement": 0.61724853515625,
+    "oracle_safe_coverage": 0.138671875,
+    "perplexity_drift_pct": 21.474837170168318,
+    "rank": 64,
+    "safe_count": 142,
+    "seed": 17,
+    "task_preservation": 0.9768618034806245
+  },
+  "reproduction": {
+    "check_command": "python3 paper/tools/build_method_dev_evidence.py --check",
+    "command": "python3 paper/tools/build_method_dev_evidence.py",
+    "gzip": "RFC 1952, DEFLATE level 9, mtime 0, empty original filename",
+    "sealed_payload_access": false
+  },
+  "schema_version": "goldenexperience.publication_v5_method_dev_evidence.v1",
+  "source_objects": [
+    {
+      "path": "artifacts/cache/publication_v5_workspace_v5/.pipeline/work/qwen3_4b_to_8b/evaluate_method_dev/method_dev_report.json",
+      "role": "uncompressed_method_dev_report",
+      "sha256": "f35e9599cea4d56cb1d0a7fad888a7d1bf2cef2602c9f42950162de7662a4400",
+      "size_bytes": 8043391
+    },
+    {
+      "path": "artifacts/publication_v5/stages/qwen3_4b_to_8b.fit_transport.v4.json",
+      "role": "verified_fit_stage_receipt",
+      "sha256": "7e3b01faec2a9eb292d4ba0435e03adb5051da005a696585828b6dd55217c1dd",
+      "size_bytes": 9835
+    },
+    {
+      "path": "artifacts/publication_v5/stages/qwen3_4b_to_8b.evaluate_method_dev.v4.failed.json",
+      "role": "failed_method_dev_stage_receipt",
+      "sha256": "758382f488b0957c0e4cac7c634941b49d969b074474d253847e818d4f52dc80",
+      "size_bytes": 11304
+    },
+    {
+      "path": "artifacts/publication_v5/development/v4_method_dev_diagnostic.json",
+      "role": "post_failure_mechanism_diagnostic",
+      "sha256": "4d93971383d2845ca13b52dfa56f22239e1f76e72a7a6ce8459a415a60850fad",
+      "size_bytes": 8255
+    }
+  ],
+  "thresholds": {
+    "max_perplexity_drift_pct": 2.0,
+    "min_greedy_agreement": 0.98,
+    "min_oracle_safe_coverage": 0.45,
+    "native_pass_to_bridge_fail_is_unsafe": true
+  }
+}

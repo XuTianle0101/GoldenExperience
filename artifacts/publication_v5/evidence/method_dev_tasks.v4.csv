@@ -1,0 +1,6 @@
+task,datasets,sample_count,safe_count,oracle_safe_coverage,task_preservation,greedy_agreement,perplexity_drift_pct,native_pass_to_bridge_fail_count,greedy_failure_count,drift_failure_count,unsafe_count
+function_calling,bfcl,48,38,0.7916666666666666,1.0,0.9817708333333334,2.604654783998791,0,7,10,10
+competition_math,math,416,63,0.15144230769230768,0.9903846153846154,0.6126802884615384,13.641052834948514,4,279,343,353
+grade_school_math,gsm8k,416,29,0.06971153846153846,0.9567307692307693,0.5518329326923077,21.041861920011236,18,327,380,387
+long_context_qa,longbench_hotpotqa;longbench_multifieldqa;longbench_qasper,72,11,0.1527777777777778,0.9764789828355472,0.6493055555555556,48.77495454586681,2,53,61,61
+python_code_generation,humaneval;mbpp,72,1,0.013888888888888888,1.0,0.7465277777777778,66.55397248957672,0,69,71,71

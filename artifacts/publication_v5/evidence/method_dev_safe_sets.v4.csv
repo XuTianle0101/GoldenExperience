@@ -1,0 +1,7 @@
+choice_set,selection_mode,candidate_count,safe_count,coverage,deployable
+registered_deployment_candidate,fixed_source_only_identity,1,142,0.138671875,True
+rank_32_any_seed,post_hoc_per_prompt_target_oracle,3,245,0.2392578125,False
+rank_64_any_seed,post_hoc_per_prompt_target_oracle,3,262,0.255859375,False
+rank_128_any_seed,post_hoc_per_prompt_target_oracle,3,270,0.263671875,False
+all_nine_any_candidate,post_hoc_per_prompt_target_oracle,9,377,0.3681640625,False
+all_nine_intersection,safe_under_every_candidate,9,42,0.041015625,False
