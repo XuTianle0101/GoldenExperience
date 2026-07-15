@@ -1,0 +1,202 @@
+{
+  "artifacts": [
+    {
+      "media_type": "text/csv",
+      "path": "artifacts/publication_v5/figures/fig01_candidate_coverage.csv",
+      "sha256": "33b178eb3993801dd908c80f15bb48ddf47f598a841aa65ddb26a66ad4b3ca72",
+      "size_bytes": 1159
+    },
+    {
+      "media_type": "image/svg+xml",
+      "path": "artifacts/publication_v5/figures/fig01_candidate_coverage.svg",
+      "sha256": "6c694d48a9055733614a6d63a18028dc1e81a3602350c2276a5d5aedba88ca90",
+      "size_bytes": 8714
+    },
+    {
+      "media_type": "application/pdf",
+      "path": "artifacts/publication_v5/figures/fig01_candidate_coverage.pdf",
+      "sha256": "c523a581d5bd957584def322ce89810f1753ef6684c661e2b209a1e9adc7d16b",
+      "size_bytes": 4481
+    },
+    {
+      "media_type": "text/csv",
+      "path": "artifacts/publication_v5/figures/fig02_full_prefix_by_length.csv",
+      "sha256": "fb73206aaec0b9d2d67cefa63e6f5cbfb07b6bc85fe0bcfc393aad8262c861bb",
+      "size_bytes": 546
+    },
+    {
+      "media_type": "image/svg+xml",
+      "path": "artifacts/publication_v5/figures/fig02_full_prefix_by_length.svg",
+      "sha256": "e4ec04943ad6119e9fb8b730e6a73d574a328b381d19b7ca05d27088f778fa72",
+      "size_bytes": 7513
+    },
+    {
+      "media_type": "application/pdf",
+      "path": "artifacts/publication_v5/figures/fig02_full_prefix_by_length.pdf",
+      "sha256": "9283b9139a574ddd578433cfc9fedab6ee900b97201f1dfc2ec73ce4c560ba13",
+      "size_bytes": 3761
+    },
+    {
+      "media_type": "text/csv",
+      "path": "artifacts/publication_v5/figures/fig03_task_heterogeneity.csv",
+      "sha256": "ef1f700b9f81761c6e91e9a302793f8b7ae7fff685f37d3bcf86963c0e1b2887",
+      "size_bytes": 711
+    },
+    {
+      "media_type": "image/svg+xml",
+      "path": "artifacts/publication_v5/figures/fig03_task_heterogeneity.svg",
+      "sha256": "a2dd95f892747db770ce3c74e5b4fbe045df8eb73620756f39bbe728160eb8c0",
+      "size_bytes": 12859
+    },
+    {
+      "media_type": "application/pdf",
+      "path": "artifacts/publication_v5/figures/fig03_task_heterogeneity.pdf",
+      "sha256": "2b8661556892c3cddc92b1df398964d91ca882fecf2303c20ed02247ad8fc66c",
+      "size_bytes": 9784
+    },
+    {
+      "media_type": "text/csv",
+      "path": "artifacts/publication_v5/figures/fig04_failure_overlap.csv",
+      "sha256": "c0e2292aafe5d07193b979bf4affd3be4a475a7b9c8f7bfa34f726020839c538",
+      "size_bytes": 523
+    },
+    {
+      "media_type": "image/svg+xml",
+      "path": "artifacts/publication_v5/figures/fig04_failure_overlap.svg",
+      "sha256": "9d0bbb709057ce9a52b4e3fefd325715d73bd2fe44c0623aa5387ffc16d8d60f",
+      "size_bytes": 6967
+    },
+    {
+      "media_type": "application/pdf",
+      "path": "artifacts/publication_v5/figures/fig04_failure_overlap.pdf",
+      "sha256": "63caa94f6b9ffa2ac5e57dfa887b039fccaf7f64f562028b3a46ff68ab5a83fe",
+      "size_bytes": 3547
+    },
+    {
+      "media_type": "text/csv",
+      "path": "artifacts/publication_v5/figures/fig05_method_progression.csv",
+      "sha256": "339d553a2a8832bea87b5bf07d106bf8a84c18c703ab33541739d6d1e0879ff8",
+      "size_bytes": 607
+    },
+    {
+      "media_type": "image/svg+xml",
+      "path": "artifacts/publication_v5/figures/fig05_method_progression.svg",
+      "sha256": "90ac0def5bb5a81f414c591c2594bb15bfc74942b30a444ad6fb01d7db97b748",
+      "size_bytes": 6809
+    },
+    {
+      "media_type": "application/pdf",
+      "path": "artifacts/publication_v5/figures/fig05_method_progression.pdf",
+      "sha256": "08aefb04223b2fe9251b8807647c9facfbd3b7a8bb60c6e2795fed678c190ea7",
+      "size_bytes": 3660
+    },
+    {
+      "media_type": "text/csv",
+      "path": "artifacts/publication_v5/figures/fig06_pipeline_stop.csv",
+      "sha256": "708874fdd556d2913bb946217b8fd2ab9a9b187c395831a2d34bcb8a71d979fd",
+      "size_bytes": 589
+    },
+    {
+      "media_type": "image/svg+xml",
+      "path": "artifacts/publication_v5/figures/fig06_pipeline_stop.svg",
+      "sha256": "b30e929ec2585d477b996600e48fa58bdfb2c9aae2e1e40db21756c52f70b131",
+      "size_bytes": 12018
+    },
+    {
+      "media_type": "application/pdf",
+      "path": "artifacts/publication_v5/figures/fig06_pipeline_stop.pdf",
+      "sha256": "4c8cdd5b93481706fa02632160915fef16e4e0d661557c114c0c5114005db134",
+      "size_bytes": 6727
+    }
+  ],
+  "authority": "derived_terminal_negative_result_figures_not_runtime_approval",
+  "figure_count": 6,
+  "formats": [
+    "csv",
+    "svg",
+    "pdf"
+  ],
+  "reproduction": {
+    "check_command": "python3 paper/tools/build_figures.py --check",
+    "command": "python3 paper/tools/build_figures.py",
+    "external_plotting_dependencies": [],
+    "sealed_payload_access": false
+  },
+  "schema_version": "goldenexperience.publication_v5_figures.v1",
+  "source_objects": [
+    {
+      "path": "artifacts/publication_v5/evidence/method_dev_candidates.v4.csv",
+      "role": "candidate_metrics",
+      "sha256": "42b0173f14b198094aa483b9b4903e3616250065f2c033e7d3c28a15ea4d2b02",
+      "size_bytes": 2148
+    },
+    {
+      "path": "artifacts/publication_v5/evidence/method_dev_safe_sets.v4.csv",
+      "role": "safe_set_metrics",
+      "sha256": "64b2aafd7f8ef2f8ec9c0c30eba78dae5bfb128456b1c738b08fe4efb54fb529",
+      "size_bytes": 536
+    },
+    {
+      "path": "artifacts/publication_v5/evidence/method_dev_tasks.v4.csv",
+      "role": "task_metrics",
+      "sha256": "b6612370ecc83cc4d706dd3b0f7b89a9b643b931f3c6a686e701903b69387db7",
+      "size_bytes": 826
+    },
+    {
+      "path": "artifacts/publication_v5/evidence/method_dev_failure_overlap.v4.csv",
+      "role": "failure_partition",
+      "sha256": "c0e2292aafe5d07193b979bf4affd3be4a475a7b9c8f7bfa34f726020839c538",
+      "size_bytes": 523
+    },
+    {
+      "path": "artifacts/publication_v5/evidence/method_dev_evidence_manifest.v4.json",
+      "role": "evidence_manifest",
+      "sha256": "2e767a86a5a31bf5767605bf092937282772d893e83c8fe9819523e4554f1832",
+      "size_bytes": 4791
+    },
+    {
+      "path": "artifacts/publication_v5/evidence/method_dev_report.v4.json.gz",
+      "role": "compressed_method_dev_report",
+      "sha256": "41fc85b79002a7958ea3b5a8d190b63cbff1385df9ab4491e20f93321b79e512",
+      "size_bytes": 702193
+    },
+    {
+      "path": "artifacts/publication_v5/development/v2_method_dev_diagnostic.json",
+      "role": "v2_diagnostic",
+      "sha256": "58f97db02583aa1fe93ac2dc4d41d11bf3eb730b6188f40fc6d2b5e1b26b44df",
+      "size_bytes": 13906
+    },
+    {
+      "path": "artifacts/publication_v5/development/v3_method_dev_diagnostic.json",
+      "role": "v3_diagnostic",
+      "sha256": "22e8ca595717c3621f03c6d9ea69afe6f58b7566d40b873cec544f60fc37d2a0",
+      "size_bytes": 5858
+    },
+    {
+      "path": "artifacts/publication_v5/development/v4_method_dev_diagnostic.json",
+      "role": "v4_diagnostic",
+      "sha256": "4d93971383d2845ca13b52dfa56f22239e1f76e72a7a6ce8459a415a60850fad",
+      "size_bytes": 8255
+    },
+    {
+      "path": "artifacts/publication_v5/stages/qwen3_4b_to_8b.evaluate_method_dev.v4.failed.json",
+      "role": "failed_stage_receipt",
+      "sha256": "758382f488b0957c0e4cac7c634941b49d969b074474d253847e818d4f52dc80",
+      "size_bytes": 11304
+    },
+    {
+      "path": "artifacts/publication_v5/initialization_v4.json",
+      "role": "locked_workspace_receipt",
+      "sha256": "28015e1b6b448b90cca70f6a743258a086ec69baee5da20a63e2a95e88da4674",
+      "size_bytes": 3800
+    }
+  ],
+  "style": {
+    "blocked": "#B7C1C4",
+    "failure": "#C94F46",
+    "font": "Aptos, Source Sans 3, DejaVu Sans, sans-serif",
+    "ink": "#172B36",
+    "safe": "#167D80",
+    "warning": "#D6922E"
+  }
+}

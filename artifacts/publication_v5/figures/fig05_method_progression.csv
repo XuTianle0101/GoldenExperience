@@ -1,0 +1,7 @@
+version,method,metric,selected_rank,safe_count,sample_count,coverage,deployable,coverage_gate
+v2,detached_generation_terms,registered_deployment,128,238,1024,0.232421875,True,0.45
+v2,detached_generation_terms,all_candidate_oracle_union,128,352,1024,0.34375,False,0.45
+v3,sampled_prefix_teacher,registered_deployment,128,115,1024,0.1123046875,True,0.45
+v3,sampled_prefix_teacher,all_candidate_oracle_union,128,311,1024,0.3037109375,False,0.45
+v4,full_prefix_teacher,registered_deployment,64,142,1024,0.138671875,True,0.45
+v4,full_prefix_teacher,all_candidate_oracle_union,64,377,1024,0.3681640625,False,0.45

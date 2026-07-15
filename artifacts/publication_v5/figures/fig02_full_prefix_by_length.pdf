@@ -1,0 +1,155 @@
+%PDF-1.4
+%‚„œ”
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 720 440] /Resources << /Font << /F1 4 0 R /F2 5 0 R >> >> /Contents 6 0 R >>
+endobj
+4 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+5 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>
+endobj
+6 0 obj
+<< /Length 3104 >>
+stream
+1 1 1 rg
+0 0 720 440 re
+f
+0.0863 0.4902 0.502 rg
+28 388 8 30 re
+f
+BT /F2 19 Tf 0.0902 0.1686 0.2118 rg 48 402 Td (Full-prefix supervision helps most at long prefixes) Tj ET
+BT /F1 9.5 Tf 0.3765 0.4549 0.4902 rg 48 383 Td (Controlled comparison: rank 128, seed 17; 256 prompts in each prefix bucket) Tj ET
+0.8471 0.8824 0.8863 RG
+1 w
+[] 0 d
+28 28 m
+692 28 l S
+[] 0 d
+BT /F1 7.5 Tf 0.3765 0.4549 0.4902 rg 28 12 Td (Source: v3/v4 mechanism diagnostics and the archived v4 method-dev report.) Tj ET
+0.8471 0.8824 0.8863 RG
+0.8 w
+[] 0 d
+70 90 m
+690 90 l S
+[] 0 d
+BT /F1 8 Tf 0.3765 0.4549 0.4902 rg 55.84 87 Td (0) Tj ET
+0.8471 0.8824 0.8863 RG
+0.8 w
+[] 0 d
+70 142 m
+690 142 l S
+[] 0 d
+BT /F1 8 Tf 0.3765 0.4549 0.4902 rg 51.68 139 Td (10) Tj ET
+0.8471 0.8824 0.8863 RG
+0.8 w
+[] 0 d
+70 194 m
+690 194 l S
+[] 0 d
+BT /F1 8 Tf 0.3765 0.4549 0.4902 rg 51.68 191 Td (20) Tj ET
+0.8471 0.8824 0.8863 RG
+0.8 w
+[] 0 d
+70 246 m
+690 246 l S
+[] 0 d
+BT /F1 8 Tf 0.3765 0.4549 0.4902 rg 51.68 243 Td (30) Tj ET
+0.8471 0.8824 0.8863 RG
+0.8 w
+[] 0 d
+70 298 m
+690 298 l S
+[] 0 d
+BT /F1 8 Tf 0.3765 0.4549 0.4902 rg 51.68 295 Td (40) Tj ET
+0.8471 0.8824 0.8863 RG
+0.8 w
+[] 0 d
+70 350 m
+690 350 l S
+[] 0 d
+BT /F1 8 Tf 0.3765 0.4549 0.4902 rg 51.68 347 Td (50) Tj ET
+0.0902 0.1686 0.2118 RG
+1 w
+[] 0 d
+70 350 m
+70 90 l S
+[] 0 d
+0.0902 0.1686 0.2118 RG
+1 w
+[] 0 d
+70 90 m
+690 90 l S
+[] 0 d
+0.2275 0.4353 0.6314 rg
+108.5 90 36 156 re
+f
+BT /F2 9 Tf 0.0902 0.1686 0.2118 rg 121.46 253 Td (30) Tj ET
+0.0863 0.4902 0.502 rg
+150.5 90 36 187.2 re
+f
+BT /F2 9 Tf 0.0902 0.1686 0.2118 rg 163.46 284.2 Td (36) Tj ET
+BT /F2 9 Tf 0.0863 0.4902 0.502 rg 142.46 303.2 Td (+6) Tj ET
+BT /F1 9 Tf 0.0902 0.1686 0.2118 rg 140.48 69 Td (128) Tj ET
+0.2275 0.4353 0.6314 rg
+263.5 90 36 192.4 re
+f
+BT /F2 9 Tf 0.0902 0.1686 0.2118 rg 276.46 289.4 Td (37) Tj ET
+0.0863 0.4902 0.502 rg
+305.5 90 36 187.2 re
+f
+BT /F2 9 Tf 0.0902 0.1686 0.2118 rg 318.46 284.2 Td (36) Tj ET
+BT /F2 9 Tf 0.7882 0.3098 0.2745 rg 297.46 308.4 Td (-1) Tj ET
+BT /F1 9 Tf 0.0902 0.1686 0.2118 rg 295.48 69 Td (512) Tj ET
+0.2275 0.4353 0.6314 rg
+418.5 90 36 150.8 re
+f
+BT /F2 9 Tf 0.0902 0.1686 0.2118 rg 431.46 247.8 Td (29) Tj ET
+0.0863 0.4902 0.502 rg
+460.5 90 36 228.8 re
+f
+BT /F2 9 Tf 0.0902 0.1686 0.2118 rg 473.46 325.8 Td (44) Tj ET
+BT /F2 9 Tf 0.0863 0.4902 0.502 rg 449.94 344.8 Td (+15) Tj ET
+BT /F1 9 Tf 0.0902 0.1686 0.2118 rg 445.8 69 Td (2,048) Tj ET
+0.2275 0.4353 0.6314 rg
+573.5 90 36 98.8 re
+f
+BT /F2 9 Tf 0.0902 0.1686 0.2118 rg 586.46 195.8 Td (19) Tj ET
+0.0863 0.4902 0.502 rg
+615.5 90 36 223.6 re
+f
+BT /F2 9 Tf 0.0902 0.1686 0.2118 rg 628.46 320.6 Td (43) Tj ET
+BT /F2 9 Tf 0.0863 0.4902 0.502 rg 604.94 339.6 Td (+24) Tj ET
+BT /F1 9 Tf 0.0902 0.1686 0.2118 rg 600.8 69 Td (8,192) Tj ET
+BT /F1 8.5 Tf 0.3765 0.4549 0.4902 rg 70 359 Td (Safe prompts) Tj ET
+BT /F1 8.5 Tf 0.3765 0.4549 0.4902 rg 351.27 48 Td (Prefix tokens) Tj ET
+0.2275 0.4353 0.6314 rg
+84 333 12 12 re
+f
+BT /F1 8.5 Tf 0.0902 0.1686 0.2118 rg 102 335 Td (v3 sampled-prefix) Tj ET
+0.0863 0.4902 0.502 rg
+84 315 12 12 re
+f
+BT /F1 8.5 Tf 0.0902 0.1686 0.2118 rg 102 317 Td (v4 full-prefix) Tj ET
+endstream
+endobj
+xref
+0 7
+0000000000 65535 f 
+0000000015 00000 n 
+0000000064 00000 n 
+0000000121 00000 n 
+0000000257 00000 n 
+0000000327 00000 n 
+0000000402 00000 n 
+trailer
+<< /Size 7 /Root 1 0 R >>
+startxref
+3557
+%%EOF

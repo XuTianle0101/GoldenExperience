@@ -1,0 +1,158 @@
+%PDF-1.4
+%‚„œ”
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 720 440] /Resources << /Font << /F1 4 0 R /F2 5 0 R >> >> /Contents 6 0 R >>
+endobj
+4 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+5 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>
+endobj
+6 0 obj
+<< /Length 3003 >>
+stream
+1 1 1 rg
+0 0 720 440 re
+f
+0.7882 0.3098 0.2745 rg
+28 388 8 30 re
+f
+BT /F2 19 Tf 0.0902 0.1686 0.2118 rg 48 402 Td (Method progression remains below the registered gate) Tj ET
+BT /F1 9.5 Tf 0.3765 0.4549 0.4902 rg 48 383 Td (Descriptive comparison: selected deployment rank changes across versions) Tj ET
+0.8471 0.8824 0.8863 RG
+1 w
+[] 0 d
+28 28 m
+692 28 l S
+[] 0 d
+BT /F1 7.5 Tf 0.3765 0.4549 0.4902 rg 28 12 Td (Source: v2/v3/v4 diagnostics; oracle bars use prohibited target-derived selection.) Tj ET
+0.8471 0.8824 0.8863 RG
+0.8 w
+[] 0 d
+72 95 m
+690 95 l S
+[] 0 d
+BT /F1 8 Tf 0.3765 0.4549 0.4902 rg 53.68 92 Td (0%) Tj ET
+0.8471 0.8824 0.8863 RG
+0.8 w
+[] 0 d
+72 145.6 m
+690 145.6 l S
+[] 0 d
+BT /F1 8 Tf 0.3765 0.4549 0.4902 rg 49.52 142.6 Td (10%) Tj ET
+0.8471 0.8824 0.8863 RG
+0.8 w
+[] 0 d
+72 196.2 m
+690 196.2 l S
+[] 0 d
+BT /F1 8 Tf 0.3765 0.4549 0.4902 rg 49.52 193.2 Td (20%) Tj ET
+0.8471 0.8824 0.8863 RG
+0.8 w
+[] 0 d
+72 246.8 m
+690 246.8 l S
+[] 0 d
+BT /F1 8 Tf 0.3765 0.4549 0.4902 rg 49.52 243.8 Td (30%) Tj ET
+0.8471 0.8824 0.8863 RG
+0.8 w
+[] 0 d
+72 297.4 m
+690 297.4 l S
+[] 0 d
+BT /F1 8 Tf 0.3765 0.4549 0.4902 rg 49.52 294.4 Td (40%) Tj ET
+0.8471 0.8824 0.8863 RG
+0.8 w
+[] 0 d
+72 348 m
+690 348 l S
+[] 0 d
+BT /F1 8 Tf 0.3765 0.4549 0.4902 rg 49.52 345 Td (50%) Tj ET
+0.0902 0.1686 0.2118 RG
+1 w
+[] 0 d
+72 348 m
+72 95 l S
+[] 0 d
+0.0902 0.1686 0.2118 RG
+1 w
+[] 0 d
+72 95 m
+690 95 l S
+[] 0 d
+0.7882 0.3098 0.2745 RG
+1.6 w
+[6 4] 0 d
+72 322.7 m
+690 322.7 l S
+[] 0 d
+BT /F1 8 Tf 0.7882 0.3098 0.2745 rg 656.72 328.7 Td (gate 45%) Tj ET
+0.0863 0.4902 0.502 rg
+122 95 48 117.6055 re
+f
+BT /F1 8 Tf 0.0902 0.1686 0.2118 rg 135.6 219.6055 Td (0.232) Tj ET
+0.9529 0.9647 0.9608 rg
+0.7882 0.3098 0.2745 RG
+2 w
+180 95 48 173.9375 re
+B
+BT /F1 8 Tf 0.0902 0.1686 0.2118 rg 193.6 275.9375 Td (0.344) Tj ET
+BT /F2 10 Tf 0.0902 0.1686 0.2118 rg 169.4 73 Td (v2) Tj ET
+BT /F1 7.5 Tf 0.3765 0.4549 0.4902 rg 137.95 59 Td (deployment rank 128) Tj ET
+0.0863 0.4902 0.502 rg
+328 95 48 56.8262 re
+f
+BT /F1 8 Tf 0.0902 0.1686 0.2118 rg 341.6 158.8262 Td (0.112) Tj ET
+0.9529 0.9647 0.9608 rg
+0.7882 0.3098 0.2745 RG
+2 w
+386 95 48 153.6777 re
+B
+BT /F1 8 Tf 0.0902 0.1686 0.2118 rg 399.6 255.6777 Td (0.304) Tj ET
+BT /F2 10 Tf 0.0902 0.1686 0.2118 rg 375.4 73 Td (v3) Tj ET
+BT /F1 7.5 Tf 0.3765 0.4549 0.4902 rg 343.95 59 Td (deployment rank 128) Tj ET
+0.0863 0.4902 0.502 rg
+534 95 48 70.168 re
+f
+BT /F1 8 Tf 0.0902 0.1686 0.2118 rg 547.6 172.168 Td (0.139) Tj ET
+0.9529 0.9647 0.9608 rg
+0.7882 0.3098 0.2745 RG
+2 w
+592 95 48 186.291 re
+B
+BT /F1 8 Tf 0.0902 0.1686 0.2118 rg 605.6 288.291 Td (0.368) Tj ET
+BT /F2 10 Tf 0.0902 0.1686 0.2118 rg 581.4 73 Td (v4) Tj ET
+BT /F1 7.5 Tf 0.3765 0.4549 0.4902 rg 551.9 59 Td (deployment rank 64) Tj ET
+0.0863 0.4902 0.502 rg
+80 328 12 12 re
+f
+BT /F1 8.5 Tf 0.0902 0.1686 0.2118 rg 98 330 Td (Registered deployment) Tj ET
+0.9529 0.9647 0.9608 rg
+0.7882 0.3098 0.2745 RG
+2 w
+227 328 12 12 re
+B
+BT /F1 8.5 Tf 0.0902 0.1686 0.2118 rg 245 330 Td (Nine-candidate oracle union) Tj ET
+endstream
+endobj
+xref
+0 7
+0000000000 65535 f 
+0000000015 00000 n 
+0000000064 00000 n 
+0000000121 00000 n 
+0000000257 00000 n 
+0000000327 00000 n 
+0000000402 00000 n 
+trailer
+<< /Size 7 /Root 1 0 R >>
+startxref
+3456
+%%EOF

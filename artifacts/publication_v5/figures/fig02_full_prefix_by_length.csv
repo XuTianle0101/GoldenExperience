@@ -1,0 +1,9 @@
+version,supervision,rank,seed,token_bucket,safe_count,sample_count,coverage,v4_minus_v3_safe_count
+v3,sampled_prefix_teacher,128,17,128,30,256,0.1171875,6
+v4,full_prefix_teacher,128,17,128,36,256,0.140625,6
+v3,sampled_prefix_teacher,128,17,512,37,256,0.14453125,-1
+v4,full_prefix_teacher,128,17,512,36,256,0.140625,-1
+v3,sampled_prefix_teacher,128,17,2048,29,256,0.11328125,15
+v4,full_prefix_teacher,128,17,2048,44,256,0.171875,15
+v3,sampled_prefix_teacher,128,17,8192,19,256,0.07421875,24
+v4,full_prefix_teacher,128,17,8192,43,256,0.16796875,24

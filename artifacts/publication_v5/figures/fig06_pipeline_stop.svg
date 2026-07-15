@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1180" height="410" viewBox="0 0 1180 410" role="img" aria-labelledby="figure-title figure-description">
+  <title id="figure-title">The failed method-dev gate stops the evidence chain</title>
+  <desc id="figure-description">Pipeline diagram showing completed, failed, blocked, and locked stages.</desc>
+  <rect x="0" y="0" width="1180" height="410" fill="#FFFFFF"/>
+  <rect x="28" y="22" width="8" height="30" fill="#C94F46"/>
+  <text x="48" y="38" fill="#172B36" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="19" font-weight="bold" text-anchor="start" letter-spacing="0">The failed method-dev gate stops the evidence chain</text>
+  <text x="48" y="57" fill="#60747D" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="9.5" font-weight="normal" text-anchor="start" letter-spacing="0">Implemented stages to the right remain protocol descriptions, not executed evidence</text>
+  <line x1="28" y1="382" x2="1152" y2="382" stroke="#D8E1E2" stroke-width="1"/>
+  <text x="28" y="398" fill="#60747D" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="7.5" font-weight="normal" text-anchor="start" letter-spacing="0">Source: publication-v5 failed-stage receipt and immutable workspace initialization receipt.</text>
+  <line x1="170" y1="152" x2="204" y2="152" stroke="#167D80" stroke-width="1.5"/>
+  <polygon points="204,152 198.0323,155.6588 198.0323,148.3412" fill="#167D80"/>
+  <line x1="346" y1="152" x2="380" y2="152" stroke="#167D80" stroke-width="1.5"/>
+  <polygon points="380,152 374.0323,155.6588 374.0323,148.3412" fill="#167D80"/>
+  <line x1="346" y1="267" x2="368" y2="267" stroke="#167D80" stroke-width="1.5"/>
+  <polygon points="368,267 362.0323,270.6588 362.0323,263.3412" fill="#167D80"/>
+  <line x1="368" y1="267" x2="368" y2="173" stroke="#167D80" stroke-width="1.5"/>
+  <line x1="368" y1="173" x2="380" y2="173" stroke="#167D80" stroke-width="1.5"/>
+  <polygon points="380,173 374.0323,176.6588 374.0323,169.3412" fill="#167D80"/>
+  <line x1="554" y1="85" x2="554" y2="300" stroke="#C94F46" stroke-width="4"/>
+  <polygon points="545,80 563,80 567,84 567,102 563,106 545,106 541,102 541,84" fill="#C94F46"/>
+  <text x="554" y="96" fill="#FFFFFF" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="7" font-weight="bold" text-anchor="middle" letter-spacing="0">STOP</text>
+  <text x="554" y="318" fill="#C94F46" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="8" font-weight="bold" text-anchor="middle" letter-spacing="0">protocol stop</text>
+  <line x1="522" y1="152" x2="540" y2="152" stroke="#C94F46" stroke-width="2"/>
+  <polygon points="540,152 534.0323,155.6588 534.0323,148.3412" fill="#C94F46"/>
+  <line x1="568" y1="133" x2="596" y2="124" stroke="#B7C1C4" stroke-width="1.5" stroke-dasharray="5,4"/>
+  <polygon points="596,124 591.4382,129.3095 589.199,122.3429" fill="#B7C1C4"/>
+  <line x1="568" y1="180" x2="596" y2="237" stroke="#B7C1C4" stroke-width="1.5" stroke-dasharray="5,4"/>
+  <polygon points="596,237 590.0848,233.2569 596.6528,230.0305" fill="#B7C1C4"/>
+  <line x1="738" y1="124" x2="776" y2="166" stroke="#B7C1C4" stroke-width="1.5" stroke-dasharray="5,4"/>
+  <polygon points="776,166 769.2831,164.0295 774.7093,159.12" fill="#B7C1C4"/>
+  <line x1="738" y1="237" x2="776" y2="194" stroke="#B7C1C4" stroke-width="1.5" stroke-dasharray="5,4"/>
+  <polygon points="776,194 774.7899,200.8946 769.3066,196.0489" fill="#B7C1C4"/>
+  <line x1="918" y1="180" x2="948" y2="128" stroke="#B7C1C4" stroke-width="1.5" stroke-dasharray="5,4"/>
+  <polygon points="948,128 948.187,134.9975 941.8486,131.3407" fill="#B7C1C4"/>
+  <line x1="1090" y1="128" x2="1105" y2="128" stroke="#B7C1C4" stroke-width="1.5" stroke-dasharray="5,4"/>
+  <polygon points="1105,128 1099.0323,131.6588 1099.0323,124.3412" fill="#B7C1C4"/>
+  <line x1="1105" y1="128" x2="1105" y2="249" stroke="#B7C1C4" stroke-width="1.5" stroke-dasharray="5,4"/>
+  <line x1="1105" y1="249" x2="1090" y2="249" stroke="#B7C1C4" stroke-width="1.5" stroke-dasharray="5,4"/>
+  <polygon points="1090,249 1095.9677,245.3412 1095.9677,252.6588" fill="#B7C1C4"/>
+  <rect x="28" y="120" width="142" height="64" rx="5" fill="#FFFFFF" stroke="#167D80" stroke-width="1.7"/>
+  <rect x="28" y="120" width="142" height="7" fill="#167D80"/>
+  <text x="38" y="149" fill="#172B36" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="9" font-weight="bold" text-anchor="start" letter-spacing="0">Transport train</text>
+  <text x="38" y="167" fill="#60747D" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="7.3" font-weight="normal" text-anchor="start" letter-spacing="0">4,096 rows collected</text>
+  <text x="161" y="137" fill="#167D80" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="6.8" font-weight="bold" text-anchor="end" letter-spacing="0">COMPLETED</text>
+  <rect x="204" y="120" width="142" height="64" rx="5" fill="#FFFFFF" stroke="#167D80" stroke-width="1.7"/>
+  <rect x="204" y="120" width="142" height="7" fill="#167D80"/>
+  <text x="214" y="149" fill="#172B36" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="9" font-weight="bold" text-anchor="start" letter-spacing="0">Transport fit</text>
+  <text x="214" y="167" fill="#60747D" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="7.3" font-weight="normal" text-anchor="start" letter-spacing="0">9 candidates; 1,536 steps</text>
+  <text x="337" y="137" fill="#167D80" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="6.8" font-weight="bold" text-anchor="end" letter-spacing="0">COMPLETED</text>
+  <rect x="204" y="235" width="142" height="64" rx="5" fill="#FFFFFF" stroke="#167D80" stroke-width="1.7"/>
+  <rect x="204" y="235" width="142" height="7" fill="#167D80"/>
+  <text x="214" y="264" fill="#172B36" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="9" font-weight="bold" text-anchor="start" letter-spacing="0">Method-dev trace</text>
+  <text x="214" y="282" fill="#60747D" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="7.3" font-weight="normal" text-anchor="start" letter-spacing="0">1,024 prompts collected</text>
+  <text x="337" y="252" fill="#167D80" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="6.8" font-weight="bold" text-anchor="end" letter-spacing="0">COMPLETED</text>
+  <rect x="380" y="120" width="142" height="64" rx="5" fill="#FFFFFF" stroke="#C94F46" stroke-width="1.7"/>
+  <rect x="380" y="120" width="142" height="7" fill="#C94F46"/>
+  <text x="390" y="149" fill="#172B36" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="9" font-weight="bold" text-anchor="start" letter-spacing="0">Method-dev gate</text>
+  <text x="390" y="167" fill="#60747D" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="7.3" font-weight="normal" text-anchor="start" letter-spacing="0">142/1,024 safe; 0.1387 &lt; 0.45</text>
+  <text x="513" y="137" fill="#C94F46" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="6.8" font-weight="bold" text-anchor="end" letter-spacing="0">FAILED</text>
+  <rect x="596" y="92" width="142" height="64" rx="5" fill="#F3F6F5" stroke="#B7C1C4" stroke-width="1.7"/>
+  <rect x="596" y="92" width="142" height="7" fill="#B7C1C4"/>
+  <text x="606" y="121" fill="#172B36" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="9" font-weight="bold" text-anchor="start" letter-spacing="0">Other directions</text>
+  <text x="606" y="139" fill="#60747D" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="7.3" font-weight="normal" text-anchor="start" letter-spacing="0">not fit</text>
+  <text x="729" y="109" fill="#B7C1C4" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="6.8" font-weight="bold" text-anchor="end" letter-spacing="0">BLOCKED</text>
+  <rect x="596" y="205" width="142" height="64" rx="5" fill="#F3F6F5" stroke="#B7C1C4" stroke-width="1.7"/>
+  <rect x="596" y="205" width="142" height="7" fill="#B7C1C4"/>
+  <text x="606" y="234" fill="#172B36" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="9" font-weight="bold" text-anchor="start" letter-spacing="0">Selector + calibration</text>
+  <text x="606" y="252" fill="#60747D" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="7.3" font-weight="normal" text-anchor="start" letter-spacing="0">not fit</text>
+  <text x="729" y="222" fill="#B7C1C4" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="6.8" font-weight="bold" text-anchor="end" letter-spacing="0">BLOCKED</text>
+  <rect x="776" y="148" width="142" height="64" rx="5" fill="#F3F6F5" stroke="#B7C1C4" stroke-width="1.7"/>
+  <rect x="776" y="148" width="142" height="7" fill="#B7C1C4"/>
+  <text x="786" y="177" fill="#172B36" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="9" font-weight="bold" text-anchor="start" letter-spacing="0">Validation x4</text>
+  <text x="786" y="195" fill="#60747D" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="7.3" font-weight="normal" text-anchor="start" letter-spacing="0">not run</text>
+  <text x="909" y="165" fill="#B7C1C4" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="6.8" font-weight="bold" text-anchor="end" letter-spacing="0">BLOCKED</text>
+  <rect x="948" y="96" width="142" height="64" rx="5" fill="#F3F6F5" stroke="#B7C1C4" stroke-width="1.7"/>
+  <rect x="948" y="96" width="142" height="7" fill="#B7C1C4"/>
+  <text x="958" y="125" fill="#172B36" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="9" font-weight="bold" text-anchor="start" letter-spacing="0">Semantic sealed</text>
+  <text x="958" y="143" fill="#60747D" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="7.3" font-weight="normal" text-anchor="start" letter-spacing="0">payload unopened</text>
+  <text x="1081" y="113" fill="#B7C1C4" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="6.8" font-weight="bold" text-anchor="end" letter-spacing="0">LOCKED</text>
+  <rect x="948" y="217" width="142" height="64" rx="5" fill="#F3F6F5" stroke="#B7C1C4" stroke-width="1.7"/>
+  <rect x="948" y="217" width="142" height="7" fill="#B7C1C4"/>
+  <text x="958" y="246" fill="#172B36" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="9" font-weight="bold" text-anchor="start" letter-spacing="0">Runtime audit</text>
+  <text x="958" y="264" fill="#60747D" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="7.3" font-weight="normal" text-anchor="start" letter-spacing="0">not run</text>
+  <text x="1081" y="234" fill="#B7C1C4" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="6.8" font-weight="bold" text-anchor="end" letter-spacing="0">BLOCKED</text>
+  <text x="596" y="297" fill="#60747D" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="8.2" font-weight="normal" text-anchor="start" letter-spacing="0">No selector, calibration, other-direction, validation, sealed-test, or runtime claim</text>
+  <rect x="28" y="334" width="12" height="12" fill="#167D80"/>
+  <text x="46" y="344" fill="#172B36" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="8" font-weight="normal" text-anchor="start" letter-spacing="0">completed</text>
+  <rect x="120" y="334" width="12" height="12" fill="#C94F46"/>
+  <text x="138" y="344" fill="#172B36" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="8" font-weight="normal" text-anchor="start" letter-spacing="0">failed</text>
+  <rect x="198" y="334" width="12" height="12" fill="#B7C1C4"/>
+  <text x="216" y="344" fill="#172B36" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="8" font-weight="normal" text-anchor="start" letter-spacing="0">blocked / locked</text>
+</svg>

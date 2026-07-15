@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="450" viewBox="0 0 760 450" role="img" aria-labelledby="figure-title figure-description">
+  <title id="figure-title">Every registered candidate misses the coverage gate</title>
+  <desc id="figure-description">Coverage bars for nine rank and seed candidates plus a post-hoc oracle.</desc>
+  <rect x="0" y="0" width="760" height="450" fill="#FFFFFF"/>
+  <rect x="28" y="22" width="8" height="30" fill="#C94F46"/>
+  <text x="48" y="38" fill="#172B36" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="19" font-weight="bold" text-anchor="start" letter-spacing="0">Every registered candidate misses the coverage gate</text>
+  <text x="48" y="57" fill="#60747D" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="9.5" font-weight="normal" text-anchor="start" letter-spacing="0">Qwen3-4B -&gt; Qwen3-8B, 1,024 method-dev prompts; star marks deployment</text>
+  <line x1="28" y1="422" x2="732" y2="422" stroke="#D8E1E2" stroke-width="1"/>
+  <text x="28" y="438" fill="#60747D" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="7.5" font-weight="normal" text-anchor="start" letter-spacing="0">Source: full v4 method-dev report; gate = 0.45 oracle-safe coverage.</text>
+  <line x1="66" y1="366" x2="730" y2="366" stroke="#D8E1E2" stroke-width="0.8"/>
+  <text x="56" y="369" fill="#60747D" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="8" font-weight="normal" text-anchor="end" letter-spacing="0">0%</text>
+  <line x1="66" y1="311.2" x2="730" y2="311.2" stroke="#D8E1E2" stroke-width="0.8"/>
+  <text x="56" y="314.2" fill="#60747D" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="8" font-weight="normal" text-anchor="end" letter-spacing="0">10%</text>
+  <line x1="66" y1="256.4" x2="730" y2="256.4" stroke="#D8E1E2" stroke-width="0.8"/>
+  <text x="56" y="259.4" fill="#60747D" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="8" font-weight="normal" text-anchor="end" letter-spacing="0">20%</text>
+  <line x1="66" y1="201.6" x2="730" y2="201.6" stroke="#D8E1E2" stroke-width="0.8"/>
+  <text x="56" y="204.6" fill="#60747D" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="8" font-weight="normal" text-anchor="end" letter-spacing="0">30%</text>
+  <line x1="66" y1="146.8" x2="730" y2="146.8" stroke="#D8E1E2" stroke-width="0.8"/>
+  <text x="56" y="149.8" fill="#60747D" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="8" font-weight="normal" text-anchor="end" letter-spacing="0">40%</text>
+  <line x1="66" y1="92" x2="730" y2="92" stroke="#D8E1E2" stroke-width="0.8"/>
+  <text x="56" y="95" fill="#60747D" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="8" font-weight="normal" text-anchor="end" letter-spacing="0">50%</text>
+  <line x1="66" y1="92" x2="66" y2="366" stroke="#172B36" stroke-width="1"/>
+  <line x1="66" y1="366" x2="730" y2="366" stroke="#172B36" stroke-width="1"/>
+  <line x1="66" y1="119.4" x2="730" y2="119.4" stroke="#C94F46" stroke-width="1.7" stroke-dasharray="6,4"/>
+  <text x="730" y="113.4" fill="#C94F46" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="8.5" font-weight="normal" text-anchor="end" letter-spacing="0">registered gate 45%</text>
+  <rect x="79.944" y="276.6289" width="38.512" height="89.3711" fill="#8DB7B5"/>
+  <text x="99.2" y="269.6289" fill="#172B36" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="7.7" font-weight="normal" text-anchor="middle" letter-spacing="0">0.163</text>
+  <text x="99.2" y="385" fill="#172B36" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="8" font-weight="normal" text-anchor="middle" letter-spacing="0">r32/s17</text>
+  <rect x="146.344" y="282.5156" width="38.512" height="83.4844" fill="#8DB7B5"/>
+  <text x="165.6" y="275.5156" fill="#172B36" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="7.7" font-weight="normal" text-anchor="middle" letter-spacing="0">0.152</text>
+  <text x="165.6" y="385" fill="#172B36" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="8" font-weight="normal" text-anchor="middle" letter-spacing="0">r32/s29</text>
+  <rect x="212.744" y="289.4727" width="38.512" height="76.5273" fill="#8DB7B5"/>
+  <text x="232" y="282.4727" fill="#172B36" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="7.7" font-weight="normal" text-anchor="middle" letter-spacing="0">0.140</text>
+  <text x="232" y="385" fill="#172B36" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="8" font-weight="normal" text-anchor="middle" letter-spacing="0">r32/s43</text>
+  <rect x="279.144" y="290.0078" width="38.512" height="75.9922" fill="#167D80"/>
+  <text x="298.4" y="283.0078" fill="#172B36" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="7.7" font-weight="normal" text-anchor="middle" letter-spacing="0">0.139</text>
+  <polygon points="316.4,269.0078 318.4,274.0078 324.4,274.0078 319.4,278.0078 321.4,284.0078 316.4,280.0078 311.4,284.0078 313.4,278.0078 308.4,274.0078 314.4,274.0078" fill="#D6922E" stroke="#FFFFFF" stroke-width="0.8"/>
+  <text x="298.4" y="385" fill="#172B36" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="8" font-weight="normal" text-anchor="middle" letter-spacing="0">r64/s17</text>
+  <rect x="345.544" y="269.6719" width="38.512" height="96.3281" fill="#167D80"/>
+  <text x="364.8" y="262.6719" fill="#172B36" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="7.7" font-weight="normal" text-anchor="middle" letter-spacing="0">0.176</text>
+  <text x="364.8" y="385" fill="#172B36" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="8" font-weight="normal" text-anchor="middle" letter-spacing="0">r64/s29</text>
+  <rect x="411.944" y="287.8672" width="38.512" height="78.1328" fill="#167D80"/>
+  <text x="431.2" y="280.8672" fill="#172B36" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="7.7" font-weight="normal" text-anchor="middle" letter-spacing="0">0.143</text>
+  <text x="431.2" y="385" fill="#172B36" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="8" font-weight="normal" text-anchor="middle" letter-spacing="0">r64/s43</text>
+  <rect x="478.344" y="280.9102" width="38.512" height="85.0898" fill="#28536B"/>
+  <text x="497.6" y="273.9102" fill="#172B36" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="7.7" font-weight="normal" text-anchor="middle" letter-spacing="0">0.155</text>
+  <text x="497.6" y="385" fill="#172B36" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="8" font-weight="normal" text-anchor="middle" letter-spacing="0">r128/s17</text>
+  <rect x="544.744" y="304.9922" width="38.512" height="61.0078" fill="#28536B"/>
+  <text x="564" y="297.9922" fill="#172B36" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="7.7" font-weight="normal" text-anchor="middle" letter-spacing="0">0.111</text>
+  <text x="564" y="385" fill="#172B36" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="8" font-weight="normal" text-anchor="middle" letter-spacing="0">r128/s29</text>
+  <rect x="611.144" y="271.2773" width="38.512" height="94.7227" fill="#28536B"/>
+  <text x="630.4" y="264.2773" fill="#172B36" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="7.7" font-weight="normal" text-anchor="middle" letter-spacing="0">0.173</text>
+  <text x="630.4" y="385" fill="#172B36" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="8" font-weight="normal" text-anchor="middle" letter-spacing="0">r128/s43</text>
+  <rect x="677.544" y="164.2461" width="38.512" height="201.7539" fill="#F3F6F5" stroke="#C94F46" stroke-width="2"/>
+  <text x="696.8" y="157.2461" fill="#172B36" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="7.7" font-weight="normal" text-anchor="middle" letter-spacing="0">0.368</text>
+  <text x="696.8" y="383" fill="#C94F46" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="8" font-weight="normal" text-anchor="middle" letter-spacing="0">9-way</text>
+  <text x="696.8" y="395" fill="#C94F46" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="8" font-weight="normal" text-anchor="middle" letter-spacing="0">oracle</text>
+  <text x="66" y="82" fill="#60747D" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="8.5" font-weight="normal" text-anchor="start" letter-spacing="0">Oracle-safe coverage</text>
+</svg>

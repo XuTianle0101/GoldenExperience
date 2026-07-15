@@ -1,0 +1,130 @@
+%PDF-1.4
+%‚„œ”
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 760 440] /Resources << /Font << /F1 4 0 R /F2 5 0 R >> >> /Contents 6 0 R >>
+endobj
+4 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+5 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>
+endobj
+6 0 obj
+<< /Length 2890 >>
+stream
+1 1 1 rg
+0 0 760 440 re
+f
+0.7882 0.3098 0.2745 rg
+28 388 8 30 re
+f
+BT /F2 19 Tf 0.0902 0.1686 0.2118 rg 48 402 Td (Most prompts violate both token-level behavior gates) Tj ET
+BT /F1 9.5 Tf 0.3765 0.4549 0.4902 rg 48 383 Td (Exact partition of all 1,024 prompts for rank 64, seed 17) Tj ET
+0.8471 0.8824 0.8863 RG
+1 w
+[] 0 d
+28 28 m
+732 28 l S
+[] 0 d
+BT /F1 7.5 Tf 0.3765 0.4549 0.4902 rg 28 12 Td (Source: archived v4 method-dev report; combinations are mutually exclusive.) Tj ET
+0.0863 0.4902 0.502 rg
+58 270 90.4141 58 re
+f
+BT /F2 8 Tf 1 1 1 rg 94.247 303 Td (Safe) Tj ET
+BT /F1 8 Tf 1 1 1 rg 96.967 287 Td (142) Tj ET
+0.8392 0.5725 0.1804 rg
+148.4141 270 93.5977 58 re
+f
+BT /F2 8 Tf 0.0902 0.1686 0.2118 rg 172.8129 303 Td (Drift only) Tj ET
+BT /F1 8 Tf 0.0902 0.1686 0.2118 rg 188.9729 287 Td (147) Tj ET
+0.2275 0.4353 0.6314 rg
+242.0117 270 10.1875 58 re
+f
+0.7882 0.3098 0.2745 rg
+252.1992 270 442.5195 58 re
+f
+BT /F2 8 Tf 1 1 1 rg 442.099 303 Td (Greedy + drift) Tj ET
+BT /F1 8 Tf 1 1 1 rg 467.219 287 Td (695) Tj ET
+0.1569 0.3255 0.4196 rg
+694.7188 270 0.6367 58 re
+f
+0.5529 0.2078 0.1843 rg
+695.3555 270 14.6445 58 re
+f
+BT /F1 8.5 Tf 0.3765 0.4549 0.4902 rg 58 338 Td (Mutually exclusive outcome partition) Tj ET
+BT /F1 8.5 Tf 0.3765 0.4549 0.4902 rg 670.22 338 Td (n = 1,024) Tj ET
+0.0863 0.4902 0.502 rg
+58 243 10 10 re
+f
+BT /F1 7.5 Tf 0.0902 0.1686 0.2118 rg 73 244 Td (Safe: 142) Tj ET
+0.8392 0.5725 0.1804 rg
+278 243 10 10 re
+f
+BT /F1 7.5 Tf 0.0902 0.1686 0.2118 rg 293 244 Td (Drift only: 147) Tj ET
+0.2275 0.4353 0.6314 rg
+498 243 10 10 re
+f
+BT /F1 7.5 Tf 0.0902 0.1686 0.2118 rg 513 244 Td (Greedy only: 16) Tj ET
+0.7882 0.3098 0.2745 rg
+58 219 10 10 re
+f
+BT /F1 7.5 Tf 0.0902 0.1686 0.2118 rg 73 220 Td (Greedy + drift: 695) Tj ET
+0.1569 0.3255 0.4196 rg
+278 219 10 10 re
+f
+BT /F1 7.5 Tf 0.0902 0.1686 0.2118 rg 293 220 Td (Task + greedy: 1) Tj ET
+0.5529 0.2078 0.1843 rg
+498 219 10 10 re
+f
+BT /F1 7.5 Tf 0.0902 0.1686 0.2118 rg 513 220 Td (Task + greedy + drift: 23) Tj ET
+BT /F2 9 Tf 0.3765 0.4549 0.4902 rg 58 192 Td (Marginal violations \(overlapping\)) Tj ET
+BT /F1 8.5 Tf 0.0902 0.1686 0.2118 rg 58 160 Td (Task regression) Tj ET
+0.9529 0.9647 0.9608 rg
+190 155 510 15 re
+f
+0.1569 0.3255 0.4196 rg
+190 155 11.9531 15 re
+f
+BT /F1 8 Tf 0.0902 0.1686 0.2118 rg 708 159 Td (24 \(2.3%\)) Tj ET
+BT /F1 8.5 Tf 0.0902 0.1686 0.2118 rg 58 122 Td (Greedy < 0.98) Tj ET
+0.9529 0.9647 0.9608 rg
+190 117 510 15 re
+f
+0.2275 0.4353 0.6314 rg
+190 117 366.0645 15 re
+f
+BT /F1 8 Tf 0.0902 0.1686 0.2118 rg 708 121 Td (735 \(71.8%\)) Tj ET
+BT /F1 8.5 Tf 0.0902 0.1686 0.2118 rg 58 84 Td (PPL drift > 2%) Tj ET
+0.9529 0.9647 0.9608 rg
+190 79 510 15 re
+f
+0.8392 0.5725 0.1804 rg
+190 79 430.8105 15 re
+f
+BT /F1 8 Tf 0.0902 0.1686 0.2118 rg 708 83 Td (865 \(84.5%\)) Tj ET
+0.7882 0.3098 0.2745 rg
+568 188 142 27 re
+f
+BT /F2 8.3 Tf 1 1 1 rg 580.9 197 Td (Unsafe union: 882 \(86.1%\)) Tj ET
+endstream
+endobj
+xref
+0 7
+0000000000 65535 f 
+0000000015 00000 n 
+0000000064 00000 n 
+0000000121 00000 n 
+0000000257 00000 n 
+0000000327 00000 n 
+0000000402 00000 n 
+trailer
+<< /Size 7 /Root 1 0 R >>
+startxref
+3343
+%%EOF

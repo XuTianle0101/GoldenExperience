@@ -1,0 +1,9 @@
+reason_combination,task_regression,greedy_failure,drift_failure,is_unsafe,count,fraction
+safe,False,False,False,False,142,0.138671875
+drift_only,False,False,True,True,147,0.1435546875
+greedy_only,False,True,False,True,16,0.015625
+greedy_and_drift,False,True,True,True,695,0.6787109375
+task_regression_only,True,False,False,True,0,0.0
+task_regression_and_drift,True,False,True,True,0,0.0
+task_regression_and_greedy,True,True,False,True,1,0.0009765625
+task_regression_and_greedy_and_drift,True,True,True,True,23,0.0224609375

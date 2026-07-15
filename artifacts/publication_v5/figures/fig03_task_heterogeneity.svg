@@ -1,0 +1,99 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="820" height="440" viewBox="0 0 820 440" role="img" aria-labelledby="figure-title figure-description">
+  <title id="figure-title">Behavioral safety is sharply task-dependent</title>
+  <desc id="figure-description">Aligned task panels for safe coverage, greedy agreement, and perplexity drift.</desc>
+  <rect x="0" y="0" width="820" height="440" fill="#FFFFFF"/>
+  <rect x="28" y="22" width="8" height="30" fill="#D6922E"/>
+  <text x="48" y="38" fill="#172B36" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="19" font-weight="bold" text-anchor="start" letter-spacing="0">Behavioral safety is sharply task-dependent</text>
+  <text x="48" y="57" fill="#60747D" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="9.5" font-weight="normal" text-anchor="start" letter-spacing="0">Registered deployment candidate: rank 64, seed 17; vertical lines show gates</text>
+  <line x1="28" y1="412" x2="792" y2="412" stroke="#D8E1E2" stroke-width="1"/>
+  <text x="28" y="428" fill="#60747D" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="7.5" font-weight="normal" text-anchor="start" letter-spacing="0">Source: archived v4 method-dev report; aggregates use the fixed deployment candidate.</text>
+  <text x="282.5" y="90" fill="#172B36" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="9.5" font-weight="bold" text-anchor="middle" letter-spacing="0">Safe coverage</text>
+  <line x1="190" y1="100" x2="375" y2="100" stroke="#172B36" stroke-width="1"/>
+  <text x="190" y="112" fill="#60747D" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="7.5" font-weight="normal" text-anchor="middle" letter-spacing="0">0</text>
+  <text x="375" y="112" fill="#60747D" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="7.5" font-weight="normal" text-anchor="middle" letter-spacing="0">1</text>
+  <line x1="273.25" y1="96" x2="273.25" y2="354" stroke="#C94F46" stroke-width="1.2" stroke-dasharray="4,3"/>
+  <text x="273.25" y="368" fill="#C94F46" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="7.2" font-weight="normal" text-anchor="middle" letter-spacing="0">min 0.45</text>
+  <line x1="190" y1="146" x2="375" y2="146" stroke="#D8E1E2" stroke-width="0.8"/>
+  <line x1="190" y1="146" x2="336.4583" y2="146" stroke="#8DB7B5" stroke-width="3"/>
+  <circle cx="336.4583" cy="146" r="5.5" fill="#167D80" stroke="#FFFFFF" stroke-width="1"/>
+  <text x="344.4583" y="138" fill="#172B36" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="7.3" font-weight="normal" text-anchor="start" letter-spacing="0">0.792</text>
+  <line x1="190" y1="198" x2="375" y2="198" stroke="#D8E1E2" stroke-width="0.8"/>
+  <line x1="190" y1="198" x2="218.0168" y2="198" stroke="#8DB7B5" stroke-width="3"/>
+  <circle cx="218.0168" cy="198" r="5.5" fill="#C94F46" stroke="#FFFFFF" stroke-width="1"/>
+  <text x="226.0168" y="190" fill="#172B36" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="7.3" font-weight="normal" text-anchor="start" letter-spacing="0">0.151</text>
+  <line x1="190" y1="250" x2="375" y2="250" stroke="#D8E1E2" stroke-width="0.8"/>
+  <line x1="190" y1="250" x2="202.8966" y2="250" stroke="#8DB7B5" stroke-width="3"/>
+  <circle cx="202.8966" cy="250" r="5.5" fill="#C94F46" stroke="#FFFFFF" stroke-width="1"/>
+  <text x="210.8966" y="242" fill="#172B36" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="7.3" font-weight="normal" text-anchor="start" letter-spacing="0">0.070</text>
+  <line x1="190" y1="302" x2="375" y2="302" stroke="#D8E1E2" stroke-width="0.8"/>
+  <line x1="190" y1="302" x2="218.2639" y2="302" stroke="#8DB7B5" stroke-width="3"/>
+  <circle cx="218.2639" cy="302" r="5.5" fill="#C94F46" stroke="#FFFFFF" stroke-width="1"/>
+  <text x="226.2639" y="294" fill="#172B36" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="7.3" font-weight="normal" text-anchor="start" letter-spacing="0">0.153</text>
+  <line x1="190" y1="354" x2="375" y2="354" stroke="#D8E1E2" stroke-width="0.8"/>
+  <line x1="190" y1="354" x2="192.5694" y2="354" stroke="#8DB7B5" stroke-width="3"/>
+  <circle cx="192.5694" cy="354" r="5.5" fill="#C94F46" stroke="#FFFFFF" stroke-width="1"/>
+  <text x="200.5694" y="346" fill="#172B36" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="7.3" font-weight="normal" text-anchor="start" letter-spacing="0">0.014</text>
+  <text x="497.5" y="90" fill="#172B36" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="9.5" font-weight="bold" text-anchor="middle" letter-spacing="0">Greedy agreement</text>
+  <line x1="405" y1="100" x2="590" y2="100" stroke="#172B36" stroke-width="1"/>
+  <text x="405" y="112" fill="#60747D" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="7.5" font-weight="normal" text-anchor="middle" letter-spacing="0">0.5</text>
+  <text x="590" y="112" fill="#60747D" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="7.5" font-weight="normal" text-anchor="middle" letter-spacing="0">1</text>
+  <line x1="582.6" y1="96" x2="582.6" y2="354" stroke="#C94F46" stroke-width="1.2" stroke-dasharray="4,3"/>
+  <text x="582.6" y="368" fill="#C94F46" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="7.2" font-weight="normal" text-anchor="middle" letter-spacing="0">min 0.98</text>
+  <line x1="405" y1="146" x2="590" y2="146" stroke="#D8E1E2" stroke-width="0.8"/>
+  <line x1="405" y1="146" x2="583.2552" y2="146" stroke="#8DB7B5" stroke-width="3"/>
+  <circle cx="583.2552" cy="146" r="5.5" fill="#167D80" stroke="#FFFFFF" stroke-width="1"/>
+  <text x="575.2552" y="138" fill="#172B36" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="7.3" font-weight="normal" text-anchor="end" letter-spacing="0">0.982</text>
+  <line x1="405" y1="198" x2="590" y2="198" stroke="#D8E1E2" stroke-width="0.8"/>
+  <line x1="405" y1="198" x2="446.6917" y2="198" stroke="#8DB7B5" stroke-width="3"/>
+  <circle cx="446.6917" cy="198" r="5.5" fill="#C94F46" stroke="#FFFFFF" stroke-width="1"/>
+  <text x="454.6917" y="190" fill="#172B36" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="7.3" font-weight="normal" text-anchor="start" letter-spacing="0">0.613</text>
+  <line x1="405" y1="250" x2="590" y2="250" stroke="#D8E1E2" stroke-width="0.8"/>
+  <line x1="405" y1="250" x2="424.1782" y2="250" stroke="#8DB7B5" stroke-width="3"/>
+  <circle cx="424.1782" cy="250" r="5.5" fill="#C94F46" stroke="#FFFFFF" stroke-width="1"/>
+  <text x="432.1782" y="242" fill="#172B36" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="7.3" font-weight="normal" text-anchor="start" letter-spacing="0">0.552</text>
+  <line x1="405" y1="302" x2="590" y2="302" stroke="#D8E1E2" stroke-width="0.8"/>
+  <line x1="405" y1="302" x2="460.2431" y2="302" stroke="#8DB7B5" stroke-width="3"/>
+  <circle cx="460.2431" cy="302" r="5.5" fill="#C94F46" stroke="#FFFFFF" stroke-width="1"/>
+  <text x="468.2431" y="294" fill="#172B36" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="7.3" font-weight="normal" text-anchor="start" letter-spacing="0">0.649</text>
+  <line x1="405" y1="354" x2="590" y2="354" stroke="#D8E1E2" stroke-width="0.8"/>
+  <line x1="405" y1="354" x2="496.2153" y2="354" stroke="#8DB7B5" stroke-width="3"/>
+  <circle cx="496.2153" cy="354" r="5.5" fill="#C94F46" stroke="#FFFFFF" stroke-width="1"/>
+  <text x="504.2153" y="346" fill="#172B36" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="7.3" font-weight="normal" text-anchor="start" letter-spacing="0">0.747</text>
+  <text x="705" y="90" fill="#172B36" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="9.5" font-weight="bold" text-anchor="middle" letter-spacing="0">PPL drift</text>
+  <line x1="620" y1="100" x2="790" y2="100" stroke="#172B36" stroke-width="1"/>
+  <text x="620" y="112" fill="#60747D" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="7.5" font-weight="normal" text-anchor="middle" letter-spacing="0">0</text>
+  <text x="790" y="112" fill="#60747D" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="7.5" font-weight="normal" text-anchor="middle" letter-spacing="0">70</text>
+  <line x1="624.8571" y1="96" x2="624.8571" y2="354" stroke="#C94F46" stroke-width="1.2" stroke-dasharray="4,3"/>
+  <text x="624.8571" y="368" fill="#C94F46" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="7.2" font-weight="normal" text-anchor="middle" letter-spacing="0">max 2</text>
+  <line x1="620" y1="146" x2="790" y2="146" stroke="#D8E1E2" stroke-width="0.8"/>
+  <line x1="620" y1="146" x2="626.3256" y2="146" stroke="#8DB7B5" stroke-width="3"/>
+  <circle cx="626.3256" cy="146" r="5.5" fill="#C94F46" stroke="#FFFFFF" stroke-width="1"/>
+  <text x="634.3256" y="138" fill="#172B36" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="7.3" font-weight="normal" text-anchor="start" letter-spacing="0">2.6%</text>
+  <line x1="620" y1="198" x2="790" y2="198" stroke="#D8E1E2" stroke-width="0.8"/>
+  <line x1="620" y1="198" x2="653.1283" y2="198" stroke="#8DB7B5" stroke-width="3"/>
+  <circle cx="653.1283" cy="198" r="5.5" fill="#C94F46" stroke="#FFFFFF" stroke-width="1"/>
+  <text x="661.1283" y="190" fill="#172B36" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="7.3" font-weight="normal" text-anchor="start" letter-spacing="0">13.6%</text>
+  <line x1="620" y1="250" x2="790" y2="250" stroke="#D8E1E2" stroke-width="0.8"/>
+  <line x1="620" y1="250" x2="671.1017" y2="250" stroke="#8DB7B5" stroke-width="3"/>
+  <circle cx="671.1017" cy="250" r="5.5" fill="#C94F46" stroke="#FFFFFF" stroke-width="1"/>
+  <text x="679.1017" y="242" fill="#172B36" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="7.3" font-weight="normal" text-anchor="start" letter-spacing="0">21.0%</text>
+  <line x1="620" y1="302" x2="790" y2="302" stroke="#D8E1E2" stroke-width="0.8"/>
+  <line x1="620" y1="302" x2="738.4535" y2="302" stroke="#8DB7B5" stroke-width="3"/>
+  <circle cx="738.4535" cy="302" r="5.5" fill="#C94F46" stroke="#FFFFFF" stroke-width="1"/>
+  <text x="746.4535" y="294" fill="#172B36" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="7.3" font-weight="normal" text-anchor="start" letter-spacing="0">48.8%</text>
+  <line x1="620" y1="354" x2="790" y2="354" stroke="#D8E1E2" stroke-width="0.8"/>
+  <line x1="620" y1="354" x2="781.6311" y2="354" stroke="#8DB7B5" stroke-width="3"/>
+  <circle cx="781.6311" cy="354" r="5.5" fill="#C94F46" stroke="#FFFFFF" stroke-width="1"/>
+  <text x="773.6311" y="346" fill="#172B36" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="7.3" font-weight="normal" text-anchor="end" letter-spacing="0">66.6%</text>
+  <text x="28" y="149" fill="#172B36" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="9" font-weight="bold" text-anchor="start" letter-spacing="0">Function calling</text>
+  <text x="174" y="149" fill="#60747D" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="7.2" font-weight="normal" text-anchor="end" letter-spacing="0">n=48</text>
+  <text x="28" y="201" fill="#172B36" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="9" font-weight="bold" text-anchor="start" letter-spacing="0">Competition math</text>
+  <text x="174" y="201" fill="#60747D" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="7.2" font-weight="normal" text-anchor="end" letter-spacing="0">n=416</text>
+  <text x="28" y="253" fill="#172B36" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="9" font-weight="bold" text-anchor="start" letter-spacing="0">Grade-school math</text>
+  <text x="174" y="253" fill="#60747D" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="7.2" font-weight="normal" text-anchor="end" letter-spacing="0">n=416</text>
+  <text x="28" y="305" fill="#172B36" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="9" font-weight="bold" text-anchor="start" letter-spacing="0">Long-context QA</text>
+  <text x="174" y="305" fill="#60747D" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="7.2" font-weight="normal" text-anchor="end" letter-spacing="0">n=72</text>
+  <text x="28" y="357" fill="#172B36" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="9" font-weight="bold" text-anchor="start" letter-spacing="0">Python code</text>
+  <text x="174" y="357" fill="#60747D" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="7.2" font-weight="normal" text-anchor="end" letter-spacing="0">n=72</text>
+</svg>

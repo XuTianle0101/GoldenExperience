@@ -1,0 +1,11 @@
+kind,candidate_id,label,rank,seed,safe_count,sample_count,coverage,is_deployment_candidate,is_post_hoc_oracle,coverage_gate
+registered_candidate,transport-r32-s17-c2cb42c33c23,r32/s17,32,17,167,1024,0.1630859375,False,False,0.45
+registered_candidate,transport-r32-s29-185910ab5b5b,r32/s29,32,29,156,1024,0.15234375,False,False,0.45
+registered_candidate,transport-r32-s43-7d83c5492cb0,r32/s43,32,43,143,1024,0.1396484375,False,False,0.45
+registered_candidate,transport-r64-s17-ad350a2afbad,r64/s17,64,17,142,1024,0.138671875,True,False,0.45
+registered_candidate,transport-r64-s29-b0e39d515ee2,r64/s29,64,29,180,1024,0.17578125,False,False,0.45
+registered_candidate,transport-r64-s43-acb2af57d59e,r64/s43,64,43,146,1024,0.142578125,False,False,0.45
+registered_candidate,transport-r128-s17-aec511da9743,r128/s17,128,17,159,1024,0.1552734375,False,False,0.45
+registered_candidate,transport-r128-s29-bda2253f1664,r128/s29,128,29,114,1024,0.111328125,False,False,0.45
+registered_candidate,transport-r128-s43-f6a633055dca,r128/s43,128,43,177,1024,0.1728515625,False,False,0.45
+all_candidate_oracle,not_deployable,9-way oracle,,,377,1024,0.3681640625,False,True,0.45

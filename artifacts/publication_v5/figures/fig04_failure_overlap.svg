@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="440" viewBox="0 0 760 440" role="img" aria-labelledby="figure-title figure-description">
+  <title id="figure-title">Most prompts violate both token-level behavior gates</title>
+  <desc id="figure-description">Exact failure partition and marginal violation counts for the deployment candidate.</desc>
+  <rect x="0" y="0" width="760" height="440" fill="#FFFFFF"/>
+  <rect x="28" y="22" width="8" height="30" fill="#C94F46"/>
+  <text x="48" y="38" fill="#172B36" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="19" font-weight="bold" text-anchor="start" letter-spacing="0">Most prompts violate both token-level behavior gates</text>
+  <text x="48" y="57" fill="#60747D" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="9.5" font-weight="normal" text-anchor="start" letter-spacing="0">Exact partition of all 1,024 prompts for rank 64, seed 17</text>
+  <line x1="28" y1="412" x2="732" y2="412" stroke="#D8E1E2" stroke-width="1"/>
+  <text x="28" y="428" fill="#60747D" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="7.5" font-weight="normal" text-anchor="start" letter-spacing="0">Source: archived v4 method-dev report; combinations are mutually exclusive.</text>
+  <rect x="58" y="112" width="90.4141" height="58" fill="#167D80"/>
+  <text x="103.207" y="137" fill="#FFFFFF" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="8" font-weight="bold" text-anchor="middle" letter-spacing="0">Safe</text>
+  <text x="103.207" y="153" fill="#FFFFFF" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="8" font-weight="normal" text-anchor="middle" letter-spacing="0">142</text>
+  <rect x="148.4141" y="112" width="93.5977" height="58" fill="#D6922E"/>
+  <text x="195.2129" y="137" fill="#172B36" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="8" font-weight="bold" text-anchor="middle" letter-spacing="0">Drift only</text>
+  <text x="195.2129" y="153" fill="#172B36" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="8" font-weight="normal" text-anchor="middle" letter-spacing="0">147</text>
+  <rect x="242.0117" y="112" width="10.1875" height="58" fill="#3A6FA1"/>
+  <rect x="252.1992" y="112" width="442.5195" height="58" fill="#C94F46"/>
+  <text x="473.459" y="137" fill="#FFFFFF" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="8" font-weight="bold" text-anchor="middle" letter-spacing="0">Greedy + drift</text>
+  <text x="473.459" y="153" fill="#FFFFFF" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="8" font-weight="normal" text-anchor="middle" letter-spacing="0">695</text>
+  <rect x="694.7188" y="112" width="0.6367" height="58" fill="#28536B"/>
+  <rect x="695.3555" y="112" width="14.6445" height="58" fill="#8D352F"/>
+  <text x="58" y="102" fill="#60747D" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="8.5" font-weight="normal" text-anchor="start" letter-spacing="0">Mutually exclusive outcome partition</text>
+  <text x="710" y="102" fill="#60747D" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="8.5" font-weight="normal" text-anchor="end" letter-spacing="0">n = 1,024</text>
+  <rect x="58" y="187" width="10" height="10" fill="#167D80"/>
+  <text x="73" y="196" fill="#172B36" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="7.5" font-weight="normal" text-anchor="start" letter-spacing="0">Safe: 142</text>
+  <rect x="278" y="187" width="10" height="10" fill="#D6922E"/>
+  <text x="293" y="196" fill="#172B36" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="7.5" font-weight="normal" text-anchor="start" letter-spacing="0">Drift only: 147</text>
+  <rect x="498" y="187" width="10" height="10" fill="#3A6FA1"/>
+  <text x="513" y="196" fill="#172B36" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="7.5" font-weight="normal" text-anchor="start" letter-spacing="0">Greedy only: 16</text>
+  <rect x="58" y="211" width="10" height="10" fill="#C94F46"/>
+  <text x="73" y="220" fill="#172B36" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="7.5" font-weight="normal" text-anchor="start" letter-spacing="0">Greedy + drift: 695</text>
+  <rect x="278" y="211" width="10" height="10" fill="#28536B"/>
+  <text x="293" y="220" fill="#172B36" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="7.5" font-weight="normal" text-anchor="start" letter-spacing="0">Task + greedy: 1</text>
+  <rect x="498" y="211" width="10" height="10" fill="#8D352F"/>
+  <text x="513" y="220" fill="#172B36" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="7.5" font-weight="normal" text-anchor="start" letter-spacing="0">Task + greedy + drift: 23</text>
+  <text x="58" y="248" fill="#60747D" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="9" font-weight="bold" text-anchor="start" letter-spacing="0">Marginal violations (overlapping)</text>
+  <text x="58" y="280" fill="#172B36" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="8.5" font-weight="normal" text-anchor="start" letter-spacing="0">Task regression</text>
+  <rect x="190" y="270" width="510" height="15" fill="#F3F6F5"/>
+  <rect x="190" y="270" width="11.9531" height="15" fill="#28536B"/>
+  <text x="708" y="281" fill="#172B36" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="8" font-weight="normal" text-anchor="start" letter-spacing="0">24 (2.3%)</text>
+  <text x="58" y="318" fill="#172B36" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="8.5" font-weight="normal" text-anchor="start" letter-spacing="0">Greedy &lt; 0.98</text>
+  <rect x="190" y="308" width="510" height="15" fill="#F3F6F5"/>
+  <rect x="190" y="308" width="366.0645" height="15" fill="#3A6FA1"/>
+  <text x="708" y="319" fill="#172B36" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="8" font-weight="normal" text-anchor="start" letter-spacing="0">735 (71.8%)</text>
+  <text x="58" y="356" fill="#172B36" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="8.5" font-weight="normal" text-anchor="start" letter-spacing="0">PPL drift &gt; 2%</text>
+  <rect x="190" y="346" width="510" height="15" fill="#F3F6F5"/>
+  <rect x="190" y="346" width="430.8105" height="15" fill="#D6922E"/>
+  <text x="708" y="357" fill="#172B36" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="8" font-weight="normal" text-anchor="start" letter-spacing="0">865 (84.5%)</text>
+  <rect x="568" y="225" width="142" height="27" rx="4" fill="#C94F46"/>
+  <text x="639" y="243" fill="#FFFFFF" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="8.3" font-weight="bold" text-anchor="middle" letter-spacing="0">Unsafe union: 882 (86.1%)</text>
+</svg>

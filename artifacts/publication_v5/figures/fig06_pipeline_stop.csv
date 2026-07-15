@@ -1,0 +1,10 @@
+stage,display_label,status,evidence
+transport_train_collection,Transport train,completed,"4,096 rows collected"
+transport_fit,Transport fit,completed,"9 candidates; 1,536 steps"
+method_dev_collection,Method-dev trace,completed,"1,024 prompts collected"
+method_dev_evaluation,Method-dev gate,failed,"142/1,024 safe; 0.1387 < 0.45"
+other_direction_fits,Other directions,blocked,not fit
+selector_and_calibration,Selector + calibration,blocked,not fit
+validation,Validation x4,blocked,not run
+semantic_sealed,Semantic sealed,locked,payload unopened
+runtime_audit,Runtime audit,blocked,not run

@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="440" viewBox="0 0 720 440" role="img" aria-labelledby="figure-title figure-description">
+  <title id="figure-title">Full-prefix supervision helps most at long prefixes</title>
+  <desc id="figure-description">Safe prompt counts by token bucket for v3 and v4 at fixed rank and seed.</desc>
+  <rect x="0" y="0" width="720" height="440" fill="#FFFFFF"/>
+  <rect x="28" y="22" width="8" height="30" fill="#167D80"/>
+  <text x="48" y="38" fill="#172B36" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="19" font-weight="bold" text-anchor="start" letter-spacing="0">Full-prefix supervision helps most at long prefixes</text>
+  <text x="48" y="57" fill="#60747D" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="9.5" font-weight="normal" text-anchor="start" letter-spacing="0">Controlled comparison: rank 128, seed 17; 256 prompts in each prefix bucket</text>
+  <line x1="28" y1="412" x2="692" y2="412" stroke="#D8E1E2" stroke-width="1"/>
+  <text x="28" y="428" fill="#60747D" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="7.5" font-weight="normal" text-anchor="start" letter-spacing="0">Source: v3/v4 mechanism diagnostics and the archived v4 method-dev report.</text>
+  <line x1="70" y1="350" x2="690" y2="350" stroke="#D8E1E2" stroke-width="0.8"/>
+  <text x="60" y="353" fill="#60747D" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="8" font-weight="normal" text-anchor="end" letter-spacing="0">0</text>
+  <line x1="70" y1="298" x2="690" y2="298" stroke="#D8E1E2" stroke-width="0.8"/>
+  <text x="60" y="301" fill="#60747D" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="8" font-weight="normal" text-anchor="end" letter-spacing="0">10</text>
+  <line x1="70" y1="246" x2="690" y2="246" stroke="#D8E1E2" stroke-width="0.8"/>
+  <text x="60" y="249" fill="#60747D" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="8" font-weight="normal" text-anchor="end" letter-spacing="0">20</text>
+  <line x1="70" y1="194" x2="690" y2="194" stroke="#D8E1E2" stroke-width="0.8"/>
+  <text x="60" y="197" fill="#60747D" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="8" font-weight="normal" text-anchor="end" letter-spacing="0">30</text>
+  <line x1="70" y1="142" x2="690" y2="142" stroke="#D8E1E2" stroke-width="0.8"/>
+  <text x="60" y="145" fill="#60747D" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="8" font-weight="normal" text-anchor="end" letter-spacing="0">40</text>
+  <line x1="70" y1="90" x2="690" y2="90" stroke="#D8E1E2" stroke-width="0.8"/>
+  <text x="60" y="93" fill="#60747D" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="8" font-weight="normal" text-anchor="end" letter-spacing="0">50</text>
+  <line x1="70" y1="90" x2="70" y2="350" stroke="#172B36" stroke-width="1"/>
+  <line x1="70" y1="350" x2="690" y2="350" stroke="#172B36" stroke-width="1"/>
+  <rect x="108.5" y="194" width="36" height="156" fill="#3A6FA1"/>
+  <text x="126.5" y="187" fill="#172B36" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="9" font-weight="bold" text-anchor="middle" letter-spacing="0">30</text>
+  <rect x="150.5" y="162.8" width="36" height="187.2" fill="#167D80"/>
+  <text x="168.5" y="155.8" fill="#172B36" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="9" font-weight="bold" text-anchor="middle" letter-spacing="0">36</text>
+  <text x="147.5" y="136.8" fill="#167D80" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="9" font-weight="bold" text-anchor="middle" letter-spacing="0">+6</text>
+  <text x="147.5" y="371" fill="#172B36" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="9" font-weight="normal" text-anchor="middle" letter-spacing="0">128</text>
+  <rect x="263.5" y="157.6" width="36" height="192.4" fill="#3A6FA1"/>
+  <text x="281.5" y="150.6" fill="#172B36" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="9" font-weight="bold" text-anchor="middle" letter-spacing="0">37</text>
+  <rect x="305.5" y="162.8" width="36" height="187.2" fill="#167D80"/>
+  <text x="323.5" y="155.8" fill="#172B36" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="9" font-weight="bold" text-anchor="middle" letter-spacing="0">36</text>
+  <text x="302.5" y="131.6" fill="#C94F46" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="9" font-weight="bold" text-anchor="middle" letter-spacing="0">-1</text>
+  <text x="302.5" y="371" fill="#172B36" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="9" font-weight="normal" text-anchor="middle" letter-spacing="0">512</text>
+  <rect x="418.5" y="199.2" width="36" height="150.8" fill="#3A6FA1"/>
+  <text x="436.5" y="192.2" fill="#172B36" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="9" font-weight="bold" text-anchor="middle" letter-spacing="0">29</text>
+  <rect x="460.5" y="121.2" width="36" height="228.8" fill="#167D80"/>
+  <text x="478.5" y="114.2" fill="#172B36" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="9" font-weight="bold" text-anchor="middle" letter-spacing="0">44</text>
+  <text x="457.5" y="95.2" fill="#167D80" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="9" font-weight="bold" text-anchor="middle" letter-spacing="0">+15</text>
+  <text x="457.5" y="371" fill="#172B36" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="9" font-weight="normal" text-anchor="middle" letter-spacing="0">2,048</text>
+  <rect x="573.5" y="251.2" width="36" height="98.8" fill="#3A6FA1"/>
+  <text x="591.5" y="244.2" fill="#172B36" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="9" font-weight="bold" text-anchor="middle" letter-spacing="0">19</text>
+  <rect x="615.5" y="126.4" width="36" height="223.6" fill="#167D80"/>
+  <text x="633.5" y="119.4" fill="#172B36" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="9" font-weight="bold" text-anchor="middle" letter-spacing="0">43</text>
+  <text x="612.5" y="100.4" fill="#167D80" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="9" font-weight="bold" text-anchor="middle" letter-spacing="0">+24</text>
+  <text x="612.5" y="371" fill="#172B36" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="9" font-weight="normal" text-anchor="middle" letter-spacing="0">8,192</text>
+  <text x="70" y="81" fill="#60747D" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="8.5" font-weight="normal" text-anchor="start" letter-spacing="0">Safe prompts</text>
+  <text x="380" y="392" fill="#60747D" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="8.5" font-weight="normal" text-anchor="middle" letter-spacing="0">Prefix tokens</text>
+  <rect x="84" y="95" width="12" height="12" fill="#3A6FA1"/>
+  <text x="102" y="105" fill="#172B36" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="8.5" font-weight="normal" text-anchor="start" letter-spacing="0">v3 sampled-prefix</text>
+  <rect x="84" y="113" width="12" height="12" fill="#167D80"/>
+  <text x="102" y="123" fill="#172B36" font-family="Aptos, Source Sans 3, DejaVu Sans, sans-serif" font-size="8.5" font-weight="normal" text-anchor="start" letter-spacing="0">v4 full-prefix</text>
+</svg>
