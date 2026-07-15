@@ -1,5 +1,20 @@
 # Experiment Matrix
 
+## Execution Status
+
+The matrix below describes the implemented end-to-end protocol, not a set of completed success
+claims. The registered Qwen3 4B-to-8B screening fit completed, but its full 1,024-prompt
+method-dev stage failed the fixed `0.45` oracle-safe coverage gate at `0.138671875` for the
+selected rank-64/seed-17 candidate. The union over all nine screened candidates was only
+`0.3681640625`. This blocks every selector, calibration, other-direction, validation,
+semantic-sealed, and runtime experiment in the present workspace. The sealed split has not
+been opened.
+
+The completed screening experiment is therefore reported as a negative result and a boundary
+on fixed low-rank affine KV transport. Rows below that require a frozen successful structure
+remain prospective and may only be run in a newly preregistered workspace with fresh
+development evidence.
+
 ## Baselines
 
 - vLLM without external KV reuse.

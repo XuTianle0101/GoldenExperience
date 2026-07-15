@@ -168,6 +168,25 @@ generation, semantic scoring, and teacher NLL. Its deliberately undertrained one
 candidate failed the safety metrics, as expected; this is implementation evidence only and
 is not included in method-dev results or used to change the registered selection rule.
 
+## Recorded Screening Outcome
+
+Pipeline `v5-pipeline-1c6fed3dc231893debb58298` completed the registered v4 4B-to-8B fit
+and the full method-dev matrix on 2026-07-15. The fixed selection order chose rank 64, whose
+seed-17 deployment candidate had task preservation `0.9768618035`, greedy agreement
+`0.6172485352`, aggregate perplexity drift `21.47483717%`, and oracle-safe coverage
+`142/1024 = 0.138671875`. It failed the required coverage of `0.45`.
+
+The candidate-safe union was `377/1024 = 0.3681640625`; therefore neither choosing another
+registered rank or seed nor selecting a different candidate per row could reach the gate.
+The stage is terminally `failed`, all 1,024 sample checkpoints match the 9,216-measurement
+report, and the semantic-sealed marker remains `locked`. The commands in the remaining
+sections specify the implemented protocol, but they are unreachable for this workspace and
+must not be presented as executed publication evidence.
+
+Any future adaptive method iteration must bind new code and a newly frozen development split
+in a new workspace. Reusing this method-dev result as both design feedback and confirmation
+would invalidate an independent success claim.
+
 ## Fit The Other Directions
 
 Once the frozen structure receipt exists, collect `transport_train` for each remaining

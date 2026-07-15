@@ -323,13 +323,25 @@ isolation are checked before the manifest is emitted.
 
 ## Current Evidence Boundary
 
-This repository contains the executable contracts and deterministic tests, but it does not
-contain publication-eligible v5 model weights, the frozen publication dataset, calibration
-output, semantic sealed results, or a real LMCache/vLLM runtime audit. The implemented fit
-path has only a single-shard real-model diagnostic, not the registered 4,096-sample run.
-Consequently there is no v5 `approved` artifact and no production claim. The direct-injection
-module is an adapter surface guarded by final manifest authority; it is not automatically
-enabled by the existing runtime patch script.
+The registered 4B-to-8B v4 screening fit is complete. Its nine candidates each consumed the
+full 4,096-row transport split for three epochs, and its final model/optimizer checkpoint and
+runtime weights were independently reloaded. The immutable fit evidence is recorded in
+`artifacts/publication_v5/stages/qwen3_4b_to_8b.fit_transport.v4.json`.
+
+The complete 1,024-prompt, nine-candidate method-dev evaluation also ran, but it failed the
+unchanged admission gate. Registered rank selection chose rank 64; its seed-17 deployment
+candidate achieved only `0.138671875` oracle-safe coverage against the required `0.45`.
+Even the per-row union of all nine candidates covered only `0.3681640625`. The detailed
+failure record and mechanism analysis are retained under `artifacts/publication_v5/` and bind
+all 9,216 measurements to report SHA-256
+`f35e9599cea4d56cb1d0a7fad888a7d1bf2cef2602c9f42950162de7662a4400`.
+
+Consequently there is no frozen transport structure, no v5 `validation_candidate`, and no
+`semantic_approved` or `approved` artifact. The selector, calibration, other-direction fit,
+validation, semantic-sealed, and runtime stages are protocol descriptions backed by tests,
+not executed evidence for this workspace. The semantic payload remains locked and automatic
+cross-model reuse remains disabled. The direct-injection module is an adapter surface guarded
+by final manifest authority; it is not enabled by the existing runtime patch script.
 
 The retained Qwen3 8B-to-14B and 14B-to-8B rank-512 results remain deprecated development
 evidence. They fail the existing quality and cost gates and cannot be promoted to v5 evidence.

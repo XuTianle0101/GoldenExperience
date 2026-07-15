@@ -170,3 +170,40 @@ below 0.98, or perplexity drift exceeds 2%. The structure is publishable only if
 oracle-safe coverage is at least 0.45. A second failure is recorded as negative evidence;
 it does not authorize a threshold change, a biased pilot, rank/seed cherry-picking, or access
 to selector, calibration, validation, sealed, or runtime splits.
+
+## Recorded Outcome
+
+The registered v4 run completed on 2026-07-15 in pipeline
+`v5-pipeline-1c6fed3dc231893debb58298`, with executable source hash
+`b3d0dcb81e5a528937c1a80858273e2e8f8b1876be3d3691e222959867ef2760`.
+All nine rank/seed candidates consumed 12,288 training rows (4,096 rows over three epochs)
+and 1,536 optimizer steps. The fit manifest content hash is
+`7195d0cf59f0c8995ce4065a42587733597d7ab3861c79e4c347f8a5e11e80a0`.
+
+The complete 1,024-prompt method-dev matrix then produced 9,216 measurements. The frozen
+ordering selected rank 64, so the deployment candidate remained seed 17 at that rank. It
+preserved task score at `0.9768618035`, but greedy agreement was only `0.6172485352`,
+aggregate perplexity drift was `21.47483717%`, and oracle-safe coverage was
+`142/1024 = 0.138671875`. The unchanged `0.45` coverage gate therefore failed.
+
+This was not a seed-selection accident. Only 377 of 1,024 prompts were safe for at least
+one of all nine candidates, so even a prohibited per-row oracle over rank and seed reached
+only `0.3681640625`, below the registered gate. Of the selected deployment candidate's 882
+unsafe rows, 735 violated greedy agreement and 865 violated perplexity drift; 695 violated
+both. All four token buckets failed, with safe counts of 30, 36, 34, and 42 for prefix
+lengths 128, 512, 2,048, and 8,192 respectively.
+
+The full-prefix correction nevertheless moved the mechanism in the predicted direction.
+For rank 128/seed 17 held fixed across v3 and v4, safe count increased from 115 to 159;
+the 8,192-token bucket contributed 24 of those additional safe rows. This supports the v3
+diagnosis that sampled-prefix teacher mismatch mattered, but also shows that teacher-estimand
+alignment alone is insufficient for the fixed low-rank affine runtime operator.
+
+The audited, non-authoritative failure summary is
+`artifacts/publication_v5/stages/qwen3_4b_to_8b.evaluate_method_dev.v4.failed.json`; the
+mechanism analysis is `artifacts/publication_v5/development/v4_method_dev_diagnostic.json`.
+The report file hash is
+`f35e9599cea4d56cb1d0a7fad888a7d1bf2cef2602c9f42950162de7662a4400`.
+All 1,024 per-sample checkpoints were independently replayed against the report. In
+accordance with the preregistered rule, no selector, calibration, validation, semantic-sealed,
+or runtime stage is authorized for this workspace.
