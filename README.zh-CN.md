@@ -81,6 +81,9 @@ python3 paper/tools/build_figures.py --check
 
 # 检查 claim、数值、引用、链接、hash 与 locked workspace receipt。
 python3 paper/tools/check_manuscript.py
+
+# 离线校验固定版本的相关工作审计及未完成 proceedings 的边界。
+python3 paper/tools/check_related_work.py
 ```
 
 所有生成器都会拒绝 input/output path 中含有 `sealed` 的路径。证据 archive 解压后与原始

@@ -7,14 +7,16 @@
     "docs/related_work_matrix.md": "0965aab81d43180c9014ebc57a2d45b5f85c850abcac0251acc36354ddcbfde1",
     "paper/paper.md": "e2c689012aaf50a582c9af3a14dd319b7e5afcd01b8128de6d335e622a56c90d",
     "paper/references.bib": "ea73538cfdd378fe83a5f7c0352080b6237d5a5ecdd89ac9af73f9096f345c5a",
-    "paper/tools/check_manuscript.py": "fa19a3baf9efbd9cdf8fdbadea996efad69f539402942ee5b388e5a6f841d697"
+    "paper/tools/check_manuscript.py": "fa19a3baf9efbd9cdf8fdbadea996efad69f539402942ee5b388e5a6f841d697",
+    "paper/tools/check_related_work.py": "2e8f67b5c448d651c705d02482f7f468c7a2faa1852176acdde1fcec569534f1"
   },
   "documents_updated": [
     "docs/paper_outline.md",
     "docs/related_work_matrix.md",
     "paper/paper.md",
     "paper/references.bib",
-    "paper/tools/check_manuscript.py"
+    "paper/tools/check_manuscript.py",
+    "paper/tools/check_related_work.py"
   ],
   "executable_code_sha256": "b3d0dcb81e5a528937c1a80858273e2e8f8b1876be3d3691e222959867ef2760",
   "findings": {

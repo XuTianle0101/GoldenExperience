@@ -14,10 +14,15 @@ or cross-model runtime claim.
 ```bash
 python3 paper/tools/build_method_dev_evidence.py --check
 python3 paper/tools/build_figures.py --check
+python3 paper/tools/check_manuscript.py
+python3 paper/tools/check_related_work.py
 ```
 
 These commands rebuild all paper tables and figures in memory, compare them byte-for-byte with the
-tracked artifacts, and reject any path containing `sealed`.
+tracked artifacts, validate the fixed-version related-work audit, and reject any path containing
+`sealed`. The related-work checker is deliberately offline: it verifies recorded source and
+proceedings metadata without silently replacing unavailable official indexes with third-party
+lists.
 
 ## Render
 

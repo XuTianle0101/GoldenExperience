@@ -83,6 +83,9 @@ python3 paper/tools/build_figures.py --check
 
 # Check claims, numbers, references, links, hashes, and the locked workspace receipt.
 python3 paper/tools/check_manuscript.py
+
+# Validate the fixed-version prior-art audit and its incomplete-proceedings boundary offline.
+python3 paper/tools/check_related_work.py
 ```
 
 Every generator rejects input and output paths containing `sealed`. The evidence archive
