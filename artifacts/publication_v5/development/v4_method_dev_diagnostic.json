@@ -1,0 +1,238 @@
+{
+  "authority": "diagnostic_only_not_publication_success_evidence",
+  "benchmark_manifest_sha256": "557cfe1eccd522d19e6a06177b2d86e6b1a55587b8a84cba65732fad4d2bcd4a",
+  "candidate_safe_set_analysis": {
+    "all_nine_safe_count": 42,
+    "all_nine_safe_coverage": 0.041015625,
+    "any_nine_safe_count": 377,
+    "any_nine_safe_coverage": 0.3681640625,
+    "no_candidate_safe_count": 647,
+    "oracle_union_is_below_registered_gate": true,
+    "per_rank": {
+      "32": {
+        "all_three_seeds_safe_count": 80,
+        "any_seed_safe_count": 245,
+        "any_seed_safe_coverage": 0.2392578125
+      },
+      "64": {
+        "all_three_seeds_safe_count": 73,
+        "any_seed_safe_count": 262,
+        "any_seed_safe_coverage": 0.255859375
+      },
+      "128": {
+        "all_three_seeds_safe_count": 52,
+        "any_seed_safe_count": 270,
+        "any_seed_safe_coverage": 0.263671875
+      }
+    },
+    "sample_count": 1024
+  },
+  "code_sha256": "b3d0dcb81e5a528937c1a80858273e2e8f8b1876be3d3691e222959867ef2760",
+  "conclusion": {
+    "downstream_disposition": "selector, calibration, validation, semantic-sealed, and runtime stages remain blocked",
+    "future_method_requirement": "any adaptive method iteration requires a newly frozen development split and a new code-bound workspace; the present method-dev split must not be reused to claim confirmation",
+    "gate_disposition": "v4_rejected_without_threshold_or_selection_change",
+    "primary_supported_mechanism": "full-prefix teacher alignment improves long-prefix behavior but does not make the fixed low-rank affine transport preserve decoded behavior across tasks",
+    "rank_or_seed_tuning_is_insufficient": true,
+    "result_status": "publishable_negative_result_not_a_successful_selective_reuse_system"
+  },
+  "created_at": "2026-07-15T03:10:39Z",
+  "deployment_breakdown": {
+    "by_dataset": {
+      "bfcl": {
+        "aggregate_perplexity_drift_pct": 2.604654783998791,
+        "greedy_agreement": 0.9817708333333334,
+        "oracle_safe_coverage": 0.7916666666666666,
+        "safe_count": 38,
+        "sample_count": 48
+      },
+      "gsm8k": {
+        "aggregate_perplexity_drift_pct": 21.041861920011236,
+        "greedy_agreement": 0.5518329326923077,
+        "oracle_safe_coverage": 0.06971153846153846,
+        "safe_count": 29,
+        "sample_count": 416
+      },
+      "humaneval": {
+        "aggregate_perplexity_drift_pct": 42.11005453585573,
+        "greedy_agreement": 0.84375,
+        "oracle_safe_coverage": 0.041666666666666664,
+        "safe_count": 1,
+        "sample_count": 24
+      },
+      "longbench_hotpotqa": {
+        "aggregate_perplexity_drift_pct": 42.27087471400978,
+        "greedy_agreement": 0.6614583333333334,
+        "oracle_safe_coverage": 0.25,
+        "safe_count": 6,
+        "sample_count": 24
+      },
+      "longbench_multifieldqa": {
+        "aggregate_perplexity_drift_pct": 54.64567782155464,
+        "greedy_agreement": 0.7161458333333334,
+        "oracle_safe_coverage": 0.08333333333333333,
+        "safe_count": 2,
+        "sample_count": 24
+      },
+      "longbench_qasper": {
+        "aggregate_perplexity_drift_pct": 49.67032118652933,
+        "greedy_agreement": 0.5703125,
+        "oracle_safe_coverage": 0.125,
+        "safe_count": 3,
+        "sample_count": 24
+      },
+      "math": {
+        "aggregate_perplexity_drift_pct": 13.641052834948514,
+        "greedy_agreement": 0.6126802884615384,
+        "oracle_safe_coverage": 0.15144230769230768,
+        "safe_count": 63,
+        "sample_count": 416
+      },
+      "mbpp": {
+        "aggregate_perplexity_drift_pct": 80.31011495020812,
+        "greedy_agreement": 0.6979166666666666,
+        "oracle_safe_coverage": 0.0,
+        "safe_count": 0,
+        "sample_count": 48
+      }
+    },
+    "by_task": {
+      "competition_math": {
+        "oracle_safe_coverage": 0.15144230769230768,
+        "safe_count": 63,
+        "sample_count": 416
+      },
+      "function_calling": {
+        "oracle_safe_coverage": 0.7916666666666666,
+        "safe_count": 38,
+        "sample_count": 48
+      },
+      "grade_school_math": {
+        "oracle_safe_coverage": 0.06971153846153846,
+        "safe_count": 29,
+        "sample_count": 416
+      },
+      "long_context_qa": {
+        "oracle_safe_coverage": 0.1527777777777778,
+        "safe_count": 11,
+        "sample_count": 72
+      },
+      "python_code_generation": {
+        "oracle_safe_coverage": 0.013888888888888888,
+        "safe_count": 1,
+        "sample_count": 72
+      }
+    },
+    "by_token_bucket": {
+      "128": {
+        "aggregate_perplexity_drift_pct": 24.412442778308947,
+        "greedy_agreement": 0.55859375,
+        "oracle_safe_coverage": 0.1171875,
+        "safe_count": 30
+      },
+      "512": {
+        "aggregate_perplexity_drift_pct": 19.565892262448912,
+        "greedy_agreement": 0.636474609375,
+        "oracle_safe_coverage": 0.140625,
+        "safe_count": 36
+      },
+      "2048": {
+        "aggregate_perplexity_drift_pct": 21.92163712989956,
+        "greedy_agreement": 0.616943359375,
+        "oracle_safe_coverage": 0.1328125,
+        "safe_count": 34
+      },
+      "8192": {
+        "aggregate_perplexity_drift_pct": 20.05863193661694,
+        "greedy_agreement": 0.656982421875,
+        "oracle_safe_coverage": 0.1640625,
+        "safe_count": 42
+      }
+    }
+  },
+  "deployment_candidate": {
+    "candidate_id": "transport-r64-s17-ad350a2afbad",
+    "greedy_agreement": 0.61724853515625,
+    "oracle_safe_coverage": 0.138671875,
+    "perplexity_drift_pct": 21.474837170168318,
+    "rank": 64,
+    "safe_count": 142,
+    "seed": 17,
+    "task_preservation": 0.9768618034806245
+  },
+  "failure_modes": {
+    "failure_reason_combinations": {
+      "drift_only": 147,
+      "greedy_and_drift": 695,
+      "greedy_only": 16,
+      "safe": 142,
+      "task_regression_and_greedy": 1,
+      "task_regression_and_greedy_and_drift": 23
+    },
+    "threshold_violation_counts": {
+      "greedy_agreement_below_0.98": 735,
+      "native_pass_to_bridge_fail": 24,
+      "perplexity_drift_above_2_pct": 865,
+      "unsafe_union": 882
+    }
+  },
+  "method_progression": {
+    "candidate_oracle_safe_union": {
+      "v2": {
+        "count": 352,
+        "coverage": 0.34375
+      },
+      "v3": {
+        "count": 311,
+        "coverage": 0.3037109375
+      },
+      "v4": {
+        "count": 377,
+        "coverage": 0.3681640625
+      }
+    },
+    "registered_deployment_v4_minus_v3": {
+      "greedy_agreement": 0.03753662109375,
+      "oracle_safe_coverage": 0.0263671875,
+      "perplexity_drift_pct": 0.012890934502891582,
+      "safe_count": 27,
+      "selected_rank_changed_from": 128,
+      "selected_rank_changed_to": 64,
+      "task_preservation": -0.008763484490786233
+    },
+    "same_rank_128_seed_17_v4_minus_v3": {
+      "greedy_agreement": 0.0355224609375,
+      "oracle_safe_coverage": 0.04296875,
+      "perplexity_drift_pct": -0.598334245094712,
+      "safe_count": 44,
+      "safe_count_by_token_bucket": {
+        "128": 6,
+        "512": -1,
+        "2048": 15,
+        "8192": 24
+      },
+      "task_preservation": -0.014367621994362811
+    }
+  },
+  "registered_thresholds": {
+    "max_perplexity_drift_pct": 2.0,
+    "min_greedy_agreement": 0.98,
+    "min_oracle_safe_coverage": 0.45,
+    "native_pass_to_bridge_fail_is_unsafe": true
+  },
+  "schema_version": "goldenexperience.publication_v5_transport_diagnostic.v4",
+  "source_bindings": {
+    "fit_manifest_content_sha256": "7195d0cf59f0c8995ce4065a42587733597d7ab3861c79e4c347f8a5e11e80a0",
+    "method_dev_report_file_sha256": "f35e9599cea4d56cb1d0a7fad888a7d1bf2cef2602c9f42950162de7662a4400",
+    "method_dev_trace_manifest_sha256": "1b65cc495ed8cd8749665051a97be84e0b7bfa8acdc77c57cea7507399c670e7",
+    "raw_sample_store_sha256": "bb56d256380834ed65947dcea0fb7ad0b2ea4d2a37e8fc5f3e0ac700b693166b",
+    "v2_method_dev_report_sha256": "f06d333f8ed871d683df1c6d1f1e1ce4e4f9f47004b541ccf96f7eb07a36798e",
+    "v3_method_dev_report_sha256": "eb9ff0415d4d684ad93c51465599cc821eb3560c2a5149309b346122c67f7c2a"
+  },
+  "verification": {
+    "all_9216_measurements_validated": true,
+    "all_1024_sample_checkpoints_match_report": true,
+    "raw_sample_store_rehashed": true,
+    "report_size_bytes": 8043391
+  }
+}
