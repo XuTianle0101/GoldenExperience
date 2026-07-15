@@ -14,7 +14,13 @@ python -m pip install -e ".[dev]"
 Run the same gates used by CI before committing:
 
 ```bash
-python -m ruff format --check .
+# These five v4 files are frozen by the published executable/test hashes.
+python -m ruff format --check . \
+  --exclude goldenexperience/size_variant/v5_directional_fit.py \
+  --exclude goldenexperience/size_variant/v5_fit.py \
+  --exclude goldenexperience/size_variant/v5_generation.py \
+  --exclude tests/test_v5_directional_fit.py \
+  --exclude tests/test_v5_fit.py
 python -m ruff check .
 python -m mypy goldenexperience
 python -m coverage run -m pytest
