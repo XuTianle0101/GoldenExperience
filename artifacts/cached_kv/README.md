@@ -12,6 +12,9 @@ ignored and should not be kept in the repository.
 - `runtime_cost_8b_to_14b_20260713.json` is the authoritative cost rejection. Its two
   compact source reports are `qwen3_8b_to_14b_native_prefill_1776.json` and
   `qwen3_8b_to_14b_cost_1776.json`.
+- `runtime_cost_storage_cleanup_20260715.json` records the later, manual reclamation of the
+  6.69 GB temporary target-file residue. It preserves the original rejection and is not
+  runtime approval evidence.
 
 The fixed/scaled baselines, regularization and capacity sweep, SiLU and CKA ablations,
 failed all-parameter refinement, constrained teacher-forced refinement, native-generation

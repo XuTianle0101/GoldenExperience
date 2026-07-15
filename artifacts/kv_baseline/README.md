@@ -15,12 +15,18 @@ Historical local manifests whose payloads no longer exist were consolidated into
 `docs/paper_outline.md` and removed. New manifests should be committed only when their
 external payload URI is durable or when they are required by the active evaluation.
 
-## Local Cleanup Exception
+## Audited Local Retention
 
-`qwen3_8b_cost_seed_20260713T0245Z/` is intentionally retained outside Git while the
-Mooncake physical-reclamation defect remains unresolved. Its 6.69 GB of backing files
-are the reproduction evidence for `artifacts/cached_kv/runtime_cost_8b_to_14b_20260713.json`.
-Do not treat this local payload as approval evidence or delete it as a routine cache.
+`qwen3_8b_cost_seed_20260713T0245Z/` remains outside Git as a same-model source seed. The
+historical cost benchmark successfully removed its temporary target keys from Mooncake metadata,
+but left 2,553 local backing files totaling 6,692,536,320 bytes. That failure is immutable in
+`artifacts/cached_kv/runtime_cost_8b_to_14b_20260713.json`.
+
+After the exact count, size, nonce, and historical report hashes were verified, those temporary
+target files were manually reclaimed on 2026-07-15. The tracked receipt is
+`artifacts/cached_kv/runtime_cost_storage_cleanup_20260715.json`. This after-the-fact cleanup does
+not repair Mooncake removal, make the cost report eligible, or authorize reuse. The 112 original
+same-model source objects (264,241,152 bytes) and the run's logs/metadata remain available locally.
 
 Do not keep these raw generated files in Git:
 

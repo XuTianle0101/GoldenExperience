@@ -1,0 +1,57 @@
+{
+  "action": {
+    "empty_directories_pruned": true,
+    "operation": "unlink_regular_files_matching_exact_historical_cost_nonce",
+    "reclaimed_bytes": 6692536320
+  },
+  "authority": "local_storage_cleanup_receipt_not_runtime_approval",
+  "cleaned_at": "2026-07-15T07:46:22Z",
+  "historical_evidence": {
+    "bridge_id": "qwen3-kv-4d86988be2bd3a98ad8b",
+    "cost_report": {
+      "path": "artifacts/cached_kv/qwen3_8b_to_14b_cost_1776.json",
+      "sha256": "85c03f662d7a5ab96d860bd4081c1c2a7566c27f239fc51b13c9c92fbc25e2d3"
+    },
+    "generated_at_utc": "2026-07-13T02:47:31Z",
+    "run_nonce": "45422-1783910816160870922",
+    "runtime_summary": {
+      "path": "artifacts/cached_kv/runtime_cost_8b_to_14b_20260713.json",
+      "sha256": "099184426d2641ba2ed1a58ef1a40c853c4a6592918abadb33c2ff0e42095346"
+    }
+  },
+  "post_cleanup": {
+    "historical_source_seed_bytes": 264241152,
+    "historical_source_seed_files": 112,
+    "run_directory_bytes": 267272066,
+    "run_directory_files": 133,
+    "temporary_target_bytes": 0,
+    "temporary_target_files": 0
+  },
+  "pre_cleanup": {
+    "file_name_prefix": "ge-cost_qwen3-kv-4d86988be2bd3a98ad8b_45422-1783910816160870922_",
+    "per_file_bytes": 2621440,
+    "runtime_services_running": false,
+    "symbolic_links_in_cache_root": 0,
+    "temporary_target_bytes": 6692536320,
+    "temporary_target_files": 2553,
+    "wrong_size_files": 0
+  },
+  "preserved": {
+    "historical_cost_reports_unchanged": true,
+    "run_logs_and_metadata": true,
+    "same_model_source_seed_objects": true
+  },
+  "repository_binding": {
+    "base_commit": "f2851e6e56876802e0ebbad8be22841ceb2c3cef",
+    "executable_source_sha256": "b3d0dcb81e5a528937c1a80858273e2e8f8b1876be3d3691e222959867ef2760"
+  },
+  "research_boundary": {
+    "automatic_reuse_approved": false,
+    "candidate_artifacts_available": false,
+    "historical_physical_reclamation_failure_remains_recorded": true,
+    "manual_cleanup_repairs_upstream_mooncake_remove": false,
+    "sealed_payload_accessed": false
+  },
+  "run_directory": "artifacts/kv_baseline/qwen3_8b_cost_seed_20260713T0245Z",
+  "schema_version": "goldenexperience.cached_kv_storage_cleanup.v1"
+}
