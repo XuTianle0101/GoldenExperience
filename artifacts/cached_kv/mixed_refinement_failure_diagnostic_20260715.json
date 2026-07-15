@@ -1,0 +1,346 @@
+{
+  "authority": "historical_failure_diagnostic_not_publication_v5_or_runtime_approval",
+  "cleanup": {
+    "deleted_bytes": 276289,
+    "deleted_files": 2,
+    "ignored_results_directory_removed": true,
+    "raw_bindings_verified_before_deletion": true
+  },
+  "conclusions": [
+    "Forward task recovery is broad but incomplete: 52 prompts become passes with no regressions, while five of the six remaining failures are prose prompts.",
+    "Reverse task score is unchanged because one new prose pass is offset by one new prose regression; six of ten failures are prose and three are chat.",
+    "Failures occur in every 32/128/512/2048 token bucket in both directions, so context length alone does not explain them.",
+    "No math prompt remains a task failure, yet aggregate token agreement, perplexity drift, and value cosine still fail the historical approval gates.",
+    "These deprecated rank-512 results cannot authorize publication-v5 reuse and do not justify another run on the consumed validation split."
+  ],
+  "created_at": "2026-07-15T08:05:46Z",
+  "directions": {
+    "14b_to_8b": {
+      "by_category": {
+        "chat": {
+          "greedy_match_mean": 0.74609375,
+          "key_cosine_mean": 0.9325271956622601,
+          "next_token_top1_mean": 0.7734375,
+          "prompts": 16,
+          "task_failures": 3,
+          "value_cosine_mean": 0.8057188391685486
+        },
+        "code": {
+          "greedy_match_mean": 0.77734375,
+          "key_cosine_mean": 0.9282355457544327,
+          "next_token_top1_mean": 0.7421875,
+          "prompts": 16,
+          "task_failures": 1,
+          "value_cosine_mean": 0.7905955426394939
+        },
+        "math": {
+          "greedy_match_mean": 0.65625,
+          "key_cosine_mean": 0.9269916154444218,
+          "next_token_top1_mean": 0.78125,
+          "prompts": 16,
+          "task_failures": 0,
+          "value_cosine_mean": 0.78403490036726
+        },
+        "prose": {
+          "greedy_match_mean": 0.7734375,
+          "key_cosine_mean": 0.9282758310437202,
+          "next_token_top1_mean": 0.7109375,
+          "prompts": 16,
+          "task_failures": 6,
+          "value_cosine_mean": 0.7889475710690022
+        }
+      },
+      "by_token_bucket": {
+        "32": {
+          "prompts": 16,
+          "task_failures": 3
+        },
+        "128": {
+          "prompts": 16,
+          "task_failures": 2
+        },
+        "512": {
+          "prompts": 16,
+          "task_failures": 3
+        },
+        "2048": {
+          "prompts": 16,
+          "task_failures": 2
+        }
+      },
+      "prompt_count": 64,
+      "task_failures": [
+        {
+          "category": "code",
+          "greedy_match_rate": 0.4375,
+          "key_cosine": 0.9524412155151367,
+          "next_token_top1_agreement": 0.625,
+          "prompt_id": "validation-code-001",
+          "rendered_tokens": 70,
+          "token_bucket": 32,
+          "value_cosine": 0.831857442855835
+        },
+        {
+          "category": "prose",
+          "greedy_match_rate": 0.625,
+          "key_cosine": 0.930504560470581,
+          "next_token_top1_agreement": 0.875,
+          "prompt_id": "validation-prose-006",
+          "rendered_tokens": 168,
+          "token_bucket": 128,
+          "value_cosine": 0.7824651598930359
+        },
+        {
+          "category": "chat",
+          "greedy_match_rate": 0.5625,
+          "key_cosine": 0.9194823503494263,
+          "next_token_top1_agreement": 0.5625,
+          "prompt_id": "validation-chat-011",
+          "rendered_tokens": 533,
+          "token_bucket": 512,
+          "value_cosine": 0.7792200446128845
+        },
+        {
+          "category": "prose",
+          "greedy_match_rate": 0.875,
+          "key_cosine": 0.9118177890777588,
+          "next_token_top1_agreement": 0.5625,
+          "prompt_id": "validation-prose-014",
+          "rendered_tokens": 2066,
+          "token_bucket": 2048,
+          "value_cosine": 0.7667350769042969
+        },
+        {
+          "category": "prose",
+          "greedy_match_rate": 0.625,
+          "key_cosine": 0.9477890729904175,
+          "next_token_top1_agreement": 0.8125,
+          "prompt_id": "validation-prose-018",
+          "rendered_tokens": 64,
+          "token_bucket": 32,
+          "value_cosine": 0.8105285167694092
+        },
+        {
+          "category": "chat",
+          "greedy_match_rate": 0.5625,
+          "key_cosine": 0.9549699425697327,
+          "next_token_top1_agreement": 0.875,
+          "prompt_id": "validation-chat-019",
+          "rendered_tokens": 58,
+          "token_bucket": 32,
+          "value_cosine": 0.8418782353401184
+        },
+        {
+          "category": "prose",
+          "greedy_match_rate": 0.6875,
+          "key_cosine": 0.9276278614997864,
+          "next_token_top1_agreement": 0.875,
+          "prompt_id": "validation-prose-022",
+          "rendered_tokens": 168,
+          "token_bucket": 128,
+          "value_cosine": 0.7761756777763367
+        },
+        {
+          "category": "prose",
+          "greedy_match_rate": 0.6875,
+          "key_cosine": 0.9161659479141235,
+          "next_token_top1_agreement": 0.625,
+          "prompt_id": "validation-prose-026",
+          "rendered_tokens": 532,
+          "token_bucket": 512,
+          "value_cosine": 0.7701460123062134
+        },
+        {
+          "category": "chat",
+          "greedy_match_rate": 0.625,
+          "key_cosine": 0.9216050505638123,
+          "next_token_top1_agreement": 0.75,
+          "prompt_id": "validation-chat-027",
+          "rendered_tokens": 533,
+          "token_bucket": 512,
+          "value_cosine": 0.7848843932151794
+        },
+        {
+          "category": "prose",
+          "greedy_match_rate": 0.875,
+          "key_cosine": 0.9152740240097046,
+          "next_token_top1_agreement": 0.625,
+          "prompt_id": "validation-prose-062",
+          "rendered_tokens": 2066,
+          "token_bucket": 2048,
+          "value_cosine": 0.7806151509284973
+        }
+      ],
+      "task_transition": {
+        "new_pass_count": 1,
+        "new_pass_prompt_ids": [
+          "validation-prose-054"
+        ],
+        "new_regression_count": 1,
+        "new_regression_prompt_ids": [
+          "validation-prose-006"
+        ]
+      }
+    },
+    "8b_to_14b": {
+      "by_category": {
+        "chat": {
+          "greedy_match_mean": 0.9609375,
+          "key_cosine_mean": 0.9355704076588154,
+          "next_token_top1_mean": 0.8671875,
+          "prompts": 16,
+          "task_failures": 1,
+          "value_cosine_mean": 0.8128937184810638
+        },
+        "code": {
+          "greedy_match_mean": 0.83984375,
+          "key_cosine_mean": 0.9308100715279579,
+          "next_token_top1_mean": 0.796875,
+          "prompts": 16,
+          "task_failures": 0,
+          "value_cosine_mean": 0.7983398996293545
+        },
+        "math": {
+          "greedy_match_mean": 0.6484375,
+          "key_cosine_mean": 0.9297717735171318,
+          "next_token_top1_mean": 0.83203125,
+          "prompts": 16,
+          "task_failures": 0,
+          "value_cosine_mean": 0.7897328361868858
+        },
+        "prose": {
+          "greedy_match_mean": 0.90234375,
+          "key_cosine_mean": 0.9305060543119907,
+          "next_token_top1_mean": 0.796875,
+          "prompts": 16,
+          "task_failures": 5,
+          "value_cosine_mean": 0.7948169596493244
+        }
+      },
+      "by_token_bucket": {
+        "32": {
+          "prompts": 16,
+          "task_failures": 1
+        },
+        "128": {
+          "prompts": 16,
+          "task_failures": 2
+        },
+        "512": {
+          "prompts": 16,
+          "task_failures": 2
+        },
+        "2048": {
+          "prompts": 16,
+          "task_failures": 1
+        }
+      },
+      "prompt_count": 64,
+      "task_failures": [
+        {
+          "category": "prose",
+          "greedy_match_rate": 0.875,
+          "key_cosine": 0.918495237827301,
+          "next_token_top1_agreement": 0.6875,
+          "prompt_id": "validation-prose-010",
+          "rendered_tokens": 532,
+          "token_bucket": 512,
+          "value_cosine": 0.7712881565093994
+        },
+        {
+          "category": "prose",
+          "greedy_match_rate": 0.5,
+          "key_cosine": 0.9474422335624695,
+          "next_token_top1_agreement": 0.6875,
+          "prompt_id": "validation-prose-018",
+          "rendered_tokens": 64,
+          "token_bucket": 32,
+          "value_cosine": 0.81219083070755
+        },
+        {
+          "category": "prose",
+          "greedy_match_rate": 0.875,
+          "key_cosine": 0.928039014339447,
+          "next_token_top1_agreement": 0.9375,
+          "prompt_id": "validation-prose-022",
+          "rendered_tokens": 168,
+          "token_bucket": 128,
+          "value_cosine": 0.7806738018989563
+        },
+        {
+          "category": "chat",
+          "greedy_match_rate": 0.875,
+          "key_cosine": 0.9300541877746582,
+          "next_token_top1_agreement": 1.0,
+          "prompt_id": "validation-chat-023",
+          "rendered_tokens": 158,
+          "token_bucket": 128,
+          "value_cosine": 0.7940190434455872
+        },
+        {
+          "category": "prose",
+          "greedy_match_rate": 0.875,
+          "key_cosine": 0.9203486442565918,
+          "next_token_top1_agreement": 0.8125,
+          "prompt_id": "validation-prose-026",
+          "rendered_tokens": 532,
+          "token_bucket": 512,
+          "value_cosine": 0.7803030610084534
+        },
+        {
+          "category": "prose",
+          "greedy_match_rate": 0.5625,
+          "key_cosine": 0.9191558361053467,
+          "next_token_top1_agreement": 0.8125,
+          "prompt_id": "validation-prose-030",
+          "rendered_tokens": 2066,
+          "token_bucket": 2048,
+          "value_cosine": 0.783941924571991
+        }
+      ],
+      "task_transition": {
+        "new_pass_count": 52,
+        "new_regression_count": 0
+      }
+    }
+  },
+  "raw_input_bindings": [
+    {
+      "direction": "14b_to_8b",
+      "path": "artifacts/results/qwen3_14b_to_8b_mixed_holdout16_paired_rank512_seed17.results.json",
+      "sha256": "43d6f0ba5c759083f6f846789e276dd5524dc0b7b5fb0ced12bc3652558979ac",
+      "size_bytes": 138001
+    },
+    {
+      "direction": "8b_to_14b",
+      "path": "artifacts/results/qwen3_8b_to_14b_mixed_holdout16_paired_rank512_seed17.results.json",
+      "sha256": "ed7e69da1a30434b669557f7500e42bc702cf7b2c6074e556ce7d17fc4afa409",
+      "size_bytes": 138288
+    }
+  ],
+  "repository_binding": {
+    "base_commit": "955036958feca41f3cc476b4f5745083599de5c0",
+    "executable_source_sha256": "b3d0dcb81e5a528937c1a80858273e2e8f8b1876be3d3691e222959867ef2760"
+  },
+  "research_boundary": {
+    "automatic_reuse_approved": false,
+    "raw_results_removable_after_binding_verification": true,
+    "sealed_test_opened": false,
+    "validation_split_reusable_for_new_confirmation": false
+  },
+  "schema_version": "goldenexperience.cached_kv_failure_diagnostic.v1",
+  "summary_bindings": [
+    {
+      "path": "artifacts/cached_kv/bidirectional_mixed_refinement_summary_20260713.json",
+      "sha256": "3390e7a26142cf41a287cbf2bf276225f6cda1175f3ec634eaafe673521c7274"
+    },
+    {
+      "path": "artifacts/cached_kv/mixed_refinement_14b_to_8b_20260713.json",
+      "sha256": "d8eb93caac9e3823d3b15f8e6d2ee2b3ef73e425a36ad8f81964feb7d504d2b2"
+    },
+    {
+      "path": "artifacts/cached_kv/mixed_refinement_8b_to_14b_20260713.json",
+      "sha256": "f0af112d16af8ca210922f8798bec1bc429b1141c260e44ce4e3a645e1eee5db"
+    }
+  ]
+}

@@ -25,10 +25,11 @@ All records in this directory predate manifest v5 and are deprecated development
 They cannot serve as publication validation, risk calibration, semantic sealed, runtime audit,
 or approval evidence for selective cross-scale reuse.
 
-The only local raw quality files intentionally retained are the two mixed, holdout-16
-per-prompt results under `artifacts/results/`. They are needed to analyze the remaining
-forward and reverse exact-answer failures; all earlier smoke and refinement outputs were
-removed.
+The remaining forward and reverse exact-answer failures from the two mixed, holdout-16 raw
+results are stratified in `mixed_refinement_failure_diagnostic_20260715.json`. The diagnostic
+binds both original files by SHA-256 and retains every failed prompt's category, token bucket,
+agreement, and cosine metrics. The ignored per-prompt outputs under `artifacts/results/` were
+removed after this binding was verified; they are not publication-v5 evidence.
 
 Only a `CachedKVBridgeManifest` whose derived `approved` property is true may be used by
 the runtime materializer. Missing held-out accuracy or Mooncake cost evidence keeps a
